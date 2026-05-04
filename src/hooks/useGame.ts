@@ -25,6 +25,7 @@ export interface GameState {
   canUndo: boolean
   undoCount: number
   maxUndos: number
+  undoTotal: number
   lives: number
   maxLives: number
   hammerCount: number
@@ -34,6 +35,9 @@ export interface GameState {
   spinTickets: number
   streakDay: number
   lastLoginDate: string
+  streakClaimed: boolean[]
+  welcomeClaimed: boolean
+  coins: number
 }
 
 let tileId = 0
@@ -81,15 +85,7 @@ function slideLine(line: (Tile | null)[]): { newLine: (Tile | null)[], scoreGain
     if (i + 1 < filtered.length && filtered[i].value === filtered[i + 1].value) {
       const newValue = filtered[i].value * 2
       scoreGain += newValue
-      result.push({
-        id: getNextId(),
-        value: newValue,
-        row: 0,
-        col: 0,
-        isNew: false,
-        isMerged: true,
-        flash: true,
-      })
+      result.push({ id: getNextId(), value: newValue, row: 0, col: 0, isNew: false, isMerged: true, flash: true })
       i += 2
     } else {
       result.push({ ...filtered[i], id: getNextId(), isNew: false, isMerged: false, flash: false })
@@ -97,35 +93,23 @@ function slideLine(line: (Tile | null)[]): { newLine: (Tile | null)[], scoreGain
     }
   }
 
-  while (result.length < 4) {
-    result.push(null)
-  }
-
+  while (result.length < 4) result.push(null)
   return { newLine: result, scoreGain }
 }
 
 function moveTiles(tiles: Tile[], direction: Direction): { newTiles: Tile[], scoreGain: number, moved: boolean } {
   const grid: (Tile | null)[][] = Array.from({ length: 4 }, () => Array(4).fill(null))
-
-  for (const tile of tiles) {
-    grid[tile.row][tile.col] = { ...tile, isNew: false, isMerged: false, flash: false }
-  }
+  for (const tile of tiles) grid[tile.row][tile.col] = { ...tile, isNew: false, isMerged: false, flash: false }
 
   let totalScore = 0
   const newTiles: Tile[] = []
 
   for (let i = 0; i < 4; i++) {
     let line: (Tile | null)[] = []
-
-    if (direction === 'left') {
-      line = [grid[i][0], grid[i][1], grid[i][2], grid[i][3]]
-    } else if (direction === 'right') {
-      line = [grid[i][3], grid[i][2], grid[i][1], grid[i][0]]
-    } else if (direction === 'up') {
-      line = [grid[0][i], grid[1][i], grid[2][i], grid[3][i]]
-    } else {
-      line = [grid[3][i], grid[2][i], grid[1][i], grid[0][i]]
-    }
+    if (direction === 'left') line = [grid[i][0], grid[i][1], grid[i][2], grid[i][3]]
+    else if (direction === 'right') line = [grid[i][3], grid[i][2], grid[i][1], grid[i][0]]
+    else if (direction === 'up') line = [grid[0][i], grid[1][i], grid[2][i], grid[3][i]]
+    else line = [grid[3][i], grid[2][i], grid[1][i], grid[0][i]]
 
     const { newLine, scoreGain } = slideLine(line)
     totalScore += scoreGain
@@ -145,17 +129,13 @@ function moveTiles(tiles: Tile[], direction: Direction): { newTiles: Tile[], sco
 
   const beforeKey = tiles.map(t => `${t.row}-${t.col}-${t.value}`).sort().join(',')
   const afterKey = newTiles.map(t => `${t.row}-${t.col}-${t.value}`).sort().join(',')
-  const moved = beforeKey !== afterKey
-
-  return { newTiles, scoreGain: totalScore, moved }
+  return { newTiles, scoreGain: totalScore, moved: beforeKey !== afterKey }
 }
 
 function canMove(tiles: Tile[]): boolean {
   if (tiles.length < 16) return true
   const grid: number[][] = Array.from({ length: 4 }, () => Array(4).fill(0))
-  for (const tile of tiles) {
-    grid[tile.row][tile.col] = tile.value
-  }
+  for (const tile of tiles) grid[tile.row][tile.col] = tile.value
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 4; c++) {
       if (c + 1 < 4 && grid[r][c] === grid[r][c + 1]) return true
@@ -174,12 +154,12 @@ function getTodayStr(): string {
 }
 
 function loadSavedData() {
-  if (typeof window === 'undefined') return { bestScore: 0, spinTickets: 5, streakDay: 0, lastLoginDate: '' }
+  if (typeof window === 'undefined') return null
   try {
     const saved = localStorage.getItem('mergeMaster2048')
     if (saved) return JSON.parse(saved)
   } catch { /* ignore */ }
-  return { bestScore: 0, spinTickets: 5, streakDay: 0, lastLoginDate: '' }
+  return null
 }
 
 export function useGame() {
@@ -187,40 +167,70 @@ export function useGame() {
     const saved = loadSavedData()
     const tiles = initTiles()
     const today = getTodayStr()
-    let streakDay = saved.streakDay || 0
-    let lastLoginDate = saved.lastLoginDate || ''
 
-    // Check streak
-    if (lastLoginDate && lastLoginDate !== today) {
-      const lastDate = new Date(lastLoginDate)
-      const todayDate = new Date(today)
-      const diffDays = Math.floor((todayDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24))
-      if (diffDays === 1) {
-        streakDay = Math.min(streakDay + 1, 6) // 0-6 for 7 days
-      } else if (diffDays > 1) {
-        streakDay = 0 // Reset streak
-      }
-    }
-
-    return {
+    // Default: welcome gift for new users
+    const defaults: GameState = {
       tiles,
       score: 0,
-      bestScore: saved.bestScore || 0,
+      bestScore: 0,
       gameOver: false,
       won: false,
       keepPlaying: false,
       canUndo: false,
       undoCount: 0,
       maxUndos: 5,
+      undoTotal: 5,
       lives: 3,
       maxLives: 3,
-      hammerCount: 1,
-      magnetCount: 1,
-      blastCount: 1,
+      hammerCount: 5,
+      magnetCount: 5,
+      blastCount: 5,
       activePowerUp: null,
-      spinTickets: saved.spinTickets ?? 5,
+      spinTickets: 3,
+      streakDay: 0,
+      lastLoginDate: today,
+      streakClaimed: [false, false, false, false, false, false, false],
+      welcomeClaimed: false,
+      coins: 0,
+    }
+
+    if (!saved) return defaults
+
+    // Restore from saved
+    let streakDay = saved.streakDay || 0
+    const lastLoginDate = saved.lastLoginDate || today
+    const streakClaimed = saved.streakClaimed || [false, false, false, false, false, false, false]
+
+    if (lastLoginDate !== today) {
+      const lastDate = new Date(lastLoginDate)
+      const todayDate = new Date(today)
+      const diffDays = Math.floor((todayDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24))
+      if (diffDays === 1) {
+        streakDay = Math.min(streakDay + 1, 6)
+      } else if (diffDays > 1) {
+        streakDay = 0
+        // Reset claims if streak broken (after 7 days from first claim, 30% remains)
+        for (let i = 0; i < 7; i++) {
+          if (streakClaimed[i]) {
+            // Already claimed items stay but only 30% if expired
+          }
+        }
+      }
+    }
+
+    return {
+      ...defaults,
+      bestScore: saved.bestScore || 0,
+      spinTickets: saved.spinTickets ?? 3,
       streakDay,
       lastLoginDate: today,
+      streakClaimed: saved.streakClaimed || streakClaimed,
+      welcomeClaimed: saved.welcomeClaimed || false,
+      hammerCount: saved.hammerCount ?? 5,
+      magnetCount: saved.magnetCount ?? 5,
+      blastCount: saved.blastCount ?? 5,
+      undoTotal: saved.undoTotal ?? 5,
+      coins: saved.coins || 0,
     }
   })
 
@@ -233,19 +243,22 @@ export function useGame() {
       spinTickets: state.spinTickets,
       streakDay: state.streakDay,
       lastLoginDate: state.lastLoginDate,
+      streakClaimed: state.streakClaimed,
+      welcomeClaimed: state.welcomeClaimed,
+      hammerCount: state.hammerCount,
+      magnetCount: state.magnetCount,
+      blastCount: state.blastCount,
+      undoTotal: state.undoTotal,
+      coins: state.coins,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins])
 
-  // Clear flash after short time
+  // Clear flash
   useEffect(() => {
-    const hasFlash = state.tiles.some(t => t.flash)
-    if (hasFlash) {
+    if (state.tiles.some(t => t.flash)) {
       const timer = setTimeout(() => {
-        setState(prev => ({
-          ...prev,
-          tiles: prev.tiles.map(t => ({ ...t, flash: false })),
-        }))
+        setState(prev => ({ ...prev, tiles: prev.tiles.map(t => ({ ...t, flash: false })) }))
       }, 250)
       return () => clearTimeout(timer)
     }
@@ -253,30 +266,23 @@ export function useGame() {
 
   const handleMove = useCallback((direction: Direction) => {
     setState(prev => {
-      if (prev.gameOver) return prev
-      if (prev.won && !prev.keepPlaying) return prev
-      if (prev.activePowerUp) return prev
+      if (prev.gameOver || (prev.won && !prev.keepPlaying) || prev.activePowerUp) return prev
 
       const { newTiles, scoreGain, moved } = moveTiles(prev.tiles, direction)
       if (!moved) return prev
 
       prevState.current = prev
-
       const tilesWithNew = addRandomTile(newTiles)
       const newScore = prev.score + scoreGain
       const newBestScore = Math.max(newScore, prev.bestScore)
       const isStuck = !canMove(tilesWithNew)
       const won = !prev.won && hasWon(tilesWithNew)
 
-      // If stuck, lose a life
       let newLives = prev.lives
       let isGameOver = false
       if (isStuck) {
         newLives = prev.lives - 1
-        if (newLives <= 0) {
-          isGameOver = true
-          newLives = 0
-        }
+        if (newLives <= 0) { isGameOver = true; newLives = 0 }
       }
 
       return {
@@ -295,30 +301,18 @@ export function useGame() {
 
   const undo = useCallback(() => {
     setState(prev => {
-      if (!prev.canUndo || !prevState.current) return prev
-      if (prev.undoCount >= prev.maxUndos) return prev
+      if (!prev.canUndo || !prevState.current || prev.undoCount >= prev.undoTotal) return prev
       const restored = prevState.current
       prevState.current = null
       return { ...restored, canUndo: false, undoCount: prev.undoCount + 1 }
     })
   }, [])
 
-  // When stuck but has lives left, restart board
   const restartAfterStuck = useCallback(() => {
     setState(prev => {
       if (prev.lives <= 0) return prev
       const tiles = initTiles()
-      return {
-        ...prev,
-        tiles,
-        score: 0,
-        gameOver: false,
-        won: false,
-        keepPlaying: false,
-        canUndo: false,
-        undoCount: 0,
-        activePowerUp: null,
-      }
+      return { ...prev, tiles, score: 0, gameOver: false, won: false, keepPlaying: false, canUndo: false, undoCount: 0, activePowerUp: null }
     })
   }, [])
 
@@ -328,8 +322,8 @@ export function useGame() {
       if (pu === 'hammer' && prev.hammerCount <= 0) return prev
       if (pu === 'magnet' && prev.magnetCount <= 0) return prev
       if (pu === 'blast' && prev.blastCount <= 0) return prev
+
       if (pu === 'blast') {
-        // Blast activates immediately
         const tilesToRemove = Math.ceil(prev.tiles.length / 2)
         const shuffled = [...prev.tiles].sort(() => Math.random() - 0.5)
         const remaining = shuffled.slice(tilesToRemove)
@@ -349,60 +343,29 @@ export function useGame() {
   const handleTileClick = useCallback((row: number, col: number) => {
     setState(prev => {
       if (prev.activePowerUp === 'hammer') {
-        const tileExists = prev.tiles.some(t => t.row === row && t.col === col)
-        if (!tileExists || prev.hammerCount <= 0) return { ...prev, activePowerUp: null }
+        if (!prev.tiles.some(t => t.row === row && t.col === col) || prev.hammerCount <= 0) return { ...prev, activePowerUp: null }
         prevState.current = prev
-        return {
-          ...prev,
-          tiles: prev.tiles.filter(t => !(t.row === row && t.col === col)),
-          hammerCount: prev.hammerCount - 1,
-          activePowerUp: null,
-          canUndo: true,
-        }
+        return { ...prev, tiles: prev.tiles.filter(t => !(t.row === row && t.col === col)), hammerCount: prev.hammerCount - 1, activePowerUp: null, canUndo: true }
       }
-
       if (prev.activePowerUp === 'magnet') {
         const targetTile = prev.tiles.find(t => t.row === row && t.col === col)
         if (!targetTile || prev.magnetCount <= 0) return { ...prev, activePowerUp: null }
-        const sameValueTiles = prev.tiles.filter(t => t.value === targetTile.value && !(t.row === row && t.col === col))
-        if (sameValueTiles.length === 0) return { ...prev, activePowerUp: null }
-
-        const mergeTarget = sameValueTiles[0]
+        const same = prev.tiles.filter(t => t.value === targetTile.value && !(t.row === row && t.col === col))
+        if (same.length === 0) return { ...prev, activePowerUp: null }
+        const mergeTarget = same[0]
         const newValue = targetTile.value * 2
         prevState.current = prev
-
         const newTiles = prev.tiles
           .filter(t => !(t.row === row && t.col === col) && !(t.row === mergeTarget.row && t.col === mergeTarget.col))
-          .concat([{
-            id: getNextId(),
-            value: newValue,
-            row: mergeTarget.row,
-            col: mergeTarget.col,
-            isNew: false,
-            isMerged: true,
-            flash: true,
-          }])
-
-        return {
-          ...prev,
-          tiles: newTiles,
-          score: prev.score + newValue,
-          magnetCount: prev.magnetCount - 1,
-          activePowerUp: null,
-          canUndo: true,
-        }
+          .concat([{ id: getNextId(), value: newValue, row: mergeTarget.row, col: mergeTarget.col, isNew: false, isMerged: true, flash: true }])
+        return { ...prev, tiles: newTiles, score: prev.score + newValue, magnetCount: prev.magnetCount - 1, activePowerUp: null, canUndo: true }
       }
-
       return prev
     })
   }, [])
 
   const reviveWithAd = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      lives: Math.min(prev.lives + 1, prev.maxLives),
-      gameOver: false,
-    }))
+    setState(prev => ({ ...prev, lives: Math.min(prev.lives + 1, prev.maxLives), gameOver: false }))
   }, [])
 
   const newGame = useCallback(() => {
@@ -423,11 +386,7 @@ export function useGame() {
   }, [])
 
   const continueGame = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      won: false,
-      keepPlaying: true,
-    }))
+    setState(prev => ({ ...prev, won: false, keepPlaying: true }))
   }, [])
 
   const useSpinTicket = useCallback(() => {
@@ -441,15 +400,68 @@ export function useGame() {
     setState(prev => ({ ...prev, spinTickets: prev.spinTickets + count }))
   }, [])
 
-  const earnPowerUp = useCallback((pu: PowerUp) => {
+  const claimWelcome = useCallback(() => {
+    setState(prev => {
+      if (prev.welcomeClaimed) return prev
+      return {
+        ...prev,
+        welcomeClaimed: true,
+        hammerCount: prev.hammerCount + 5,
+        magnetCount: prev.magnetCount + 5,
+        blastCount: prev.blastCount + 5,
+        undoTotal: prev.undoTotal + 5,
+        spinTickets: prev.spinTickets + 3,
+      }
+    })
+  }, [])
+
+  const claimStreakDay = useCallback((day: number) => {
+    setState(prev => {
+      if (prev.streakClaimed[day]) return prev
+      const newClaimed = [...prev.streakClaimed]
+      newClaimed[day] = true
+
+      // Rewards per day
+      let h = 0, m = 0, b = 0, s = 0, u = 0
+      switch (day) {
+        case 0: m = 2; break
+        case 1: s = 2; break
+        case 2: m = 1; b = 1; break
+        case 3: b = 2; break
+        case 4: h = 1; m = 2; break
+        case 5: m = 3; h = 2; break
+        case 6: s = 5; break
+      }
+
+      return {
+        ...prev,
+        streakClaimed: newClaimed,
+        hammerCount: prev.hammerCount + h,
+        magnetCount: prev.magnetCount + m,
+        blastCount: prev.blastCount + b,
+        spinTickets: prev.spinTickets + s,
+        undoTotal: prev.undoTotal + u,
+      }
+    })
+  }, [])
+
+  const addCoins = useCallback((amount: number) => {
+    setState(prev => ({ ...prev, coins: prev.coins + amount }))
+  }, [])
+
+  const addPowerUp = useCallback((pu: PowerUp, count: number) => {
     setState(prev => {
       switch (pu) {
-        case 'hammer': return { ...prev, hammerCount: prev.hammerCount + 1 }
-        case 'magnet': return { ...prev, magnetCount: prev.magnetCount + 1 }
-        case 'blast': return { ...prev, blastCount: prev.blastCount + 1 }
+        case 'hammer': return { ...prev, hammerCount: prev.hammerCount + count }
+        case 'magnet': return { ...prev, magnetCount: prev.magnetCount + count }
+        case 'blast': return { ...prev, blastCount: prev.blastCount + count }
         default: return prev
       }
     })
+  }, [])
+
+  const addUndos = useCallback((count: number) => {
+    setState(prev => ({ ...prev, undoTotal: prev.undoTotal + count }))
   }, [])
 
   return {
@@ -464,6 +476,10 @@ export function useGame() {
     restartAfterStuck,
     useSpinTicket,
     addSpinTickets,
-    earnPowerUp,
+    claimWelcome,
+    claimStreakDay,
+    addCoins,
+    addPowerUp,
+    addUndos,
   }
 }
