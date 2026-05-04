@@ -14,10 +14,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "2048 Game — The Classic Puzzle",
-  description: "Play the addictive 2048 puzzle game! Swipe or use arrow keys to merge tiles and reach 2048.",
-  keywords: ["2048", "puzzle game", "tile game", "merge game"],
-  authors: [{ name: "Z.ai" }],
+  title: "Merge Master 2048 Challenge",
+  description: "The ultimate 2048 merge puzzle game! Swipe tiles, use power-ups, and reach 2048!",
+  keywords: ["2048", "merge master", "puzzle game", "tile game", "merge game", "challenge"],
+  authors: [{ name: "Merge Master" }],
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
