@@ -23,13 +23,17 @@ export interface GameState {
   won: boolean
   keepPlaying: boolean
   canUndo: boolean
+  undoCount: number
+  maxUndos: number
   lives: number
   maxLives: number
   hammerCount: number
   magnetCount: number
   blastCount: number
   activePowerUp: PowerUp | null
-  moveCount: number
+  spinTickets: number
+  streakDay: number
+  lastLoginDate: string
 }
 
 let tileId = 0
@@ -59,7 +63,7 @@ function addRandomTile(tiles: Tile[]): Tile[] {
   return [...tiles, { id: getNextId(), value, row, col, isNew: true, isMerged: false, flash: false }]
 }
 
-function initGame(): Tile[] {
+function initTiles(): Tile[] {
   tileId = 0
   let tiles: Tile[] = []
   tiles = addRandomTile(tiles)
@@ -67,18 +71,16 @@ function initGame(): Tile[] {
   return tiles
 }
 
-function slideLine(line: (Tile | null)[]): { newLine: (Tile | null)[], scoreGain: number, mergedIndices: number[] } {
+function slideLine(line: (Tile | null)[]): { newLine: (Tile | null)[], scoreGain: number } {
   const filtered = line.filter(t => t !== null) as Tile[]
   const result: (Tile | null)[] = []
   let scoreGain = 0
-  const mergedIndices: number[] = []
 
   let i = 0
   while (i < filtered.length) {
     if (i + 1 < filtered.length && filtered[i].value === filtered[i + 1].value) {
       const newValue = filtered[i].value * 2
       scoreGain += newValue
-      mergedIndices.push(result.length)
       result.push({
         id: getNextId(),
         value: newValue,
@@ -99,10 +101,10 @@ function slideLine(line: (Tile | null)[]): { newLine: (Tile | null)[], scoreGain
     result.push(null)
   }
 
-  return { newLine: result, scoreGain, mergedIndices }
+  return { newLine: result, scoreGain }
 }
 
-function move(tiles: Tile[], direction: Direction): { newTiles: Tile[], scoreGain: number, moved: boolean } {
+function moveTiles(tiles: Tile[], direction: Direction): { newTiles: Tile[], scoreGain: number, moved: boolean } {
   const grid: (Tile | null)[][] = Array.from({ length: 4 }, () => Array(4).fill(null))
 
   for (const tile of tiles) {
@@ -121,7 +123,7 @@ function move(tiles: Tile[], direction: Direction): { newTiles: Tile[], scoreGai
       line = [grid[i][3], grid[i][2], grid[i][1], grid[i][0]]
     } else if (direction === 'up') {
       line = [grid[0][i], grid[1][i], grid[2][i], grid[3][i]]
-    } else if (direction === 'down') {
+    } else {
       line = [grid[3][i], grid[2][i], grid[1][i], grid[0][i]]
     }
 
@@ -132,21 +134,11 @@ function move(tiles: Tile[], direction: Direction): { newTiles: Tile[], scoreGai
       const tile = newLine[j]
       if (tile) {
         let row: number, col: number
-        if (direction === 'left') {
-          row = i; col = j
-        } else if (direction === 'right') {
-          row = i; col = 3 - j
-        } else if (direction === 'up') {
-          row = j; col = i
-        } else {
-          row = 3 - j; col = i
-        }
-
-        newTiles.push({
-          ...tile,
-          row,
-          col,
-        })
+        if (direction === 'left') { row = i; col = j }
+        else if (direction === 'right') { row = i; col = 3 - j }
+        else if (direction === 'up') { row = j; col = i }
+        else { row = 3 - j; col = i }
+        newTiles.push({ ...tile, row, col })
       }
     }
   }
@@ -160,19 +152,16 @@ function move(tiles: Tile[], direction: Direction): { newTiles: Tile[], scoreGai
 
 function canMove(tiles: Tile[]): boolean {
   if (tiles.length < 16) return true
-
   const grid: number[][] = Array.from({ length: 4 }, () => Array(4).fill(0))
   for (const tile of tiles) {
     grid[tile.row][tile.col] = tile.value
   }
-
   for (let r = 0; r < 4; r++) {
     for (let c = 0; c < 4; c++) {
       if (c + 1 < 4 && grid[r][c] === grid[r][c + 1]) return true
       if (r + 1 < 4 && grid[r][c] === grid[r + 1][c]) return true
     }
   }
-
   return false
 }
 
@@ -180,40 +169,75 @@ function hasWon(tiles: Tile[]): boolean {
   return tiles.some(t => t.value >= 2048)
 }
 
+function getTodayStr(): string {
+  return new Date().toISOString().split('T')[0]
+}
+
+function loadSavedData() {
+  if (typeof window === 'undefined') return { bestScore: 0, spinTickets: 5, streakDay: 0, lastLoginDate: '' }
+  try {
+    const saved = localStorage.getItem('mergeMaster2048')
+    if (saved) return JSON.parse(saved)
+  } catch { /* ignore */ }
+  return { bestScore: 0, spinTickets: 5, streakDay: 0, lastLoginDate: '' }
+}
+
 export function useGame() {
   const [state, setState] = useState<GameState>(() => {
-    const tiles = initGame()
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('mergeMaster2048') : null
-    const data = saved ? JSON.parse(saved) : {}
+    const saved = loadSavedData()
+    const tiles = initTiles()
+    const today = getTodayStr()
+    let streakDay = saved.streakDay || 0
+    let lastLoginDate = saved.lastLoginDate || ''
+
+    // Check streak
+    if (lastLoginDate && lastLoginDate !== today) {
+      const lastDate = new Date(lastLoginDate)
+      const todayDate = new Date(today)
+      const diffDays = Math.floor((todayDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24))
+      if (diffDays === 1) {
+        streakDay = Math.min(streakDay + 1, 6) // 0-6 for 7 days
+      } else if (diffDays > 1) {
+        streakDay = 0 // Reset streak
+      }
+    }
+
     return {
       tiles,
       score: 0,
-      bestScore: data.bestScore || 0,
+      bestScore: saved.bestScore || 0,
       gameOver: false,
       won: false,
       keepPlaying: false,
       canUndo: false,
+      undoCount: 0,
+      maxUndos: 5,
       lives: 3,
       maxLives: 3,
       hammerCount: 1,
       magnetCount: 1,
       blastCount: 1,
       activePowerUp: null,
-      moveCount: 0,
+      spinTickets: saved.spinTickets ?? 5,
+      streakDay,
+      lastLoginDate: today,
     }
   })
 
   const prevState = useRef<GameState | null>(null)
 
-  // Save progress
+  // Save data
   useEffect(() => {
     const data = {
       bestScore: state.bestScore,
+      spinTickets: state.spinTickets,
+      streakDay: state.streakDay,
+      lastLoginDate: state.lastLoginDate,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate])
 
-  // Clear flash after a short time
+  // Clear flash after short time
   useEffect(() => {
     const hasFlash = state.tiles.some(t => t.flash)
     if (hasFlash) {
@@ -222,7 +246,7 @@ export function useGame() {
           ...prev,
           tiles: prev.tiles.map(t => ({ ...t, flash: false })),
         }))
-      }, 200)
+      }, 250)
       return () => clearTimeout(timer)
     }
   }, [state.tiles])
@@ -233,8 +257,7 @@ export function useGame() {
       if (prev.won && !prev.keepPlaying) return prev
       if (prev.activePowerUp) return prev
 
-      const { newTiles, scoreGain, moved } = move(prev.tiles, direction)
-
+      const { newTiles, scoreGain, moved } = moveTiles(prev.tiles, direction)
       if (!moved) return prev
 
       prevState.current = prev
@@ -242,13 +265,18 @@ export function useGame() {
       const tilesWithNew = addRandomTile(newTiles)
       const newScore = prev.score + scoreGain
       const newBestScore = Math.max(newScore, prev.bestScore)
-      const isGameOver = !canMove(tilesWithNew)
+      const isStuck = !canMove(tilesWithNew)
       const won = !prev.won && hasWon(tilesWithNew)
 
-      // Lose a life on game over
+      // If stuck, lose a life
       let newLives = prev.lives
-      if (isGameOver) {
-        newLives = Math.max(0, prev.lives - 1)
+      let isGameOver = false
+      if (isStuck) {
+        newLives = prev.lives - 1
+        if (newLives <= 0) {
+          isGameOver = true
+          newLives = 0
+        }
       }
 
       return {
@@ -259,8 +287,8 @@ export function useGame() {
         gameOver: isGameOver,
         won: won || (prev.won && prev.keepPlaying),
         canUndo: true,
+        undoCount: 0,
         lives: newLives,
-        moveCount: prev.moveCount + 1,
       }
     })
   }, [])
@@ -268,127 +296,106 @@ export function useGame() {
   const undo = useCallback(() => {
     setState(prev => {
       if (!prev.canUndo || !prevState.current) return prev
+      if (prev.undoCount >= prev.maxUndos) return prev
       const restored = prevState.current
       prevState.current = null
-      return { ...restored, canUndo: false }
+      return { ...restored, canUndo: false, undoCount: prev.undoCount + 1 }
     })
   }, [])
 
-  const useHammer = useCallback((row: number, col: number) => {
+  // When stuck but has lives left, restart board
+  const restartAfterStuck = useCallback(() => {
     setState(prev => {
-      if (prev.hammerCount <= 0 || prev.activePowerUp !== 'hammer') return prev
-      const newTiles = prev.tiles.filter(t => !(t.row === row && t.col === col))
-      if (newTiles.length === prev.tiles.length) return prev // tile not found
-      prevState.current = prev
+      if (prev.lives <= 0) return prev
+      const tiles = initTiles()
       return {
         ...prev,
-        tiles: newTiles,
-        hammerCount: prev.hammerCount - 1,
+        tiles,
+        score: 0,
+        gameOver: false,
+        won: false,
+        keepPlaying: false,
+        canUndo: false,
+        undoCount: 0,
         activePowerUp: null,
-        canUndo: true,
       }
     })
   }, [])
 
-  const useMagnet = useCallback((row: number, col: number) => {
+  const activatePowerUp = useCallback((pu: PowerUp) => {
     setState(prev => {
-      if (prev.magnetCount <= 0 || prev.activePowerUp !== 'magnet') return prev
-      const targetTile = prev.tiles.find(t => t.row === row && t.col === col)
-      if (!targetTile) return prev
-
-      // Find another tile with the same value
-      const sameValueTiles = prev.tiles.filter(t => t.value === targetTile.value && !(t.row === row && t.col === col))
-      if (sameValueTiles.length === 0) return prev
-
-      // Merge with the first matching tile
-      const mergeTarget = sameValueTiles[0]
-      const newValue = targetTile.value * 2
-      prevState.current = prev
-
-      const newTiles = prev.tiles
-        .filter(t => !(t.row === row && t.col === col) && !(t.row === mergeTarget.row && t.col === mergeTarget.col))
-        .concat([{
-          id: getNextId(),
-          value: newValue,
-          row: mergeTarget.row,
-          col: mergeTarget.col,
-          isNew: false,
-          isMerged: true,
-          flash: true,
-        }])
-
-      return {
-        ...prev,
-        tiles: newTiles,
-        score: prev.score + newValue,
-        magnetCount: prev.magnetCount - 1,
-        activePowerUp: null,
-        canUndo: true,
-      }
-    })
-  }, [])
-
-  const useBlast = useCallback(() => {
-    setState(prev => {
-      if (prev.blastCount <= 0) return prev
-
-      // Remove ~half the tiles randomly
-      const tilesToRemove = Math.ceil(prev.tiles.length / 2)
-      const shuffled = [...prev.tiles].sort(() => Math.random() - 0.5)
-      const remaining = shuffled.slice(tilesToRemove)
-
-      prevState.current = prev
-
-      return {
-        ...prev,
-        tiles: remaining.map(t => ({ ...t, id: getNextId(), isNew: false, isMerged: false, flash: false })),
-        blastCount: prev.blastCount - 1,
-        activePowerUp: null,
-        canUndo: true,
-      }
-    })
-  }, [])
-
-  const activatePowerUp = useCallback((powerUp: PowerUp) => {
-    setState(prev => {
-      if (prev.activePowerUp === powerUp) {
-        return { ...prev, activePowerUp: null }
-      }
-      // Check if available
-      if (powerUp === 'hammer' && prev.hammerCount <= 0) return prev
-      if (powerUp === 'magnet' && prev.magnetCount <= 0) return prev
-      if (powerUp === 'blast' && prev.blastCount <= 0) return prev
-
-      if (powerUp === 'blast') {
+      if (prev.activePowerUp === pu) return { ...prev, activePowerUp: null }
+      if (pu === 'hammer' && prev.hammerCount <= 0) return prev
+      if (pu === 'magnet' && prev.magnetCount <= 0) return prev
+      if (pu === 'blast' && prev.blastCount <= 0) return prev
+      if (pu === 'blast') {
         // Blast activates immediately
-        return prev // Will be handled by useBlast
+        const tilesToRemove = Math.ceil(prev.tiles.length / 2)
+        const shuffled = [...prev.tiles].sort(() => Math.random() - 0.5)
+        const remaining = shuffled.slice(tilesToRemove)
+        prevState.current = prev
+        return {
+          ...prev,
+          tiles: remaining.map(t => ({ ...t, id: getNextId(), isNew: false, isMerged: false, flash: false })),
+          blastCount: prev.blastCount - 1,
+          activePowerUp: null,
+          canUndo: true,
+        }
       }
-
-      return { ...prev, activePowerUp: powerUp }
+      return { ...prev, activePowerUp: pu }
     })
   }, [])
 
   const handleTileClick = useCallback((row: number, col: number) => {
     setState(prev => {
       if (prev.activePowerUp === 'hammer') {
-        // Will be handled by useHammer
-        return prev
+        const tileExists = prev.tiles.some(t => t.row === row && t.col === col)
+        if (!tileExists || prev.hammerCount <= 0) return { ...prev, activePowerUp: null }
+        prevState.current = prev
+        return {
+          ...prev,
+          tiles: prev.tiles.filter(t => !(t.row === row && t.col === col)),
+          hammerCount: prev.hammerCount - 1,
+          activePowerUp: null,
+          canUndo: true,
+        }
       }
+
       if (prev.activePowerUp === 'magnet') {
-        // Will be handled by useMagnet
-        return prev
+        const targetTile = prev.tiles.find(t => t.row === row && t.col === col)
+        if (!targetTile || prev.magnetCount <= 0) return { ...prev, activePowerUp: null }
+        const sameValueTiles = prev.tiles.filter(t => t.value === targetTile.value && !(t.row === row && t.col === col))
+        if (sameValueTiles.length === 0) return { ...prev, activePowerUp: null }
+
+        const mergeTarget = sameValueTiles[0]
+        const newValue = targetTile.value * 2
+        prevState.current = prev
+
+        const newTiles = prev.tiles
+          .filter(t => !(t.row === row && t.col === col) && !(t.row === mergeTarget.row && t.col === mergeTarget.col))
+          .concat([{
+            id: getNextId(),
+            value: newValue,
+            row: mergeTarget.row,
+            col: mergeTarget.col,
+            isNew: false,
+            isMerged: true,
+            flash: true,
+          }])
+
+        return {
+          ...prev,
+          tiles: newTiles,
+          score: prev.score + newValue,
+          magnetCount: prev.magnetCount - 1,
+          activePowerUp: null,
+          canUndo: true,
+        }
       }
+
       return prev
     })
-
-    // Use the actual power-up functions
-    const currentState = state
-    if (currentState.activePowerUp === 'hammer') {
-      useHammer(row, col)
-    } else if (currentState.activePowerUp === 'magnet') {
-      useMagnet(row, col)
-    }
-  }, [state.activePowerUp, useHammer, useMagnet])
+  }, [])
 
   const reviveWithAd = useCallback(() => {
     setState(prev => ({
@@ -398,37 +405,20 @@ export function useGame() {
     }))
   }, [])
 
-  const earnPowerUp = useCallback((powerUp: PowerUp) => {
-    setState(prev => {
-      switch (powerUp) {
-        case 'hammer':
-          return { ...prev, hammerCount: prev.hammerCount + 1 }
-        case 'magnet':
-          return { ...prev, magnetCount: prev.magnetCount + 1 }
-        case 'blast':
-          return { ...prev, blastCount: prev.blastCount + 1 }
-      }
-    })
-  }, [])
-
   const newGame = useCallback(() => {
-    const tiles = initGame()
+    const tiles = initTiles()
     prevState.current = null
     setState(prev => ({
+      ...prev,
       tiles,
       score: 0,
-      bestScore: Math.max(prev.bestScore, prev.score),
       gameOver: false,
       won: false,
       keepPlaying: false,
       canUndo: false,
-      lives: prev.lives > 0 ? prev.lives : 3,
-      maxLives: 3,
-      hammerCount: prev.hammerCount,
-      magnetCount: prev.magnetCount,
-      blastCount: prev.blastCount,
+      undoCount: 0,
+      lives: prev.maxLives,
       activePowerUp: null,
-      moveCount: 0,
     }))
   }, [])
 
@@ -440,18 +430,40 @@ export function useGame() {
     }))
   }, [])
 
+  const useSpinTicket = useCallback(() => {
+    setState(prev => {
+      if (prev.spinTickets <= 0) return prev
+      return { ...prev, spinTickets: prev.spinTickets - 1 }
+    })
+  }, [])
+
+  const addSpinTickets = useCallback((count: number) => {
+    setState(prev => ({ ...prev, spinTickets: prev.spinTickets + count }))
+  }, [])
+
+  const earnPowerUp = useCallback((pu: PowerUp) => {
+    setState(prev => {
+      switch (pu) {
+        case 'hammer': return { ...prev, hammerCount: prev.hammerCount + 1 }
+        case 'magnet': return { ...prev, magnetCount: prev.magnetCount + 1 }
+        case 'blast': return { ...prev, blastCount: prev.blastCount + 1 }
+        default: return prev
+      }
+    })
+  }, [])
+
   return {
     ...state,
     handleMove,
     newGame,
     continueGame,
     undo,
-    useHammer,
-    useMagnet,
-    useBlast,
     activatePowerUp,
     handleTileClick,
     reviveWithAd,
+    restartAfterStuck,
+    useSpinTicket,
+    addSpinTickets,
     earnPowerUp,
   }
 }
