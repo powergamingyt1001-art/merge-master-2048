@@ -12,13 +12,13 @@ interface LoginStreakProps {
 }
 
 const STREAK_REWARDS = [
-  { day: 1, label: '2 Magnet', emoji: '🧲', color: '#00E676', desc: '2x Magnet power-up' },
-  { day: 2, label: '2 Spin', emoji: '🎫', color: '#00FFFF', desc: '2 Spin tickets' },
-  { day: 3, label: '1 Magnet + 1 Blast', emoji: '🧲💣', color: '#F59563', desc: 'Magnet & Blast' },
-  { day: 4, label: '2 Blast', emoji: '💣', color: '#FF7A00', desc: '2x Blast power-up' },
-  { day: 5, label: '1 Hammer + 2 Magnet', emoji: '🔨🧲', color: '#F67C5F', desc: 'Hammer & Magnets' },
-  { day: 6, label: '3 Magnet + 2 Hammer', emoji: '🧲🔨', color: '#F59563', desc: 'Mega power-ups!' },
-  { day: 7, label: '5 Spin Tickets', emoji: '🎰', color: '#EDC22E', desc: 'BIG REWARD! 🎉' },
+  { day: 1, label: '2 Magnets', emoji: '🧲', color: '#00E676', items: '2x Magnet power-up' },
+  { day: 2, label: '2 Spins', emoji: '🎫', color: '#00FFFF', items: '2 Spin tickets' },
+  { day: 3, label: '1 Magnet + 1 Boom', emoji: '🧲💣', color: '#F59563', items: 'Magnet & Boom' },
+  { day: 4, label: '2 Booms', emoji: '💣', color: '#FF7A00', items: '2x Boom power-up' },
+  { day: 5, label: '1 Hammer + 2 Magnets', emoji: '🔨🧲', color: '#F67C5F', items: 'Hammer & Magnets' },
+  { day: 6, label: '3 Magnets + 2 Hammers', emoji: '🧲🔨', color: '#F59563', items: 'Mega power-ups!' },
+  { day: 7, label: '5 Spin Tickets', emoji: '🎰', color: '#EDC22E', items: 'BIG REWARD! 🎉' },
 ]
 
 export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim }: LoginStreakProps) {
@@ -44,7 +44,7 @@ export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim
               <div>
                 <h3 className="text-lg font-bold" style={{ color: '#FFFFFF' }}>📅 Daily Rewards</h3>
                 <p className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                  Day {streakDay + 1} of 7 • Login daily to claim!
+                  Day {Math.min(streakDay + 1, 7)} of 7 • Login daily to claim!
                 </p>
               </div>
               <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
@@ -54,14 +54,16 @@ export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim
 
             <div className="px-4 pb-5">
               <p className="text-[9px] mb-3 px-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                ⏰ Claims expire after 7 days. Unclaimed rewards reduce to 30%.
+                ⏰ Rewards expire after 7 days. Unclaimed rewards reduce to 30%.
               </p>
 
+              {/* 7 Day Boxes */}
               <div className="grid grid-cols-4 gap-2 mb-3">
                 {STREAK_REWARDS.map((reward, i) => {
                   const isClaimed = streakClaimed[i]
-                  const isCurrent = i === streakDay && !isClaimed
+                  const isCurrent = i === streakDay && !isClaimed && i < 7
                   const isLocked = i > streakDay
+                  const isAvailable = i <= streakDay && !isClaimed
 
                   return (
                     <motion.div
@@ -73,21 +75,20 @@ export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim
                         opacity: isLocked ? 0.35 : 1,
                         ringColor: isCurrent ? reward.color : undefined,
                       }}
-                      whileTap={isCurrent ? { scale: 0.95 } : {}}
                     >
                       <span className="text-lg mb-0.5">{reward.emoji}</span>
                       <span className="text-[8px] font-bold text-center leading-tight" style={{ color: isCurrent ? reward.color : isClaimed ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.3)' }}>
                         D{reward.day}
                       </span>
                       <span className="text-[7px] text-center leading-tight mt-0.5" style={{ color: isCurrent ? reward.color : 'rgba(255,255,255,0.3)' }}>
-                        {isClaimed ? '✓' : isLocked ? '🔒' : reward.label}
+                        {isClaimed ? '✓ Claimed' : isLocked ? '🔒' : reward.label}
                       </span>
                     </motion.div>
                   )
                 })}
               </div>
 
-              {/* Current day claim detail */}
+              {/* Claim button for current day */}
               {streakDay < 7 && !streakClaimed[streakDay] && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -102,7 +103,7 @@ export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim
                         Day {streakDay + 1}: {STREAK_REWARDS[streakDay].label}
                       </p>
                       <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                        {STREAK_REWARDS[streakDay].desc}
+                        {STREAK_REWARDS[streakDay].items}
                       </p>
                     </div>
                     <button
@@ -114,6 +115,15 @@ export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim
                     </button>
                   </div>
                 </motion.div>
+              )}
+
+              {/* All claimed message */}
+              {streakDay >= 7 && (
+                <div className="p-3 rounded-xl mb-2 text-center"
+                  style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                  <p className="text-xs font-bold" style={{ color: '#EDC22E' }}>🎉 All 7 days claimed!</p>
+                  <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Come back tomorrow for new rewards</p>
+                </div>
               )}
 
               {/* Progress bar */}

@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 
 export type Direction = 'up' | 'down' | 'left' | 'right'
 export type PowerUp = 'hammer' | 'magnet' | 'blast'
+export type GameMode = 'classic' | 'bot'
 
 export interface Tile {
   id: number
@@ -13,6 +14,12 @@ export interface Tile {
   isNew: boolean
   isMerged: boolean
   flash: boolean
+}
+
+export interface BotOpponent {
+  name: string
+  targetScore: number
+  avatar: string
 }
 
 export interface GameState {
@@ -38,7 +45,25 @@ export interface GameState {
   streakClaimed: boolean[]
   welcomeClaimed: boolean
   coins: number
+  // Bot mode
+  gameMode: GameMode
+  botOpponent: BotOpponent | null
+  botBattleResult: 'win' | 'lose' | null
+  modBestScore: number
 }
+
+const BOT_NAMES = [
+  { name: 'Rahul Pro', avatar: '🦁' },
+  { name: 'Pooja Queen', avatar: '👸' },
+  { name: 'Amit King', avatar: '👑' },
+  { name: 'Sneha Star', avatar: '⭐' },
+  { name: 'Vikram Boss', avatar: '🔥' },
+  { name: 'Anjali Ace', avatar: '💎' },
+  { name: 'Ravi Master', avatar: '🏆' },
+  { name: 'Priya Legend', avatar: '🌟' },
+  { name: 'Karan Beast', avatar: '💪' },
+  { name: 'Neha Champ', avatar: '🎯' },
+]
 
 let tileId = 0
 
@@ -162,13 +187,21 @@ function loadSavedData() {
   return null
 }
 
+function generateBotOpponent(modBestScore: number): BotOpponent {
+  const bot = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]
+  // Generate target score based on player's mod best - 50-50 chance
+  const baseScore = Math.max(modBestScore, 200)
+  const variance = baseScore * 0.4
+  const targetScore = Math.round(baseScore + (Math.random() * variance * 2 - variance))
+  return { ...bot, targetScore: Math.max(100, targetScore) }
+}
+
 export function useGame() {
   const [state, setState] = useState<GameState>(() => {
     const saved = loadSavedData()
     const tiles = initTiles()
     const today = getTodayStr()
 
-    // Default: welcome gift for new users
     const defaults: GameState = {
       tiles,
       score: 0,
@@ -182,21 +215,24 @@ export function useGame() {
       undoTotal: 5,
       lives: 3,
       maxLives: 3,
-      hammerCount: 5,
-      magnetCount: 5,
-      blastCount: 5,
+      hammerCount: 0,
+      magnetCount: 0,
+      blastCount: 0,
       activePowerUp: null,
-      spinTickets: 3,
+      spinTickets: 0,
       streakDay: 0,
       lastLoginDate: today,
       streakClaimed: [false, false, false, false, false, false, false],
       welcomeClaimed: false,
       coins: 0,
+      gameMode: 'classic',
+      botOpponent: null,
+      botBattleResult: null,
+      modBestScore: 0,
     }
 
     if (!saved) return defaults
 
-    // Restore from saved
     let streakDay = saved.streakDay || 0
     const lastLoginDate = saved.lastLoginDate || today
     const streakClaimed = saved.streakClaimed || [false, false, false, false, false, false, false]
@@ -208,12 +244,17 @@ export function useGame() {
       if (diffDays === 1) {
         streakDay = Math.min(streakDay + 1, 6)
       } else if (diffDays > 1) {
+        // Streak broken - reset but keep already claimed items at 30%
         streakDay = 0
-        // Reset claims if streak broken (after 7 days from first claim, 30% remains)
+        const newClaimed = [...streakClaimed]
         for (let i = 0; i < 7; i++) {
-          if (streakClaimed[i]) {
-            // Already claimed items stay but only 30% if expired
+          if (newClaimed[i]) {
+            // Already claimed rewards stay claimed, but user only got 30%
           }
+        }
+        // Reset unclaimed
+        for (let i = 0; i < 7; i++) {
+          if (!newClaimed[i]) newClaimed[i] = false
         }
       }
     }
@@ -221,16 +262,17 @@ export function useGame() {
     return {
       ...defaults,
       bestScore: saved.bestScore || 0,
-      spinTickets: saved.spinTickets ?? 3,
+      spinTickets: saved.spinTickets ?? 0,
       streakDay,
       lastLoginDate: today,
       streakClaimed: saved.streakClaimed || streakClaimed,
       welcomeClaimed: saved.welcomeClaimed || false,
-      hammerCount: saved.hammerCount ?? 5,
-      magnetCount: saved.magnetCount ?? 5,
-      blastCount: saved.blastCount ?? 5,
+      hammerCount: saved.hammerCount ?? 0,
+      magnetCount: saved.magnetCount ?? 0,
+      blastCount: saved.blastCount ?? 0,
       undoTotal: saved.undoTotal ?? 5,
       coins: saved.coins || 0,
+      modBestScore: saved.modBestScore || 0,
     }
   })
 
@@ -250,9 +292,10 @@ export function useGame() {
       blastCount: state.blastCount,
       undoTotal: state.undoTotal,
       coins: state.coins,
+      modBestScore: state.modBestScore,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.modBestScore])
 
   // Clear flash
   useEffect(() => {
@@ -285,6 +328,18 @@ export function useGame() {
         if (newLives <= 0) { isGameOver = true; newLives = 0 }
       }
 
+      // Bot battle check
+      let botBattleResult = prev.botBattleResult
+      let modBestScore = prev.modBestScore
+      if (prev.gameMode === 'bot' && prev.botOpponent && !botBattleResult) {
+        if (newScore >= prev.botOpponent.targetScore) {
+          botBattleResult = 'win'
+          modBestScore = Math.max(modBestScore, newScore)
+        } else if (isGameOver) {
+          botBattleResult = 'lose'
+        }
+      }
+
       return {
         ...prev,
         tiles: tilesWithNew,
@@ -295,6 +350,8 @@ export function useGame() {
         canUndo: true,
         undoCount: 0,
         lives: newLives,
+        botBattleResult,
+        modBestScore,
       }
     })
   }, [])
@@ -364,10 +421,6 @@ export function useGame() {
     })
   }, [])
 
-  const reviveWithAd = useCallback(() => {
-    setState(prev => ({ ...prev, lives: Math.min(prev.lives + 1, prev.maxLives), gameOver: false }))
-  }, [])
-
   const newGame = useCallback(() => {
     const tiles = initTiles()
     prevState.current = null
@@ -382,7 +435,33 @@ export function useGame() {
       undoCount: 0,
       lives: prev.maxLives,
       activePowerUp: null,
+      botOpponent: null,
+      botBattleResult: null,
+      gameMode: 'classic',
     }))
+  }, [])
+
+  const startBotBattle = useCallback(() => {
+    const tiles = initTiles()
+    prevState.current = null
+    setState(prev => {
+      const opponent = generateBotOpponent(prev.modBestScore)
+      return {
+        ...prev,
+        tiles,
+        score: 0,
+        gameOver: false,
+        won: false,
+        keepPlaying: false,
+        canUndo: false,
+        undoCount: 0,
+        lives: prev.maxLives,
+        activePowerUp: null,
+        gameMode: 'bot',
+        botOpponent: opponent,
+        botBattleResult: null,
+      }
+    })
   }, [])
 
   const continueGame = useCallback(() => {
@@ -421,8 +500,7 @@ export function useGame() {
       const newClaimed = [...prev.streakClaimed]
       newClaimed[day] = true
 
-      // Rewards per day
-      let h = 0, m = 0, b = 0, s = 0, u = 0
+      let h = 0, m = 0, b = 0, s = 0
       switch (day) {
         case 0: m = 2; break
         case 1: s = 2; break
@@ -440,7 +518,6 @@ export function useGame() {
         magnetCount: prev.magnetCount + m,
         blastCount: prev.blastCount + b,
         spinTickets: prev.spinTickets + s,
-        undoTotal: prev.undoTotal + u,
       }
     })
   }, [])
@@ -464,6 +541,28 @@ export function useGame() {
     setState(prev => ({ ...prev, undoTotal: prev.undoTotal + count }))
   }, [])
 
+  const reviveWithAd = useCallback(() => {
+    setState(prev => ({ ...prev, lives: Math.min(prev.lives + 1, prev.maxLives), gameOver: false }))
+  }, [])
+
+  const goBackToDashboard = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      tiles: initTiles(),
+      score: 0,
+      gameOver: false,
+      won: false,
+      keepPlaying: false,
+      canUndo: false,
+      undoCount: 0,
+      lives: prev.maxLives,
+      activePowerUp: null,
+      gameMode: 'classic',
+      botOpponent: null,
+      botBattleResult: null,
+    }))
+  }, [])
+
   return {
     ...state,
     handleMove,
@@ -481,5 +580,7 @@ export function useGame() {
     addCoins,
     addPowerUp,
     addUndos,
+    startBotBattle,
+    goBackToDashboard,
   }
 }

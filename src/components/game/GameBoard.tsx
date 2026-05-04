@@ -5,13 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useGame, Direction, PowerUp } from '@/hooks/useGame'
 import { TileComponent } from './Tile'
 import { RewardedAd } from './RewardedAd'
-import { SpinWheel, SpinPrize } from './SpinWheel'
-import { LoginStreak } from './LoginStreak'
-import { WelcomeGift } from './WelcomeGift'
-import { BannerAd } from './BannerAd'
 import {
   Trophy, RotateCcw, Undo2, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
-  Heart, Hammer, Magnet, Bomb, Crown, Zap, Wifi, WifiOff,
+  Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle,
 } from 'lucide-react'
 
 function checkCanMove(tiles: { row: number; col: number; value: number }[]): boolean {
@@ -28,13 +24,13 @@ function checkCanMove(tiles: { row: number; col: number; value: number }[]): boo
 }
 
 function useResponsiveSize() {
-  const [sizes, setSizes] = useState({ cellSize: 72, gap: 8 })
+  const [sizes, setSizes] = useState({ cellSize: 80, gap: 10 })
   useEffect(() => {
     function calc() {
       const vw = window.innerWidth
       const vh = window.innerHeight
-      const maxBoard = Math.min(vw - 32, vh - 360, 400)
-      const gap = maxBoard > 300 ? 8 : 6
+      const maxBoard = Math.min(vw - 24, vh - 300, 420)
+      const gap = maxBoard > 300 ? 10 : 8
       const cellSize = Math.floor((maxBoard - gap * 5) / 4)
       setSizes({ cellSize, gap })
     }
@@ -45,16 +41,19 @@ function useResponsiveSize() {
   return sizes
 }
 
-export function GameBoard() {
+interface GameBoardProps {
+  onBackToDashboard: () => void
+}
+
+export function GameBoard({ onBackToDashboard }: GameBoardProps) {
   const game = useGame()
   const {
     tiles, score, bestScore, gameOver, won, keepPlaying,
     canUndo, undoCount, undoTotal,
     lives, maxLives, hammerCount, magnetCount, blastCount, activePowerUp,
-    spinTickets, streakDay, streakClaimed, welcomeClaimed, coins,
+    gameMode, botOpponent, botBattleResult,
     handleMove, newGame, continueGame, undo, activatePowerUp, handleTileClick,
-    reviveWithAd, restartAfterStuck, useSpinTicket, addSpinTickets,
-    claimWelcome, claimStreakDay, addCoins, addPowerUp, addUndos,
+    reviveWithAd, restartAfterStuck,
   } = game
 
   const touchStart = useRef<{ x: number; y: number } | null>(null)
@@ -63,13 +62,8 @@ export function GameBoard() {
   const prevScore = useRef(score)
   const [scoreGain, setScoreGain] = useState(0)
   const [showRewardAd, setShowRewardAd] = useState(false)
-  const [showSpinWheel, setShowSpinWheel] = useState(false)
-  const [showStreak, setShowStreak] = useState(false)
-  const [showWelcome, setShowWelcome] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
-  const [adSpinCount, setAdSpinCount] = useState(0)
 
-  // Derived state instead of useEffect+setState
   const [gameOverDismissed, setGameOverDismissed] = useState(false)
   const isStuck = !checkCanMove(tiles) && lives > 0 && !gameOver
   const showGameOverModal = gameOver && lives <= 0 && !gameOverDismissed
@@ -82,14 +76,6 @@ export function GameBoard() {
     window.addEventListener('offline', off)
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
   }, [])
-
-  // Show welcome gift for new users
-  useEffect(() => {
-    if (!welcomeClaimed) {
-      const timer = setTimeout(() => setShowWelcome(true), 1000)
-      return () => clearTimeout(timer)
-    }
-  }, [welcomeClaimed])
 
   // Score gain animation
   useEffect(() => {
@@ -127,29 +113,16 @@ export function GameBoard() {
   }, [onMove])
 
   const handlePowerUp = useCallback((pu: PowerUp) => {
-    if (pu === 'blast') { activatePowerUp('blast') }
-    else { activatePowerUp(pu) }
+    activatePowerUp(pu)
   }, [activatePowerUp])
-
-  const handleSpinPrize = useCallback((prize: SpinPrize) => {
-    switch (prize.type) {
-      case 'blast': addPowerUp('blast', prize.count); break
-      case 'magnet': addPowerUp('magnet', prize.count); break
-      case 'hammer': addPowerUp('hammer', prize.count); break
-      case 'undo': addUndos(prize.count); break
-      case 'spin': addSpinTickets(prize.count); break
-      case 'coin': addCoins(prize.count); break
-      case 'respin': addSpinTickets(1); break
-    }
-  }, [addPowerUp, addUndos, addSpinTickets, addCoins])
-
-  const handleAdForSpin = useCallback(() => {
-    if (isOnline) addSpinTickets(1)
-  }, [isOnline, addSpinTickets])
 
   const handleStuckContinue = useCallback(() => {
     restartAfterStuck()
   }, [restartAfterStuck])
+
+  const handleBack = useCallback(() => {
+    onBackToDashboard()
+  }, [onBackToDashboard])
 
   return (
     <div
@@ -160,11 +133,12 @@ export function GameBoard() {
       role="application"
       aria-label="Merge Master 2048 Challenge"
     >
-      {/* Top Banner Ad */}
-      <BannerAd position="top" />
-
       {/* Header */}
-      <div className="flex items-center justify-between w-full px-2 pt-1" style={{ maxWidth: boardSize }}>
+      <div className="flex items-center justify-between w-full px-3 pt-2" style={{ maxWidth: boardSize + 20 }}>
+        <button onClick={handleBack} className="flex items-center gap-1 p-1.5 rounded-lg"
+          style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+          <ArrowLeftCircle className="w-5 h-5" style={{ color: 'rgba(255,255,255,0.6)' }} />
+        </button>
         <div className="flex items-center gap-1.5">
           <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)' }}>
             <Crown className="w-3.5 h-3.5" style={{ color: '#FFFFFF' }} />
@@ -179,7 +153,6 @@ export function GameBoard() {
         <div className="flex gap-1.5 relative">
           <ScoreCard label="SCORE" value={score} />
           <ScoreCard label="BEST" value={bestScore} />
-          {coins > 0 && <ScoreCard label="COINS" value={coins} />}
           <AnimatePresence>
             {scoreGain > 0 && (
               <motion.div initial={{ opacity: 1, y: 0 }} animate={{ opacity: 0, y: -20 }} exit={{ opacity: 0 }}
@@ -191,17 +164,46 @@ export function GameBoard() {
         </div>
       </div>
 
-      {/* Lives + Power-ups row (next to each other) */}
-      <div className="flex items-center w-full px-2" style={{ maxWidth: boardSize }}>
+      {/* Bot Battle Bar */}
+      {gameMode === 'bot' && botOpponent && (
+        <motion.div initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+          className="flex items-center justify-between w-full px-3 py-2 rounded-xl"
+          style={{ maxWidth: boardSize, backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)' }}>
+          <div className="flex items-center gap-2">
+            <span className="text-xl">{botOpponent.avatar}</span>
+            <div>
+              <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>{botOpponent.name}</p>
+              <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                Target: <span style={{ color: '#F65E3B' }}>{botOpponent.targetScore}</span>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Progress towards target */}
+            <div className="w-20 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
+              <div className="h-full rounded-full transition-all"
+                style={{
+                  width: `${Math.min((score / botOpponent.targetScore) * 100, 100)}%`,
+                  background: score >= botOpponent.targetScore ? 'linear-gradient(90deg, #00E676, #00C853)' : 'linear-gradient(90deg, #F65E3B, #EDC22E)',
+                }} />
+            </div>
+            <span className="text-[9px] font-bold" style={{ color: score >= botOpponent.targetScore ? '#00E676' : '#F65E3B' }}>
+              {Math.min(score, botOpponent.targetScore)}/{botOpponent.targetScore}
+            </span>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Lives + Power-ups row */}
+      <div className="flex items-center w-full px-3" style={{ maxWidth: boardSize }}>
         {/* Hearts */}
         <div className="flex items-center gap-0.5">
           {Array.from({ length: maxLives }).map((_, i) => (
-            <Heart key={i} className="w-4 h-4 sm:w-4.5 sm:h-4.5"
+            <Heart key={i} className="w-4 h-4 sm:w-5 sm:h-5"
               style={{ color: i < lives ? '#F65E3B' : 'rgba(255,255,255,0.12)', fill: i < lives ? '#F65E3B' : 'none', filter: i < lives ? 'drop-shadow(0 0 3px rgba(246,94,59,0.5))' : 'none' }} />
           ))}
         </div>
 
-        {/* Gap */}
         <div className="w-2" />
 
         {/* Power-ups */}
@@ -215,22 +217,6 @@ export function GameBoard() {
           <PowerUpBtn icon={<Undo2 className="w-3.5 h-3.5" />} count={undoTotal - undoCount} active={false}
             onClick={undo} color="#8f7a66" disabled={!canUndo || undoCount >= undoTotal} />
         </div>
-
-        <div className="flex-1" />
-
-        {/* Quick access: Spin + Streak */}
-        <div className="flex items-center gap-1">
-          <button onClick={() => setShowStreak(true)} className="text-base" title="Daily Rewards">📅</button>
-          <button onClick={() => setShowSpinWheel(true)} className="text-base" title="Spin & Win">🎰</button>
-        </div>
-      </div>
-
-      {/* Online indicator */}
-      <div className="flex items-center gap-1">
-        {isOnline ? <Wifi className="w-2.5 h-2.5" style={{ color: '#00E676' }} /> : <WifiOff className="w-2.5 h-2.5" style={{ color: 'rgba(255,255,255,0.2)' }} />}
-        <span className="text-[8px]" style={{ color: isOnline ? 'rgba(0,230,118,0.5)' : 'rgba(255,255,255,0.2)' }}>
-          {isOnline ? 'Online' : 'Offline'}
-        </span>
       </div>
 
       {/* Active Power-up indicator */}
@@ -302,9 +288,44 @@ export function GameBoard() {
               <div className="flex gap-3">
                 <button onClick={continueGame} className="px-4 py-2 rounded-lg font-bold text-xs"
                   style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)' }}>Keep Going</button>
-                <button onClick={newGame} className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1"
+                <button onClick={() => { newGame(); onBackToDashboard(); }} className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1"
                   style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
-                  <RotateCcw className="w-3 h-3" /> New Game
+                  <RotateCcw className="w-3 h-3" /> Dashboard
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Bot Battle Result overlay */}
+        <AnimatePresence>
+          {gameMode === 'bot' && botBattleResult && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 flex flex-col items-center justify-center rounded-xl" style={{ backgroundColor: botBattleResult === 'win' ? 'rgba(0,200,83,0.6)' : 'rgba(246,94,59,0.6)', zIndex: 100 }}>
+              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200 }}>
+                <span className="text-5xl mb-2 block">{botBattleResult === 'win' ? '🏆' : '😔'}</span>
+              </motion.div>
+              <p className="text-2xl font-extrabold mb-1" style={{ color: '#FFFFFF' }}>
+                {botBattleResult === 'win' ? 'You Won!' : 'You Lost!'}
+              </p>
+              <p className="text-sm mb-1" style={{ color: 'rgba(255,255,255,0.8)' }}>
+                Your Score: {score}
+              </p>
+              {botOpponent && (
+                <p className="text-xs mb-4" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                  {botOpponent.avatar} {botOpponent.name}: {botOpponent.targetScore}
+                </p>
+              )}
+              <div className="flex gap-3">
+                <button onClick={() => { newGame(); onBackToDashboard(); }}
+                  className="px-4 py-2 rounded-lg font-bold text-xs"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)' }}>
+                  Dashboard
+                </button>
+                <button onClick={() => { newGame(); onBackToDashboard(); }}
+                  className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1"
+                  style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
+                  Play Again
                 </button>
               </div>
             </motion.div>
@@ -315,9 +336,9 @@ export function GameBoard() {
       {/* Mobile direction buttons */}
       <div className="flex gap-1 sm:hidden">
         {(['up', 'down', 'left', 'right'] as Direction[]).map(dir => (
-          <button key={dir} onClick={() => onMove(dir)} className="w-9 h-9 rounded-lg flex items-center justify-center"
+          <button key={dir} onClick={() => onMove(dir)} className="w-10 h-10 rounded-lg flex items-center justify-center"
             style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>
-            {dir === 'up' ? <ArrowUp className="w-4 h-4" /> : dir === 'down' ? <ArrowDown className="w-4 h-4" /> : dir === 'left' ? <ArrowLeft className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+            {dir === 'up' ? <ArrowUp className="w-5 h-5" /> : dir === 'down' ? <ArrowDown className="w-5 h-5" /> : dir === 'left' ? <ArrowLeft className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
           </button>
         ))}
       </div>
@@ -343,10 +364,10 @@ export function GameBoard() {
                   style={{ background: 'linear-gradient(135deg, #F65E3B, #F67C5F)', color: '#FFFFFF' }}>
                   <Heart className="w-4 h-4" /> Watch Ad & Revive
                 </button>
-                <button onClick={() => { setGameOverDismissed(false); newGame() }}
+                <button onClick={() => { setGameOverDismissed(false); newGame(); onBackToDashboard(); }}
                   className="w-full py-2.5 rounded-xl font-semibold text-xs"
                   style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                  New Game
+                  Back to Dashboard
                 </button>
               </div>
             </motion.div>
@@ -354,13 +375,8 @@ export function GameBoard() {
         )}
       </AnimatePresence>
 
-      {/* Modals */}
+      {/* Rewarded Ad Modal */}
       <RewardedAd isOpen={showRewardAd} onClose={() => setShowRewardAd(false)} onReward={reviveWithAd} isOnline={isOnline} />
-      <SpinWheel isOpen={showSpinWheel} onClose={() => setShowSpinWheel(false)} spinTickets={spinTickets}
-        onUseTicket={useSpinTicket} onWinPrize={handleSpinPrize} onWatchAdForSpin={handleAdForSpin} isOnline={isOnline} />
-      <LoginStreak isOpen={showStreak} onClose={() => setShowStreak(false)} streakDay={streakDay}
-        streakClaimed={streakClaimed} onClaim={claimStreakDay} />
-      <WelcomeGift isOpen={showWelcome} onClose={() => setShowWelcome(false)} onClaim={claimWelcome} />
     </div>
   )
 }
@@ -382,7 +398,7 @@ function PowerUpBtn({ icon, count, active, onClick, color, disabled }: {
     <motion.button onClick={onClick} disabled={disabled}
       className="relative flex items-center justify-center rounded-lg"
       style={{
-        width: 32, height: 32,
+        width: 36, height: 36,
         backgroundColor: active ? `${color}20` : 'rgba(255,255,255,0.04)',
         border: active ? `1.5px solid ${color}` : '1px solid rgba(255,255,255,0.06)',
         boxShadow: active ? `0 0 10px ${color}25` : 'none',
@@ -392,7 +408,7 @@ function PowerUpBtn({ icon, count, active, onClick, color, disabled }: {
       animate={active ? { scale: [1, 1.05, 1] } : {}}
       transition={{ duration: 0.8, repeat: active ? Infinity : 0 }}>
       <div style={{ color: count > 0 ? color : 'rgba(255,255,255,0.15)' }}>{icon}</div>
-      <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] font-bold"
+      <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold"
         style={{ backgroundColor: count > 0 ? color : 'rgba(255,255,255,0.08)', color: '#FFFFFF' }}>{count}</div>
     </motion.button>
   )
