@@ -18,8 +18,15 @@ export interface Tile {
 
 export interface BotOpponent {
   name: string
-  targetScore: number
   avatar: string
+  finalScore: number
+}
+
+export interface InvitedUser {
+  id: string
+  name: string
+  joinedAt: string
+  commissionEarned: number
 }
 
 export interface GameState {
@@ -45,11 +52,26 @@ export interface GameState {
   streakClaimed: boolean[]
   welcomeClaimed: boolean
   coins: number
+  // Game points - only from actual gameplay (for ranking)
+  gamePoints: number
   // Bot mode
   gameMode: GameMode
   botOpponent: BotOpponent | null
   botBattleResult: 'win' | 'lose' | null
   modBestScore: number
+  // Battle timer
+  battleTimer: number
+  battleTimeLimit: number
+  // Combo system
+  consecutiveMerges: number
+  comboBonus: number
+  // Invite system
+  inviteCode: string
+  invitedBy: string | null
+  invitedUsers: InvitedUser[]
+  commissionBalance: number
+  commissionClaimed: number
+  autoClaimCommission: boolean
 }
 
 const BOT_NAMES = [
@@ -69,6 +91,15 @@ let tileId = 0
 
 function getNextId(): number {
   return ++tileId
+}
+
+function generateInviteCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let code = ''
+  for (let i = 0; i < 8; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return code
 }
 
 function getEmptyCells(tiles: Tile[]): [number, number][] {
@@ -100,16 +131,18 @@ function initTiles(): Tile[] {
   return tiles
 }
 
-function slideLine(line: (Tile | null)[]): { newLine: (Tile | null)[], scoreGain: number } {
+function slideLine(line: (Tile | null)[]): { newLine: (Tile | null)[], scoreGain: number, mergeCount: number } {
   const filtered = line.filter(t => t !== null) as Tile[]
   const result: (Tile | null)[] = []
   let scoreGain = 0
+  let mergeCount = 0
 
   let i = 0
   while (i < filtered.length) {
     if (i + 1 < filtered.length && filtered[i].value === filtered[i + 1].value) {
       const newValue = filtered[i].value * 2
       scoreGain += newValue
+      mergeCount++
       result.push({ id: getNextId(), value: newValue, row: 0, col: 0, isNew: false, isMerged: true, flash: true })
       i += 2
     } else {
@@ -119,14 +152,15 @@ function slideLine(line: (Tile | null)[]): { newLine: (Tile | null)[], scoreGain
   }
 
   while (result.length < 4) result.push(null)
-  return { newLine: result, scoreGain }
+  return { newLine: result, scoreGain, mergeCount }
 }
 
-function moveTiles(tiles: Tile[], direction: Direction): { newTiles: Tile[], scoreGain: number, moved: boolean } {
+function moveTiles(tiles: Tile[], direction: Direction): { newTiles: Tile[], scoreGain: number, moved: boolean, mergeCount: number } {
   const grid: (Tile | null)[][] = Array.from({ length: 4 }, () => Array(4).fill(null))
   for (const tile of tiles) grid[tile.row][tile.col] = { ...tile, isNew: false, isMerged: false, flash: false }
 
   let totalScore = 0
+  let totalMergeCount = 0
   const newTiles: Tile[] = []
 
   for (let i = 0; i < 4; i++) {
@@ -136,8 +170,9 @@ function moveTiles(tiles: Tile[], direction: Direction): { newTiles: Tile[], sco
     else if (direction === 'up') line = [grid[0][i], grid[1][i], grid[2][i], grid[3][i]]
     else line = [grid[3][i], grid[2][i], grid[1][i], grid[0][i]]
 
-    const { newLine, scoreGain } = slideLine(line)
+    const { newLine, scoreGain, mergeCount } = slideLine(line)
     totalScore += scoreGain
+    totalMergeCount += mergeCount
 
     for (let j = 0; j < 4; j++) {
       const tile = newLine[j]
@@ -154,7 +189,7 @@ function moveTiles(tiles: Tile[], direction: Direction): { newTiles: Tile[], sco
 
   const beforeKey = tiles.map(t => `${t.row}-${t.col}-${t.value}`).sort().join(',')
   const afterKey = newTiles.map(t => `${t.row}-${t.col}-${t.value}`).sort().join(',')
-  return { newTiles, scoreGain: totalScore, moved: beforeKey !== afterKey }
+  return { newTiles, scoreGain: totalScore, moved: beforeKey !== afterKey, mergeCount: totalMergeCount }
 }
 
 function canMove(tiles: Tile[]): boolean {
@@ -187,13 +222,16 @@ function loadSavedData() {
   return null
 }
 
-function generateBotOpponent(modBestScore: number): BotOpponent {
+// Generate realistic bot score for 1-minute gameplay - 50/50 win chance
+function generateBotScore(playerBestScore: number): BotOpponent {
   const bot = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]
-  // Generate target score based on player's mod best - 50-50 chance
-  const baseScore = Math.max(modBestScore, 200)
-  const variance = baseScore * 0.4
-  const targetScore = Math.round(baseScore + (Math.random() * variance * 2 - variance))
-  return { ...bot, targetScore: Math.max(100, targetScore) }
+  // Base score around player's ability for 50-50 chance
+  // In 1 minute, typical scores range from 100-800 for beginners, 300-2000 for experienced
+  const base = Math.max(playerBestScore, 200)
+  // Add randomness: 50% chance bot scores higher, 50% lower
+  const variance = base * 0.5
+  const finalScore = Math.round(Math.max(50, base + (Math.random() * variance * 2 - variance)))
+  return { ...bot, finalScore }
 }
 
 export function useGame() {
@@ -225,13 +263,26 @@ export function useGame() {
       streakClaimed: [false, false, false, false, false, false, false],
       welcomeClaimed: false,
       coins: 0,
+      gamePoints: 0,
       gameMode: 'classic',
       botOpponent: null,
       botBattleResult: null,
       modBestScore: 0,
+      battleTimer: 0,
+      battleTimeLimit: 60,
+      consecutiveMerges: 0,
+      comboBonus: 0,
+      inviteCode: '',
+      invitedBy: null,
+      invitedUsers: [],
+      commissionBalance: 0,
+      commissionClaimed: 0,
+      autoClaimCommission: false,
     }
 
-    if (!saved) return defaults
+    if (!saved) {
+      return { ...defaults, inviteCode: generateInviteCode() }
+    }
 
     let streakDay = saved.streakDay || 0
     const lastLoginDate = saved.lastLoginDate || today
@@ -244,18 +295,21 @@ export function useGame() {
       if (diffDays === 1) {
         streakDay = Math.min(streakDay + 1, 6)
       } else if (diffDays > 1) {
-        // Streak broken - reset but keep already claimed items at 30%
         streakDay = 0
         const newClaimed = [...streakClaimed]
         for (let i = 0; i < 7; i++) {
-          if (newClaimed[i]) {
-            // Already claimed rewards stay claimed, but user only got 30%
-          }
-        }
-        // Reset unclaimed
-        for (let i = 0; i < 7; i++) {
           if (!newClaimed[i]) newClaimed[i] = false
         }
+      }
+    }
+
+    // Check URL for invite code
+    let invitedBy = saved.invitedBy || null
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const ref = params.get('ref')
+      if (ref && !invitedBy) {
+        invitedBy = ref
       }
     }
 
@@ -272,7 +326,14 @@ export function useGame() {
       blastCount: saved.blastCount ?? 0,
       undoTotal: saved.undoTotal ?? 5,
       coins: saved.coins || 0,
+      gamePoints: saved.gamePoints || 0,
       modBestScore: saved.modBestScore || 0,
+      inviteCode: saved.inviteCode || generateInviteCode(),
+      invitedBy,
+      invitedUsers: saved.invitedUsers || [],
+      commissionBalance: saved.commissionBalance || 0,
+      commissionClaimed: saved.commissionClaimed || 0,
+      autoClaimCommission: saved.autoClaimCommission || false,
     }
   })
 
@@ -292,10 +353,17 @@ export function useGame() {
       blastCount: state.blastCount,
       undoTotal: state.undoTotal,
       coins: state.coins,
+      gamePoints: state.gamePoints,
       modBestScore: state.modBestScore,
+      inviteCode: state.inviteCode,
+      invitedBy: state.invitedBy,
+      invitedUsers: state.invitedUsers,
+      commissionBalance: state.commissionBalance,
+      commissionClaimed: state.commissionClaimed,
+      autoClaimCommission: state.autoClaimCommission,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.modBestScore])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission])
 
   // Clear flash
   useEffect(() => {
@@ -311,12 +379,28 @@ export function useGame() {
     setState(prev => {
       if (prev.gameOver || (prev.won && !prev.keepPlaying) || prev.activePowerUp) return prev
 
-      const { newTiles, scoreGain, moved } = moveTiles(prev.tiles, direction)
+      const { newTiles, scoreGain, moved, mergeCount } = moveTiles(prev.tiles, direction)
       if (!moved) return prev
 
       prevState.current = prev
       const tilesWithNew = addRandomTile(newTiles)
-      const newScore = prev.score + scoreGain
+
+      // Combo system: 3 consecutive merges = 1/5 extra point bonus
+      let newConsecutiveMerges = prev.consecutiveMerges
+      let newComboBonus = prev.comboBonus
+      let comboExtra = 0
+      if (mergeCount > 0) {
+        newConsecutiveMerges += mergeCount
+        if (newConsecutiveMerges >= 3) {
+          comboExtra = Math.round(scoreGain / 5)
+          newComboBonus += comboExtra
+          newConsecutiveMerges = 0 // Reset after combo
+        }
+      } else {
+        newConsecutiveMerges = 0 // Reset if no merge
+      }
+
+      const newScore = prev.score + scoreGain + comboExtra
       const newBestScore = Math.max(newScore, prev.bestScore)
       const isStuck = !canMove(tilesWithNew)
       const won = !prev.won && hasWon(tilesWithNew)
@@ -328,17 +412,21 @@ export function useGame() {
         if (newLives <= 0) { isGameOver = true; newLives = 0 }
       }
 
-      // Bot battle check
+      // Bot battle check - timer based
       let botBattleResult = prev.botBattleResult
       let modBestScore = prev.modBestScore
       if (prev.gameMode === 'bot' && prev.botOpponent && !botBattleResult) {
-        if (newScore >= prev.botOpponent.targetScore) {
-          botBattleResult = 'win'
-          modBestScore = Math.max(modBestScore, newScore)
-        } else if (isGameOver) {
-          botBattleResult = 'lose'
+        if (isGameOver) {
+          // Compare scores
+          botBattleResult = newScore > prev.botOpponent.finalScore ? 'win' : 'lose'
+          if (botBattleResult === 'win') {
+            modBestScore = Math.max(modBestScore, newScore)
+          }
         }
       }
+
+      // Game points only from actual gameplay
+      const newGamePoints = prev.gamePoints + scoreGain + comboExtra
 
       return {
         ...prev,
@@ -352,6 +440,9 @@ export function useGame() {
         lives: newLives,
         botBattleResult,
         modBestScore,
+        consecutiveMerges: newConsecutiveMerges,
+        comboBonus: newComboBonus,
+        gamePoints: newGamePoints,
       }
     })
   }, [])
@@ -369,7 +460,7 @@ export function useGame() {
     setState(prev => {
       if (prev.lives <= 0) return prev
       const tiles = initTiles()
-      return { ...prev, tiles, score: 0, gameOver: false, won: false, keepPlaying: false, canUndo: false, undoCount: 0, activePowerUp: null }
+      return { ...prev, tiles, score: 0, gameOver: false, won: false, keepPlaying: false, canUndo: false, undoCount: 0, activePowerUp: null, consecutiveMerges: 0, comboBonus: 0 }
     })
   }, [])
 
@@ -415,7 +506,7 @@ export function useGame() {
         const newTiles = prev.tiles
           .filter(t => !(t.row === row && t.col === col) && !(t.row === mergeTarget.row && t.col === mergeTarget.col))
           .concat([{ id: getNextId(), value: newValue, row: mergeTarget.row, col: mergeTarget.col, isNew: false, isMerged: true, flash: true }])
-        return { ...prev, tiles: newTiles, score: prev.score + newValue, magnetCount: prev.magnetCount - 1, activePowerUp: null, canUndo: true }
+        return { ...prev, tiles: newTiles, score: prev.score + newValue, magnetCount: prev.magnetCount - 1, activePowerUp: null, canUndo: true, gamePoints: prev.gamePoints + newValue }
       }
       return prev
     })
@@ -438,14 +529,17 @@ export function useGame() {
       botOpponent: null,
       botBattleResult: null,
       gameMode: 'classic',
+      battleTimer: 0,
+      consecutiveMerges: 0,
+      comboBonus: 0,
     }))
   }, [])
 
-  const startBotBattle = useCallback(() => {
+  const startBotBattle = useCallback((timeLimit: number = 60) => {
     const tiles = initTiles()
     prevState.current = null
     setState(prev => {
-      const opponent = generateBotOpponent(prev.modBestScore)
+      const opponent = generateBotScore(prev.modBestScore)
       return {
         ...prev,
         tiles,
@@ -460,7 +554,25 @@ export function useGame() {
         gameMode: 'bot',
         botOpponent: opponent,
         botBattleResult: null,
+        battleTimer: timeLimit,
+        battleTimeLimit: timeLimit,
+        consecutiveMerges: 0,
+        comboBonus: 0,
       }
+    })
+  }, [])
+
+  const tickBattleTimer = useCallback(() => {
+    setState(prev => {
+      if (prev.gameMode !== 'bot' || prev.botBattleResult || prev.battleTimer <= 0) return prev
+      const newTimer = prev.battleTimer - 1
+      if (newTimer <= 0) {
+        // Time's up - compare scores
+        const result = prev.score > (prev.botOpponent?.finalScore ?? 0) ? 'win' : 'lose'
+        const newModBest = result === 'win' ? Math.max(prev.modBestScore, prev.score) : prev.modBestScore
+        return { ...prev, battleTimer: 0, botBattleResult: result, gameOver: true, modBestScore: newModBest }
+      }
+      return { ...prev, battleTimer: newTimer }
     })
   }, [])
 
@@ -523,7 +635,17 @@ export function useGame() {
   }, [])
 
   const addCoins = useCallback((amount: number) => {
-    setState(prev => ({ ...prev, coins: prev.coins + amount }))
+    setState(prev => {
+      const newCoins = prev.coins + amount
+      // If auto-claim is on and there's commission, auto-claim it
+      let newCommissionBalance = prev.commissionBalance
+      let newCommissionClaimed = prev.commissionClaimed
+      if (prev.autoClaimCommission && prev.commissionBalance > 0) {
+        newCommissionClaimed += prev.commissionBalance
+        newCommissionBalance = 0
+      }
+      return { ...prev, coins: newCoins, commissionBalance: newCommissionBalance, commissionClaimed: newCommissionClaimed }
+    })
   }, [])
 
   const addPowerUp = useCallback((pu: PowerUp, count: number) => {
@@ -560,7 +682,71 @@ export function useGame() {
       gameMode: 'classic',
       botOpponent: null,
       botBattleResult: null,
+      battleTimer: 0,
+      consecutiveMerges: 0,
+      comboBonus: 0,
     }))
+  }, [])
+
+  // Invite system
+  const claimInviteReward = useCallback(() => {
+    setState(prev => {
+      if (prev.invitedBy) {
+        return {
+          ...prev,
+          coins: prev.coins + 500,
+          spinTickets: prev.spinTickets + 2,
+          magnetCount: prev.magnetCount + 2,
+          invitedBy: null, // Clear after claiming
+        }
+      }
+      return prev
+    })
+  }, [])
+
+  const addInvitedUser = useCallback((name: string) => {
+    setState(prev => {
+      const newUser: InvitedUser = {
+        id: Date.now().toString(),
+        name,
+        joinedAt: new Date().toISOString(),
+        commissionEarned: 0,
+      }
+      return {
+        ...prev,
+        invitedUsers: [...prev.invitedUsers, newUser],
+      }
+    })
+  }, [])
+
+  const addCommission = useCallback((amount: number) => {
+    setState(prev => {
+      const newBalance = prev.commissionBalance + amount
+      if (prev.autoClaimCommission) {
+        return {
+          ...prev,
+          coins: prev.coins + amount,
+          commissionClaimed: prev.commissionClaimed + amount,
+        }
+      }
+      return { ...prev, commissionBalance: newBalance }
+    })
+  }, [])
+
+  const claimCommission = useCallback(() => {
+    setState(prev => {
+      if (prev.commissionBalance <= 0) return prev
+      return {
+        ...prev,
+        coins: prev.coins + prev.commissionBalance,
+        commissionClaimed: prev.commissionClaimed + prev.commissionBalance,
+        commissionBalance: 0,
+      }
+    })
+  }, [])
+
+  const toggleAutoClaim = useCallback(() => {
+    setState(prev => ({ ...prev, autoClaimCommission: !prev.autoClaimCommission }))
   }, [])
 
   return {
@@ -581,6 +767,12 @@ export function useGame() {
     addPowerUp,
     addUndos,
     startBotBattle,
+    tickBattleTimer,
     goBackToDashboard,
+    claimInviteReward,
+    addInvitedUser,
+    addCommission,
+    claimCommission,
+    toggleAutoClaim,
   }
 }
