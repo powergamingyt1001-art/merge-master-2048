@@ -63,8 +63,9 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
     battleTimer, battleTimeLimit, consecutiveMerges, comboBonus,
     coinEntryFee, coinGameWon,
     tournamentPoints, tournamentCarryOver,
+    countdownActive, countdownSecondsLeft,
     handleMove, newGame, continueGame, undo, activatePowerUp, handleTileClick,
-    reviveWithAd, restartAfterStuck, tickBattleTimer, addCoins, addNotification,
+    reviveWithAd, restartAfterStuck, tickBattleTimer, tickCountdown, addCoins, addNotification,
     goBackToDashboard, calculateTournamentPoints, addGameToHistory,
   } = game
 
@@ -76,7 +77,6 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
   const [showRewardAd, setShowRewardAd] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
   const [gameOverDismissed, setGameOverDismissed] = useState(false)
-  const countdownRef = useRef<NodeJS.Timeout | null>(null)
 
   const isStuck = !checkCanMove(tiles) && lives > 0 && !gameOver
   const showGameOverModal = gameOver && lives <= 0 && !gameOverDismissed
@@ -87,37 +87,15 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
   const isTournament = gameMode === 'tournament'
   const isClassic = gameMode === 'classic'
 
-  // Countdown overlay - trigger when battleTimer first gets set (>0) in battle mode
-  const hasShownCountdownRef = useRef(false)
+  // Countdown overlay - derived from game state
+  const countdownOverlay = countdownActive ? { seconds: countdownSecondsLeft, total: 3 } : null
 
-  // Use derived state for countdown instead of setState in effect
-  const [countdownTrigger, setCountdownTrigger] = useState(0)
-  const [countdownSeconds, setCountdownSeconds] = useState(0)
-
-  // Detect when to start countdown
-  if (isBattleMode && battleTimer > 0 && !botBattleResult && !hasShownCountdownRef.current && countdownTrigger === 0) {
-    hasShownCountdownRef.current = true
-    setCountdownTrigger(1)
-    setCountdownSeconds(3)
-  }
-  if (!isBattleMode && hasShownCountdownRef.current) {
-    hasShownCountdownRef.current = false
-    setCountdownTrigger(0)
-    setCountdownSeconds(0)
-  }
-
-  const countdownOverlay = countdownTrigger > 0 && countdownSeconds > 0 ? { seconds: countdownSeconds, total: 3 } : null
-
+  // Countdown tick effect
   useEffect(() => {
-    if (countdownSeconds <= 0 || countdownTrigger === 0) return
-    countdownRef.current = setTimeout(() => {
-      setCountdownSeconds(prev => {
-        if (prev <= 1) return 0
-        return prev - 1
-      })
-    }, 1000)
-    return () => { if (countdownRef.current) clearTimeout(countdownRef.current) }
-  }, [countdownSeconds, countdownTrigger])
+    if (!countdownActive) return
+    const timer = setTimeout(() => { tickCountdown() }, 1000)
+    return () => clearTimeout(timer)
+  }, [countdownActive, countdownSecondsLeft, tickCountdown])
 
   // Internet detection
   useEffect(() => {
@@ -208,16 +186,17 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
     onBackToDashboard()
   }, [isCoinGame, isTournament, botBattleResult, coinEntryFee, score, addCoins, addNotification, newGame, onBackToDashboard, addGameToHistory, gameMode, battleTimeLimit, calculateTournamentPoints])
 
-  // Timer heartbeat effect - last 10 seconds - MINE STYLE
-  const timerIsCritical = isBattleMode && battleTimer <= 10 && battleTimer > 0 && !botBattleResult
-  // Timer phase: GREEN (>50%), YELLOW/MID (20-50%), RED+BLINK (<=10sec)
+  // Timer percentage - used for progress bar and color phases
   const timerPct = battleTimeLimit > 0 ? battleTimer / battleTimeLimit : 0
-  const timerPhase = timerIsCritical ? 'critical' : timerPct > 0.5 ? 'green' : 'mid'
+  // Timer phase: GREEN (60%+), YELLOW (30-60%), ORANGE (15-30%), RED+BLINK (<15%)
+  const timerPhase: 'green' | 'yellow' | 'orange' | 'critical' = timerPct < 0.15 ? 'critical' : timerPct < 0.30 ? 'orange' : timerPct < 0.60 ? 'yellow' : 'green'
+  const timerIsCritical = timerPhase === 'critical' && isBattleMode && battleTimer > 0 && !botBattleResult
 
   function getTimerColor() {
-    if (timerPhase === 'critical') return '#F65E3B'
-    if (timerPhase === 'mid') return '#FFB300' // Yellow/orange in the middle
-    return '#00E676' // Green at start
+    if (timerPhase === 'critical') return '#F65E3B' // RED
+    if (timerPhase === 'orange') return '#FF7A00'    // ORANGE
+    if (timerPhase === 'yellow') return '#FFB300'    // YELLOW
+    return '#00E676'                                  // GREEN
   }
   const timerColor = getTimerColor()
 

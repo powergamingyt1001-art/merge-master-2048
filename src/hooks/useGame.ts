@@ -82,6 +82,9 @@ export interface GameState {
   // Battle timer
   battleTimer: number
   battleTimeLimit: number
+  // Countdown before game starts (3-2-1)
+  countdownActive: boolean
+  countdownSecondsLeft: number
   // Combo system
   consecutiveMerges: number
   comboBonus: number
@@ -321,6 +324,8 @@ export function useGame() {
       modBestScore: 0,
       battleTimer: 0,
       battleTimeLimit: 60,
+      countdownActive: false,
+      countdownSecondsLeft: 0,
       consecutiveMerges: 0,
       comboBonus: 0,
       inviteCode: '',
@@ -749,6 +754,8 @@ export function useGame() {
       botBattleResult: null,
       gameMode: 'classic',
       battleTimer: 0,
+      countdownActive: false,
+      countdownSecondsLeft: 0,
       consecutiveMerges: 0,
       comboBonus: 0,
       coinEntryFee: 0,
@@ -781,6 +788,8 @@ export function useGame() {
         botBattleResult: null,
         battleTimer: timeLimit,
         battleTimeLimit: timeLimit,
+        countdownActive: true,
+        countdownSecondsLeft: 3,
         consecutiveMerges: 0,
         comboBonus: 0,
         gamesPlayedToday: gamesToday + 1,
@@ -817,6 +826,8 @@ export function useGame() {
         botBattleResult: null,
         battleTimer: 120, // 2 minutes for coins game
         battleTimeLimit: 120,
+        countdownActive: true,
+        countdownSecondsLeft: 3,
         consecutiveMerges: 0,
         comboBonus: 0,
         coins: prev.coins - entryFee,
@@ -856,6 +867,8 @@ export function useGame() {
         botBattleResult: null,
         battleTimer: 90,
         battleTimeLimit: 90,
+        countdownActive: true,
+        countdownSecondsLeft: 3,
         consecutiveMerges: 0,
         comboBonus: 0,
         coinEntryFee: 0,
@@ -933,6 +946,17 @@ export function useGame() {
         }
       }
       return { ...prev, battleTimer: newTimer }
+    })
+  }, [])
+
+  const tickCountdown = useCallback(() => {
+    setState(prev => {
+      if (!prev.countdownActive) return prev
+      const newSeconds = prev.countdownSecondsLeft - 1
+      if (newSeconds <= 0) {
+        return { ...prev, countdownActive: false, countdownSecondsLeft: 0 }
+      }
+      return { ...prev, countdownSecondsLeft: newSeconds }
     })
   }, [])
 
@@ -1043,6 +1067,8 @@ export function useGame() {
       botOpponent: null,
       botBattleResult: null,
       battleTimer: 0,
+      countdownActive: false,
+      countdownSecondsLeft: 0,
       consecutiveMerges: 0,
       comboBonus: 0,
       coinEntryFee: 0,
@@ -1142,6 +1168,7 @@ export function useGame() {
     calculateTournamentPoints,
     joinTournament,
     tickBattleTimer,
+    tickCountdown,
     goBackToDashboard,
     claimInviteReward,
     addInvitedUser,

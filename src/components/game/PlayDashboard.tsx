@@ -280,7 +280,7 @@ export function PlayDashboard({
                     {[
                       { time: '1 min', seconds: 60, icon: <Clock className="w-3 h-3" /> },
                       { time: '2 min', seconds: 120, icon: <Clock className="w-3 h-3" /> },
-                      { time: '5 min', seconds: 300, icon: <Clock className="w-3 h-3" /> },
+                      { time: '4 min', seconds: 240, icon: <Clock className="w-3 h-3" /> },
                       { time: '10 min', seconds: 600, icon: <Trophy className="w-3 h-3" /> },
                     ].map((mode, i) => (
                       <button key={i} onClick={() => isOnline && !isGameLimitReached && onStartBotBattle(mode.seconds)}
@@ -355,7 +355,7 @@ export function PlayDashboard({
                     })}
                   </div>
                   <p className="text-[8px] text-center mt-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                    {isGameLimitReached ? '⚠️ Daily game limit reached' : isOnline ? '1v1 • 1 min • Win 2x your entry! 🪙' : '⚠️ Internet required for Coin Games'}
+                    {isGameLimitReached ? '⚠️ Daily game limit reached' : isOnline ? '1v1 • 2 min • Win 2x your entry! 🪙' : '⚠️ Internet required for Coin Games'}
                   </p>
                 </motion.div>
               )}
