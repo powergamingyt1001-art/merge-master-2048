@@ -68,11 +68,11 @@ export function InterstitialAd({ isOpen, onClose, isOnline, duration = 5 }: Inte
             initial={{ scale: 0.8, y: 30 }}
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.8 }}
-            className="w-full max-w-sm rounded-2xl overflow-hidden"
-            style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
+            className="w-full h-full flex flex-col items-center justify-center"
+            style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)' }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-3">
+            <div className="flex items-center justify-between p-3 w-full max-w-sm">
               <div className="flex items-center gap-1.5">
                 <Megaphone className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
                 <span className="text-[9px] font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>Sponsored</span>
@@ -80,33 +80,36 @@ export function InterstitialAd({ isOpen, onClose, isOnline, duration = 5 }: Inte
               <button
                 onClick={handleClose}
                 disabled={!canClose}
-                className="w-7 h-7 rounded-full flex items-center justify-center"
+                className="w-8 h-8 rounded-full flex items-center justify-center"
                 style={{
-                  backgroundColor: canClose ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)',
+                  backgroundColor: canClose ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
                   cursor: canClose ? 'pointer' : 'not-allowed',
                 }}
               >
                 {canClose ? (
-                  <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.7)' }} />
+                  <span className="text-sm font-bold" style={{ color: 'rgba(255,255,255,0.9)' }}>✕</span>
                 ) : (
-                  <span className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.3)' }}>{countdown}</span>
+                  <span className="text-sm font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>{countdown}</span>
                 )}
               </button>
             </div>
 
-            {/* Ad content placeholder */}
-            <div className="px-6 pb-6">
-              <div className="w-full h-40 rounded-xl flex flex-col items-center justify-center gap-2"
-                style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <Megaphone className="w-10 h-10" style={{ color: '#EDC22E' }} />
-                <p className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Advertisement</p>
-                <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
+            {/* Ad content - FULL SCREEN */}
+            <div className="flex-1 w-full max-w-sm flex flex-col items-center justify-center px-6">
+              <div className="w-full aspect-[3/4] max-h-[60vh] rounded-xl flex flex-col items-center justify-center gap-3"
+                style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <Megaphone className="w-16 h-16" style={{ color: '#EDC22E' }} />
+                <p className="text-lg font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>Advertisement</p>
+                <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
                   Ad ID: {ADMOB_CONFIG.interstitial.id}
                 </p>
               </div>
-              {/* Progress bar */}
+            </div>
+
+            {/* Progress bar - bottom */}
+            <div className="w-full max-w-sm px-6 pb-6">
               {!canClose && countdown > 0 && (
-                <div className="mt-3 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
+                <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
                   <motion.div
                     className="h-full rounded-full"
                     style={{ background: 'linear-gradient(90deg, #EDC22E, #FF7A00)' }}

@@ -82,6 +82,8 @@ export interface GameState {
   // Battle timer
   battleTimer: number
   battleTimeLimit: number
+  // Timer paused (when lives=0 in battle mode, waiting for ad)
+  timerPaused: boolean
   // Countdown before game starts (3-2-1)
   countdownActive: boolean
   countdownSecondsLeft: number
@@ -324,6 +326,7 @@ export function useGame() {
       modBestScore: 0,
       battleTimer: 0,
       battleTimeLimit: 60,
+      timerPaused: false,
       countdownActive: false,
       countdownSecondsLeft: 0,
       consecutiveMerges: 0,
@@ -554,10 +557,13 @@ export function useGame() {
 
   const handleMove = useCallback((direction: Direction) => {
     setState(prev => {
-      if (prev.gameOver || (prev.won && !prev.keepPlaying) || prev.activePowerUp) return prev
+      if (prev.gameOver || (prev.won && !prev.keepPlaying) || prev.activePowerUp || prev.timerPaused) return prev
 
       const { newTiles, scoreGain, moved, mergeCount } = moveTiles(prev.tiles, direction)
       if (!moved) return prev
+
+      // Check if this is a battle mode (for timer pause on lives=0)
+      const isBattleMode = prev.gameMode === 'bot' || prev.gameMode === 'coins' || prev.gameMode === 'tournament'
 
       prevState.current = prev
       const tilesWithNew = addRandomTile(newTiles)
@@ -597,9 +603,18 @@ export function useGame() {
 
       let newLives = prev.lives
       let isGameOver = false
+      let newTimerPaused = prev.timerPaused
       if (isStuck) {
         newLives = prev.lives - 1
-        if (newLives <= 0) { isGameOver = true; newLives = 0 }
+        if (newLives <= 0) {
+          newLives = 0
+          // In battle mode: pause timer instead of game over (user can watch ad to revive)
+          if (isBattleMode) {
+            newTimerPaused = true
+          } else {
+            isGameOver = true
+          }
+        }
       }
 
       // Bot battle check
@@ -658,6 +673,7 @@ export function useGame() {
         canUndo: true,
         undoCount: 0,
         lives: newLives,
+        timerPaused: newTimerPaused,
         botBattleResult,
         modBestScore,
         consecutiveMerges: newConsecutiveMerges,
@@ -754,6 +770,7 @@ export function useGame() {
       botBattleResult: null,
       gameMode: 'classic',
       battleTimer: 0,
+      timerPaused: false,
       countdownActive: false,
       countdownSecondsLeft: 0,
       consecutiveMerges: 0,
@@ -788,6 +805,7 @@ export function useGame() {
         botBattleResult: null,
         battleTimer: timeLimit,
         battleTimeLimit: timeLimit,
+        timerPaused: false,
         countdownActive: true,
         countdownSecondsLeft: 3,
         consecutiveMerges: 0,
@@ -826,6 +844,7 @@ export function useGame() {
         botBattleResult: null,
         battleTimer: 120, // 2 minutes for coins game
         battleTimeLimit: 120,
+        timerPaused: false,
         countdownActive: true,
         countdownSecondsLeft: 3,
         consecutiveMerges: 0,
@@ -867,6 +886,7 @@ export function useGame() {
         botBattleResult: null,
         battleTimer: 90,
         battleTimeLimit: 90,
+        timerPaused: false,
         countdownActive: true,
         countdownSecondsLeft: 3,
         consecutiveMerges: 0,
@@ -911,7 +931,7 @@ export function useGame() {
   const tickBattleTimer = useCallback(() => {
     setState(prev => {
       if (prev.gameMode !== 'bot' && prev.gameMode !== 'coins' && prev.gameMode !== 'tournament') return prev
-      if (prev.botBattleResult || prev.battleTimer <= 0) return prev
+      if (prev.botBattleResult || prev.battleTimer <= 0 || prev.timerPaused) return prev
       const newTimer = prev.battleTimer - 1
       if (newTimer <= 0) {
         // Time's up - compare scores
@@ -1048,7 +1068,12 @@ export function useGame() {
   }, [])
 
   const reviveWithAd = useCallback(() => {
-    setState(prev => ({ ...prev, lives: Math.min(prev.lives + 1, prev.maxLives), gameOver: false }))
+    setState(prev => ({
+      ...prev,
+      lives: Math.min(prev.lives + 1, prev.maxLives),
+      gameOver: false,
+      timerPaused: false, // Resume timer after ad revive
+    }))
   }, [])
 
   const goBackToDashboard = useCallback(() => {
@@ -1067,6 +1092,7 @@ export function useGame() {
       botOpponent: null,
       botBattleResult: null,
       battleTimer: 0,
+      timerPaused: false,
       countdownActive: false,
       countdownSecondsLeft: 0,
       consecutiveMerges: 0,
