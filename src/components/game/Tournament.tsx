@@ -184,12 +184,12 @@ export function Tournament({
               )}
             </div>
 
-            {/* Join button or Tournament stats */}
-            {!tournamentJoined && (
+            {/* Join button or PLAY button (replaces Join after joining) */}
+            {!tournamentJoined ? (
               <div className="mx-4 mb-3">
                 <button
                   onClick={() => canJoin && handleJoin()}
-                  className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] active:scale-95"
+                  className="w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] active:scale-95"
                   style={{
                     background: canJoin ? 'linear-gradient(135deg, #EDC22E, #FF7A00)' : 'rgba(255,255,255,0.06)',
                     color: canJoin ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
@@ -197,56 +197,28 @@ export function Tournament({
                   }}
                   disabled={!canJoin}
                 >
-                  {canJoin ? <><Zap className="w-4 h-4" /> Join Tournament ({ENTRY_FEE} coins)</> : <><Lock className="w-4 h-4" /> Need {ENTRY_FEE} coins to join</>}
+                  {canJoin ? <><Zap className="w-5 h-5" /> Join Tournament ({ENTRY_FEE} coins)</> : <><Lock className="w-5 h-5" /> Need {ENTRY_FEE} coins to join</>}
                 </button>
               </div>
-            )}
-
-            {tournamentJoined && (
+            ) : (
               <div className="mx-4 mb-2">
-                {/* Tournament Stats */}
-                <div className="p-3 rounded-xl mb-2" style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-1.5">
-                      <Target className="w-3.5 h-3.5" style={{ color: '#00E676' }} />
-                      <span className="text-[10px] font-bold" style={{ color: '#00E676' }}>Your Tournament Stats</span>
-                    </div>
-                    <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(0,230,118,0.15)', color: '#00E676' }}>
-                      {tournamentGamesPlayed} games
-                    </span>
+                {/* Tournament Stats - compact */}
+                <div className="flex gap-2 mb-2">
+                  <div className="flex-1 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
+                    <p className="text-xs font-extrabold" style={{ color: '#00E676' }}>{tournamentPoints}</p>
+                    <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Points</p>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}>
-                      <p className="text-lg font-extrabold" style={{ color: '#00E676' }}>{tournamentPoints}</p>
-                      <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Total Points</p>
-                    </div>
-                    <div className="p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}>
-                      <p className="text-lg font-extrabold" style={{ color: '#EDC22E' }}>{tournamentCarryOver}</p>
-                      <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Carry Over Score</p>
-                    </div>
+                  <div className="flex-1 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                    <p className="text-xs font-extrabold" style={{ color: '#EDC22E' }}>{tournamentCarryOver}</p>
+                    <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Carry Over</p>
+                  </div>
+                  <div className="flex-1 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <p className="text-xs font-extrabold" style={{ color: '#FFFFFF' }}>{tournamentGamesPlayed}</p>
+                    <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Games</p>
                   </div>
                 </div>
 
-                {/* Point System Explanation */}
-                <div className="p-2.5 rounded-xl mb-2" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.12)' }}>
-                  <p className="text-[9px] font-bold mb-1" style={{ color: '#EDC22E' }}>📊 Point System</p>
-                  <ul className="space-y-0.5">
-                    <li className="text-[8px] flex items-start gap-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                      <span style={{ color: '#EDC22E' }}>•</span> 10 score = 1 tournament point
-                    </li>
-                    <li className="text-[8px] flex items-start gap-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                      <span style={{ color: '#EDC22E' }}>•</span> Remainder carries to next game
-                    </li>
-                    <li className="text-[8px] flex items-start gap-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                      <span style={{ color: '#EDC22E' }}>•</span> E.g. Score 25 → 2 pts, 5 carry over
-                    </li>
-                    <li className="text-[8px] flex items-start gap-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                      <span style={{ color: '#EDC22E' }}>•</span> Next game: 35 + 5 carry = 4 pts total
-                    </li>
-                  </ul>
-                </div>
-
-                {/* PLAY BUTTON */}
+                {/* PLAY BUTTON - replaces Join button */}
                 <button
                   onClick={handlePlay}
                   className="w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] active:scale-95"
@@ -258,7 +230,7 @@ export function Tournament({
                 >
                   <Play className="w-6 h-6" fill="white" />
                   <span>PLAY TOURNAMENT</span>
-                  <span className="text-[10px] font-normal" style={{ color: 'rgba(255,255,255,0.7)' }}>90s</span>
+                  <span className="text-[10px] font-normal px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>90s</span>
                 </button>
               </div>
             )}

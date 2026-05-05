@@ -8,7 +8,7 @@ import { RewardedAd } from './RewardedAd'
 import { BannerAd } from './BannerAd'
 import {
   Trophy, RotateCcw, Undo2, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
-  Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle, Clock, Swords, Flame, Coins, Timer,
+  Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle, Clock, Swords, Flame, Coins,
 } from 'lucide-react'
 
 function checkCanMove(tiles: { row: number; col: number; value: number }[]): boolean {
@@ -89,30 +89,36 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
   const isClassic = gameMode === 'classic'
 
   // Countdown overlay - trigger when battleTimer first gets set (>0) in battle mode
-  const [hasShownCountdown, setHasShownCountdown] = useState(false)
+  const hasShownCountdownRef = useRef(false)
+
+  // Use derived state for countdown instead of setState in effect
+  const [countdownTrigger, setCountdownTrigger] = useState(0)
+  const [countdownSeconds, setCountdownSeconds] = useState(0)
+
+  // Detect when to start countdown
+  if (isBattleMode && battleTimer > 0 && !botBattleResult && !hasShownCountdownRef.current && countdownTrigger === 0) {
+    hasShownCountdownRef.current = true
+    setCountdownTrigger(1)
+    setCountdownSeconds(3)
+  }
+  if (!isBattleMode && hasShownCountdownRef.current) {
+    hasShownCountdownRef.current = false
+    setCountdownTrigger(0)
+    setCountdownSeconds(0)
+  }
+
+  const countdownOverlay = countdownTrigger > 0 && countdownSeconds > 0 ? { seconds: countdownSeconds, total: 3 } : null
 
   useEffect(() => {
-    if (isBattleMode && battleTimer > 0 && !botBattleResult && !hasShownCountdown) {
-      setCountdownOverlay({ seconds: 3, total: 3 })
-      setHasShownCountdown(true)
-    }
-    if (!isBattleMode) {
-      setHasShownCountdown(false)
-      setCountdownOverlay(null)
-    }
-  }, [isBattleMode, battleTimer, botBattleResult, hasShownCountdown])
-
-  useEffect(() => {
-    if (!countdownOverlay) return
-    if (countdownOverlay.seconds <= 0) {
-      setCountdownOverlay(null)
-      return
-    }
+    if (countdownSeconds <= 0 || countdownTrigger === 0) return
     countdownRef.current = setTimeout(() => {
-      setCountdownOverlay(prev => prev ? { ...prev, seconds: prev.seconds - 1 } : null)
+      setCountdownSeconds(prev => {
+        if (prev <= 1) return 0
+        return prev - 1
+      })
     }, 1000)
     return () => { if (countdownRef.current) clearTimeout(countdownRef.current) }
-  }, [countdownOverlay])
+  }, [countdownSeconds, countdownTrigger])
 
   // Internet detection
   useEffect(() => {
@@ -129,9 +135,6 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
     const interval = setInterval(() => { tickBattleTimer() }, 1000)
     return () => clearInterval(interval)
   }, [isBattleMode, botBattleResult, battleTimer, tickBattleTimer, countdownOverlay])
-
-  // Combo flash
-  const comboFlashActive = comboBonus > 0 && consecutiveMerges === 0
 
   // Score gain animation
   useEffect(() => {
@@ -206,19 +209,21 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
     onBackToDashboard()
   }, [isCoinGame, isTournament, botBattleResult, coinEntryFee, score, addCoins, addNotification, newGame, onBackToDashboard, addGameToHistory, gameMode, battleTimeLimit, calculateTournamentPoints])
 
-  // Timer heartbeat effect - last 10 seconds
+  // Timer heartbeat effect - last 10 seconds - MINE STYLE
   const timerIsCritical = isBattleMode && battleTimer <= 10 && battleTimer > 0 && !botBattleResult
-  // Timer phase: green (>50%), yellow/orange (20-50%), red (<=10sec heartbeat)
+  // Timer phase: GREEN (>50%), YELLOW/MID (20-50%), RED+BLINK (<=10sec)
   const timerPct = battleTimeLimit > 0 ? battleTimer / battleTimeLimit : 0
-  const timerPhase = timerIsCritical ? 'critical' : timerPct > 0.5 ? 'green' : timerPct > 0.2 ? 'yellow' : 'orange'
+  const timerPhase = timerIsCritical ? 'critical' : timerPct > 0.5 ? 'green' : 'mid'
 
   function getTimerColor() {
     if (timerPhase === 'critical') return '#F65E3B'
-    if (timerPhase === 'orange') return '#FF7A00'
-    if (timerPhase === 'yellow') return '#FFB300'
-    return '#00E676' // green
+    if (timerPhase === 'mid') return '#FFB300' // Yellow/orange in the middle
+    return '#00E676' // Green at start
   }
   const timerColor = getTimerColor()
+
+  // Combo multiplier label for display
+  const comboLabel = consecutiveMerges >= 3 ? '3x' : consecutiveMerges >= 2 ? '2x' : ''
 
   // Get mode label and color
   function getModeInfo() {
@@ -264,45 +269,86 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
         </div>
       </div>
 
-      {/* Timer Bar - for ALL modes with color changes */}
+      {/* Timer Bar - MINE STYLE with GREEN→MID→RED+BLINK */}
       {isBattleMode && !botBattleResult && (
         <motion.div
           initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-          className="flex items-center justify-between w-full px-3 py-1.5 rounded-xl flex-shrink-0"
-          style={{
-            maxWidth: boardSize,
-            backgroundColor: `${timerColor}15`,
-            border: `1px solid ${timerColor}30`,
-          }}>
-          <div className="flex items-center gap-2">
-            {modeInfo.icon}
-            <span className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>{modeInfo.label}</span>
+          className="w-full flex-shrink-0"
+          style={{ maxWidth: boardSize + 20 }}
+        >
+          {/* Mode label row */}
+          <div className="flex items-center justify-between px-2 mb-1">
+            <div className="flex items-center gap-1.5">
+              {modeInfo.icon}
+              <span className="text-[9px] font-bold" style={{ color: '#FFFFFF' }}>{modeInfo.label}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Score:</span>
+              <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>{score}</span>
+            </div>
           </div>
+
+          {/* Timer with progress bar + countdown number */}
           <motion.div
-            className="flex items-center gap-2"
-            animate={timerIsCritical ? { scale: [1, 1.2, 1] } : {}}
+            className="relative w-full rounded-xl overflow-hidden"
+            style={{
+              backgroundColor: `${timerColor}12`,
+              border: `1.5px solid ${timerColor}40`,
+            }}
+            animate={timerIsCritical ? {
+              borderColor: [`#F65E3B40`, `#F65E3B`, `#F65E3B40`],
+              boxShadow: [`0 0 0px rgba(246,94,59,0)`, `0 0 20px rgba(246,94,59,0.5)`, `0 0 0px rgba(246,94,59,0)`],
+            } : {}}
             transition={timerIsCritical ? { repeat: Infinity, duration: 0.5 } : {}}
           >
-            <Clock className="w-3.5 h-3.5" style={{ color: timerColor }} />
-            <span className="text-sm font-extrabold" style={{
-              color: timerColor,
-              textShadow: timerIsCritical ? `0 0 12px ${timerColor}80, 0 0 24px ${timerColor}40` : 'none',
-            }}>
-              {formatTimer(battleTimer)}
-            </span>
-            {/* Heartbeat indicator for last 10 sec */}
-            {timerIsCritical && (
-              <motion.span
-                animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1.2, 0.8] }}
-                transition={{ repeat: Infinity, duration: 0.5 }}
-                className="text-xs"
-              >💓</motion.span>
-            )}
+            {/* Progress bar background */}
+            <div className="h-8 w-full relative flex items-center">
+              {/* Filled progress */}
+              <motion.div
+                className="absolute left-0 top-0 h-full rounded-l-xl"
+                style={{
+                  width: `${timerPct * 100}%`,
+                  background: `linear-gradient(90deg, ${timerColor}30, ${timerColor}15)`,
+                }}
+              />
+
+              {/* Timer content */}
+              <div className="relative z-10 w-full flex items-center justify-between px-3">
+                <Clock className="w-3.5 h-3.5" style={{ color: timerColor }} />
+
+                {/* BIG countdown number */}
+                <motion.div
+                  className="flex items-center gap-1.5"
+                  animate={timerIsCritical ? { scale: [1, 1.15, 1] } : {}}
+                  transition={timerIsCritical ? { repeat: Infinity, duration: 0.5 } : {}}
+                >
+                  <span className="text-lg font-extrabold tabular-nums" style={{
+                    color: timerColor,
+                    textShadow: timerIsCritical
+                      ? `0 0 10px ${timerColor}, 0 0 20px ${timerColor}80, 0 0 40px ${timerColor}40`
+                      : `0 0 8px ${timerColor}40`,
+                    letterSpacing: '0.05em',
+                  }}>
+                    {formatTimer(battleTimer)}
+                  </span>
+                  {/* BLINKING warning indicator for last 10 seconds */}
+                  {timerIsCritical && (
+                    <motion.span
+                      animate={{ opacity: [0, 1, 0] }}
+                      transition={{ repeat: Infinity, duration: 0.6, ease: 'easeInOut' }}
+                      className="text-xs font-extrabold"
+                      style={{ color: '#F65E3B' }}
+                    >⚠️</motion.span>
+                  )}
+                </motion.div>
+
+                {/* Time fraction text */}
+                <span className="text-[9px] font-bold tabular-nums" style={{ color: timerColor }}>
+                  {battleTimer}s
+                </span>
+              </div>
+            </div>
           </motion.div>
-          <div className="flex items-center gap-1">
-            <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Score:</span>
-            <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>{score}</span>
-          </div>
         </motion.div>
       )}
 
@@ -317,18 +363,30 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
         </div>
       )}
 
-      {/* Combo indicator - ONLY in Mods (bot) mode */}
+      {/* Combo indicator - ONLY in Mods (bot) mode, NOT tournament */}
       <AnimatePresence>
-        {gameMode === 'bot' && (consecutiveMerges >= 2 || comboFlashActive) && (
-          <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
-            className="px-3 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1 flex-shrink-0"
+        {gameMode === 'bot' && (consecutiveMerges >= 2 || comboBonus > 0) && !botBattleResult && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.5, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="px-4 py-1 rounded-xl text-xs font-extrabold flex items-center gap-1.5 flex-shrink-0"
             style={{
-              backgroundColor: comboFlashActive ? 'rgba(237,194,46,0.25)' : 'rgba(255,122,0,0.15)',
-              color: comboFlashActive ? '#EDC22E' : '#FF7A00',
-              border: `1px solid ${comboFlashActive ? 'rgba(237,194,46,0.3)' : 'rgba(255,122,0,0.25)'}`,
+              backgroundColor: consecutiveMerges >= 3 ? 'rgba(237,194,46,0.25)' : 'rgba(255,122,0,0.15)',
+              color: consecutiveMerges >= 3 ? '#FFD700' : '#FF7A00',
+              border: `1.5px solid ${consecutiveMerges >= 3 ? 'rgba(255,215,0,0.5)' : 'rgba(255,122,0,0.3)'}`,
+              boxShadow: consecutiveMerges >= 3 ? '0 0 15px rgba(255,215,0,0.3)' : 'none',
             }}>
-            <Flame className="w-2.5 h-2.5" />
-            {comboFlashActive ? 'COMBO! Bonus earned!' : `${consecutiveMerges}/3 merges → combo!`}
+            <Flame className="w-3.5 h-3.5" />
+            <span style={{ fontSize: '14px' }}>
+              {comboLabel || (consecutiveMerges >= 2 ? '2x' : '')}
+            </span>
+            <span>COMBO!</span>
+            {comboBonus > 0 && (
+              <span className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>
+                +{comboBonus} pts
+              </span>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

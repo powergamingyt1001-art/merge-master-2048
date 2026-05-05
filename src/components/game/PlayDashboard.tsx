@@ -409,7 +409,7 @@ export function PlayDashboard({
               <Trophy className="w-5 h-5" style={{ color: '#EDC22E' }} />
               <div className="text-left">
                 <p className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>Tournament</p>
-                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{isOnline ? 'Weekly Prizes!' : 'Need Internet'}</p>
+                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{isOnline ? (tournamentJoined ? `${tournamentPoints} pts` : 'Weekly Prizes!') : 'Need Internet'}</p>
               </div>
             </button>
             <div className="flex items-center gap-2 p-3 rounded-xl"
@@ -421,6 +421,25 @@ export function PlayDashboard({
               </div>
             </div>
           </motion.div>
+
+          {/* PLAY TOURNAMENT button - shows on dashboard when joined */}
+          {tournamentJoined && isOnline && (
+            <motion.div initial={{ y: 20, opacity: 0, scale: 0.9 }} animate={{ y: 0, opacity: 1, scale: 1 }} transition={{ delay: 0.55, type: 'spring', stiffness: 200 }}>
+              <button
+                onClick={() => { onStartTournamentGame() }}
+                className="w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] active:scale-95"
+                style={{
+                  background: 'linear-gradient(135deg, #00E676, #00C853)',
+                  color: '#FFFFFF',
+                  boxShadow: '0 6px 30px rgba(0,230,118,0.4), 0 0 60px rgba(0,230,118,0.15)',
+                }}
+              >
+                <Play className="w-5 h-5" fill="white" />
+                <span>PLAY TOURNAMENT</span>
+                <span className="text-[10px] font-normal px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>90s</span>
+              </button>
+            </motion.div>
+          )}
 
           {/* Mod Best Score */}
           {modBestScore > 0 && (

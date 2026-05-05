@@ -3,31 +3,34 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Megaphone } from 'lucide-react'
-import { ADMOB_CONFIG, canShowInterstitial, markInterstitialShown } from '@/lib/admob'
+import { ADMOB_CONFIG } from '@/lib/admob'
 
 interface InterstitialAdProps {
   isOpen: boolean
   onClose: () => void
   isOnline: boolean
+  /** Duration in seconds. App open = 8s, interstitial = 5s */
+  duration?: number
 }
 
-export function InterstitialAd({ isOpen, onClose, isOnline }: InterstitialAdProps) {
-  const [countdown, setCountdown] = useState(5)
+export function InterstitialAd({ isOpen, onClose, isOnline, duration = 5 }: InterstitialAdProps) {
+  const [countdown, setCountdown] = useState(0)
   const [canClose, setCanClose] = useState(false)
-  const [prevOpen, setPrevOpen] = useState(false)
+  const [wasOpen, setWasOpen] = useState(false)
 
-  // Reset when ad opens
-  if (isOpen && !prevOpen) {
-    setPrevOpen(true)
-    setCountdown(5)
+  // Detect when ad opens and initialize
+  if (isOpen && !wasOpen) {
+    setWasOpen(true)
+    setCountdown(duration)
     setCanClose(false)
   }
-  if (!isOpen && prevOpen) {
-    setPrevOpen(false)
+  if (!isOpen && wasOpen) {
+    setWasOpen(false)
   }
 
+  // Countdown timer
   useEffect(() => {
-    if (!isOpen || canClose) return
+    if (!isOpen || canClose || countdown <= 0) return
 
     const timer = setInterval(() => {
       setCountdown(prev => {
@@ -41,11 +44,10 @@ export function InterstitialAd({ isOpen, onClose, isOnline }: InterstitialAdProp
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [isOpen, canClose])
+  }, [isOpen, canClose, countdown])
 
   const handleClose = useCallback(() => {
     if (canClose) {
-      markInterstitialShown()
       onClose()
     }
   }, [canClose, onClose])
@@ -102,6 +104,17 @@ export function InterstitialAd({ isOpen, onClose, isOnline }: InterstitialAdProp
                   Ad ID: {ADMOB_CONFIG.interstitial.id}
                 </p>
               </div>
+              {/* Progress bar */}
+              {!canClose && countdown > 0 && (
+                <div className="mt-3 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
+                  <motion.div
+                    className="h-full rounded-full"
+                    style={{ background: 'linear-gradient(90deg, #EDC22E, #FF7A00)' }}
+                    animate={{ width: `${((duration - countdown) / duration) * 100}%` }}
+                    transition={{ duration: 0.3 }}
+                  />
+                </div>
+              )}
             </div>
           </motion.div>
         </motion.div>

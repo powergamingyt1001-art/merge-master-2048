@@ -17,13 +17,13 @@ export default function Home() {
   const [showInterstitialAd, setShowInterstitialAd] = useState(false)
   const game = useGame()
 
-  // Show App Open ad when app first loads
+  // Show App Open ad when app first loads (5-10 sec ad)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (navigator.onLine && canShowAppOpen()) {
         setShowAppOpenAd(true)
       }
-    }, 2000)
+    }, 2500) // Show after loading screen finishes
     return () => clearTimeout(timer)
   }, [])
 
@@ -51,12 +51,12 @@ export default function Home() {
   }, [game])
 
   const handleBackToDashboard = useCallback(() => {
-    // Show interstitial ad when going back to dashboard after game
-    if (navigator.onLine && canShowInterstitial()) {
+    // Show interstitial ad when going back to dashboard after game (5 sec ad)
+    if (phase === 'game' && navigator.onLine && canShowInterstitial()) {
       setShowInterstitialAd(true)
     }
     setPhase('dashboard')
-  }, [])
+  }, [phase])
 
   const handleInterstitialClose = useCallback(() => {
     markInterstitialShown()
@@ -121,18 +121,20 @@ export default function Home() {
         {phase === 'game' && <GameBoard key="game" onBackToDashboard={handleBackToDashboard} />}
       </AnimatePresence>
 
-      {/* App Open Ad */}
+      {/* App Open Ad - 8 seconds */}
       <InterstitialAd
         isOpen={showAppOpenAd}
         onClose={() => { markAppOpenShown(); setShowAppOpenAd(false) }}
         isOnline={typeof window !== 'undefined' ? navigator.onLine : false}
+        duration={8}
       />
 
-      {/* Interstitial Ad - shown when going back to dashboard */}
+      {/* Interstitial Ad - 5 seconds, shown when going back to dashboard after game */}
       <InterstitialAd
         isOpen={showInterstitialAd}
         onClose={handleInterstitialClose}
         isOnline={typeof window !== 'undefined' ? navigator.onLine : false}
+        duration={5}
       />
     </main>
   )

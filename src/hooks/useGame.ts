@@ -558,16 +558,24 @@ export function useGame() {
       const tilesWithNew = addRandomTile(newTiles)
 
       // Combo system: ONLY in Mods (bot) mode, NOT in tournament/coins/classic
+      // 2 merges → 2x combo, 3+ merges → 3x combo on POINTS
       let newConsecutiveMerges = prev.consecutiveMerges
       let newComboBonus = prev.comboBonus
       let comboExtra = 0
+      let comboMultiplier = 0 // 0 = no combo, 2 = 2x, 3 = 3x
       const isComboMode = prev.gameMode === 'bot'
       if (isComboMode && mergeCount > 0) {
         newConsecutiveMerges += mergeCount
         if (newConsecutiveMerges >= 3) {
-          comboExtra = Math.round(scoreGain / 5)
+          comboMultiplier = 3
+          comboExtra = scoreGain * 2 // 3x means 2x extra
           newComboBonus += comboExtra
           newConsecutiveMerges = 0
+        } else if (newConsecutiveMerges >= 2) {
+          comboMultiplier = 2
+          comboExtra = scoreGain // 2x means 1x extra
+          newComboBonus += comboExtra
+          // Don't reset - keep building toward 3x
         }
       } else if (!isComboMode) {
         // No combo in tournament/coins/classic
@@ -631,6 +639,9 @@ export function useGame() {
 
       // Game points only from actual gameplay (combo only counts in mods mode)
       const newGamePoints = prev.gamePoints + scoreGain + comboExtra
+
+      // comboMultiplier is used for display (2x/3x combo label)
+      // It's derived from consecutiveMerges in the UI
 
       return {
         ...prev,
@@ -951,6 +962,7 @@ export function useGame() {
         blastCount: prev.blastCount + 5,
         undoTotal: prev.undoTotal + 5,
         spinTickets: prev.spinTickets + 3,
+        coins: prev.coins + 100, // Welcome bonus coins for new users
       }
     })
   }, [])
