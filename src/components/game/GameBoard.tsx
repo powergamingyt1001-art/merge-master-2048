@@ -8,7 +8,7 @@ import { RewardedAd } from './RewardedAd'
 import { BannerAd } from './BannerAd'
 import {
   Trophy, RotateCcw, Undo2, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
-  Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle, Clock, Swords, Flame, Coins,
+  Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle, Clock, Swords, Flame, Coins, Timer,
 } from 'lucide-react'
 
 function checkCanMove(tiles: { row: number; col: number; value: number }[]): boolean {
@@ -30,8 +30,8 @@ function useResponsiveSize() {
     function calc() {
       const vw = window.innerWidth
       const vh = window.innerHeight
-      // Leave room for header (50), timer (40), lives row (40), power-ups (50), footer (40)
-      const maxBoard = Math.min(vw - 24, vh - 300, 420)
+      // Leave room for header (50), timer (40), lives row (30), power-ups (50), banner (40)
+      const maxBoard = Math.min(vw - 24, vh - 280, 420)
       const gap = maxBoard > 300 ? 10 : 8
       const cellSize = Math.floor((maxBoard - gap * 5) / 4)
       setSizes({ cellSize, gap })
@@ -62,9 +62,10 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
     gameMode, botOpponent, botBattleResult,
     battleTimer, battleTimeLimit, consecutiveMerges, comboBonus,
     coinEntryFee, coinGameWon,
+    tournamentPoints, tournamentCarryOver,
     handleMove, newGame, continueGame, undo, activatePowerUp, handleTileClick,
     reviveWithAd, restartAfterStuck, tickBattleTimer, addCoins, addNotification,
-    goBackToDashboard,
+    goBackToDashboard, calculateTournamentPoints, addGameToHistory,
   } = game
 
   const touchStart = useRef<{ x: number; y: number } | null>(null)
@@ -79,9 +80,11 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
   const isStuck = !checkCanMove(tiles) && lives > 0 && !gameOver
   const showGameOverModal = gameOver && lives <= 0 && !gameOverDismissed
 
-  // Determine if this is a timed battle
-  const isBattleMode = gameMode === 'bot' || gameMode === 'coins'
+  // Determine game type
+  const isBattleMode = gameMode === 'bot' || gameMode === 'coins' || gameMode === 'tournament'
   const isCoinGame = gameMode === 'coins'
+  const isTournament = gameMode === 'tournament'
+  const isClassic = gameMode === 'classic'
 
   // Internet detection
   useEffect(() => {
@@ -149,6 +152,10 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
   const handleBack = useCallback(() => { onBackToDashboard() }, [onBackToDashboard])
 
   const handleBattleEnd = useCallback(() => {
+    // Record game history
+    const result = botBattleResult || 'classic'
+    addGameToHistory(gameMode, score, result as 'win' | 'lose' | 'classic', coinEntryFee, battleTimeLimit)
+
     if (isCoinGame && botBattleResult === 'win' && coinEntryFee > 0) {
       const winAmount = coinEntryFee * 2
       addCoins(winAmount)
@@ -156,13 +163,35 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
     } else if (isCoinGame && botBattleResult === 'lose') {
       addNotification('Coin Game Lost', `You lost ${coinEntryFee} coins`, 'battle', '😔')
     }
+
+    // Tournament point calculation
+    if (isTournament) {
+      calculateTournamentPoints(score)
+      if (botBattleResult === 'win') {
+        addNotification('Tournament Win!', `+${Math.floor(score / 10)} points! Score: ${score}`, 'reward', '🏆')
+      } else {
+        addNotification('Tournament Game Over', `Score: ${score} - Keep playing!`, 'battle', '⚔️')
+      }
+    }
+
     newGame()
     onBackToDashboard()
-  }, [isCoinGame, botBattleResult, coinEntryFee, addCoins, addNotification, newGame, onBackToDashboard])
+  }, [isCoinGame, isTournament, botBattleResult, coinEntryFee, score, addCoins, addNotification, newGame, onBackToDashboard, addGameToHistory, gameMode, battleTimeLimit, calculateTournamentPoints])
+
+  // Timer heartbeat effect
+  const timerIsCritical = isBattleMode && battleTimer <= 10 && battleTimer > 0 && !botBattleResult
+
+  // Get mode label and color
+  function getModeInfo() {
+    if (isCoinGame) return { label: `₹${coinEntryFee} Game`, color: '#EDC22E', icon: <Coins className="w-4 h-4" style={{ color: '#EDC22E' }} /> }
+    if (isTournament) return { label: 'Tournament', color: '#00E676', icon: <Trophy className="w-4 h-4" style={{ color: '#00E676' }} /> }
+    return { label: '1v1 Battle', color: '#F65E3B', icon: <Swords className="w-4 h-4" style={{ color: '#F65E3B' }} /> }
+  }
+  const modeInfo = getModeInfo()
 
   return (
-    <div className="fixed inset-0 flex flex-col items-center justify-center select-none outline-none"
-      style={{ background: 'linear-gradient(180deg, #1a0533 0%, #0d1b3e 100%)', overflow: 'hidden' }}
+    <div className="fixed inset-0 flex flex-col items-center justify-center select-none outline-none game-touch-area"
+      style={{ background: 'linear-gradient(180deg, #1a0533 0%, #0d1b3e 100%)', overflow: 'hidden', touchAction: 'none' }}
       onKeyDown={handleKeyDown} tabIndex={0} role="application" aria-label="Merge Master 2048 Challenge">
 
       {/* Header - Compact */}
@@ -196,26 +225,49 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
         </div>
       </div>
 
-      {/* Battle Timer Bar - only show timer, no bot name/score during play */}
+      {/* Timer Bar - for ALL modes */}
       {isBattleMode && !botBattleResult && (
-        <motion.div initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+        <motion.div
+          initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
           className="flex items-center justify-between w-full px-3 py-1.5 rounded-xl flex-shrink-0"
-          style={{ maxWidth: boardSize, backgroundColor: isCoinGame ? 'rgba(237,194,46,0.1)' : 'rgba(246,94,59,0.1)', border: `1px solid ${isCoinGame ? 'rgba(237,194,46,0.2)' : 'rgba(246,94,59,0.2)'}` }}>
+          style={{
+            maxWidth: boardSize,
+            backgroundColor: timerIsCritical ? 'rgba(246,94,59,0.2)' : `${modeInfo.color}10`,
+            border: `1px solid ${timerIsCritical ? 'rgba(246,94,59,0.4)' : `${modeInfo.color}20`}`,
+          }}>
           <div className="flex items-center gap-2">
-            {isCoinGame ? <Coins className="w-4 h-4" style={{ color: '#EDC22E' }} /> : <Swords className="w-4 h-4" style={{ color: '#F65E3B' }} />}
-            <span className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>{isCoinGame ? `₹${coinEntryFee} Game` : '1v1 Battle'}</span>
+            {modeInfo.icon}
+            <span className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>{modeInfo.label}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <Clock className="w-3.5 h-3.5" style={{ color: battleTimer <= 10 ? '#F65E3B' : '#EDC22E' }} />
-            <span className="text-sm font-extrabold" style={{ color: battleTimer <= 10 ? '#F65E3B' : '#FFFFFF' }}>
+          <motion.div
+            className="flex items-center gap-2"
+            animate={timerIsCritical ? { scale: [1, 1.15, 1] } : {}}
+            transition={timerIsCritical ? { repeat: Infinity, duration: 0.5 } : {}}
+          >
+            <Clock className="w-3.5 h-3.5" style={{ color: timerIsCritical ? '#F65E3B' : '#EDC22E' }} />
+            <span className="text-sm font-extrabold" style={{
+              color: timerIsCritical ? '#F65E3B' : '#FFFFFF',
+              textShadow: timerIsCritical ? '0 0 10px rgba(246,94,59,0.5)' : 'none',
+            }}>
               {formatTimer(battleTimer)}
             </span>
-          </div>
+          </motion.div>
           <div className="flex items-center gap-1">
             <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Score:</span>
             <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>{score}</span>
           </div>
         </motion.div>
+      )}
+
+      {/* Tournament Points display during game */}
+      {isTournament && !botBattleResult && (
+        <div className="flex items-center gap-2 py-0.5 flex-shrink-0">
+          <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Tournament Pts:</span>
+          <span className="text-[10px] font-bold" style={{ color: '#00E676' }}>{tournamentPoints}</span>
+          {tournamentCarryOver > 0 && (
+            <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>(+{tournamentCarryOver} carry)</span>
+          )}
+        </div>
       )}
 
       {/* Combo indicator */}
@@ -242,10 +294,11 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
         ))}
       </div>
 
-      {/* Game Board - CENTERED */}
+      {/* Game Board */}
       <div className="relative rounded-xl overflow-hidden game-touch-area flex-shrink-0" style={{
         width: boardSize, height: boardSize, backgroundColor: '#2d1b4e',
         boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 40px rgba(237,194,46,0.08)', border: '1px solid rgba(255,255,255,0.06)',
+        touchAction: 'none',
       }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
         {Array.from({ length: 16 }).map((_, i) => {
           const row = Math.floor(i / 4), col = i % 4
@@ -296,7 +349,7 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
           )}
         </AnimatePresence>
 
-        {/* Bot/Coin Battle Result overlay */}
+        {/* Bot/Coin/Tournament Battle Result overlay */}
         <AnimatePresence>
           {isBattleMode && botBattleResult && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -307,14 +360,14 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
               <p className="text-2xl font-extrabold mb-2" style={{ color: '#FFFFFF' }}>
                 {botBattleResult === 'win' ? 'You Won!' : 'You Lost!'}
               </p>
-              <div className="flex items-center gap-6 mb-4">
+              <div className="flex items-center gap-6 mb-3">
                 <div className="text-center">
                   <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.6)' }}>Your Score</p>
                   <p className="text-xl font-extrabold" style={{ color: '#FFFFFF' }}>{score}</p>
                 </div>
                 <span className="text-lg font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>vs</span>
                 <div className="text-center">
-                  <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.6)' }}>{botOpponent?.avatar} {botOpponent?.name}</p>
+                  <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.6)' }}>Opponent</p>
                   <p className="text-xl font-extrabold" style={{ color: '#FFFFFF' }}>{botOpponent?.finalScore}</p>
                 </div>
               </div>
@@ -323,9 +376,16 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
                   {botBattleResult === 'win' ? `+${coinEntryFee * 2} coins! 🎉` : `-${coinEntryFee} coins`}
                 </p>
               )}
-              {!isCoinGame && (
+              {isTournament && (
+                <div className="mb-3 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
+                  <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.6)' }}>Tournament Points</p>
+                  <p className="text-lg font-extrabold" style={{ color: '#00E676' }}>+{Math.floor((score + tournamentCarryOver) / 10)} pts</p>
+                  <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Total: {tournamentPoints + Math.floor((score + tournamentCarryOver) / 10)} pts</p>
+                </div>
+              )}
+              {!isCoinGame && !isTournament && (
                 <p className="text-[9px] mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  {botBattleResult === 'win' ? `You scored ${score - (botOpponent?.finalScore ?? 0)} more!` : `Bot scored ${(botOpponent?.finalScore ?? 0) - score} more`}
+                  {botBattleResult === 'win' ? `You scored ${score - (botOpponent?.finalScore ?? 0)} more!` : `Opponent scored ${(botOpponent?.finalScore ?? 0) - score} more`}
                 </p>
               )}
               <div className="flex gap-3">
@@ -333,6 +393,8 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
                 <button onClick={() => {
                   if (isCoinGame) {
                     game.startCoinGame(coinEntryFee)
+                  } else if (isTournament) {
+                    game.startTournamentGame()
                   } else {
                     game.startBotBattle(battleTimeLimit)
                   }
@@ -384,7 +446,7 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
         <BannerAd position="bottom" isOnline={isOnline} />
       </div>
 
-      {/* Game Over Modal - only for classic mode */}
+      {/* Game Over Modal - for classic mode */}
       <AnimatePresence>
         {showGameOverModal && gameOver && lives <= 0 && !isBattleMode && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -402,7 +464,12 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
                   style={{ background: 'linear-gradient(135deg, #F65E3B, #F67C5F)', color: '#FFFFFF' }}>
                   <Heart className="w-4 h-4" /> Watch Ad & Revive
                 </button>
-                <button onClick={() => { setGameOverDismissed(false); newGame(); onBackToDashboard(); }}
+                <button onClick={() => {
+                  addGameToHistory('classic', score, 'classic', 0, 0)
+                  setGameOverDismissed(false)
+                  newGame()
+                  onBackToDashboard()
+                }}
                   className="w-full py-2.5 rounded-xl font-semibold text-xs"
                   style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
                   Back to Dashboard

@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 
 export type Direction = 'up' | 'down' | 'left' | 'right'
 export type PowerUp = 'hammer' | 'magnet' | 'blast'
-export type GameMode = 'classic' | 'bot' | 'coins'
+export type GameMode = 'classic' | 'bot' | 'coins' | 'tournament'
 
 export interface Tile {
   id: number
@@ -37,6 +37,16 @@ export interface Notification {
   emoji: string
   timestamp: string
   read: boolean
+}
+
+export interface GameHistoryEntry {
+  id: string
+  date: string
+  mode: GameMode
+  score: number
+  result: 'win' | 'lose' | 'classic'
+  entryFee: number
+  timeLimit: number
 }
 
 export interface GameState {
@@ -98,6 +108,13 @@ export interface GameState {
   // Win/loss tracking for percentage
   totalBattlesPlayed: number
   totalBattlesWon: number
+  // Tournament system
+  tournamentJoined: boolean
+  tournamentPoints: number
+  tournamentCarryOver: number
+  tournamentGamesPlayed: number
+  // Game history
+  gameHistory: GameHistoryEntry[]
 }
 
 const BOT_NAMES = [
@@ -250,12 +267,10 @@ function loadSavedData() {
   return null
 }
 
-// Generate realistic bot score for 1-minute gameplay - 50/50 win chance
+// Generate realistic bot score - 50/50 win chance
 function generateBotScore(playerBestScore: number): BotOpponent {
   const bot = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]
-  // Base score around player's ability for 50-50 chance
   const base = Math.max(playerBestScore, 200)
-  // Add randomness: 50% chance bot scores higher, 50% lower
   const variance = base * 0.5
   const finalScore = Math.round(Math.max(50, base + (Math.random() * variance * 2 - variance)))
   return { ...bot, finalScore }
@@ -325,6 +340,11 @@ export function useGame() {
       playerLevel: 1,
       totalBattlesPlayed: 0,
       totalBattlesWon: 0,
+      tournamentJoined: false,
+      tournamentPoints: 0,
+      tournamentCarryOver: 0,
+      tournamentGamesPlayed: 0,
+      gameHistory: [],
     }
 
     if (!saved) {
@@ -367,6 +387,24 @@ export function useGame() {
       gamesPlayedToday = 0
     }
 
+    // Reset tournament weekly if new week
+    let tournamentJoined = saved.tournamentJoined || false
+    let tournamentPoints = saved.tournamentPoints || 0
+    let tournamentCarryOver = saved.tournamentCarryOver || 0
+    let tournamentGamesPlayed = saved.tournamentGamesPlayed || 0
+    // Simple weekly reset: check if last tournament week is different from current week
+    if (saved.tournamentWeek) {
+      const start = new Date(2025, 0, 6)
+      const now = new Date()
+      const currentWeek = Math.floor((now.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
+      if (currentWeek > saved.tournamentWeek) {
+        tournamentJoined = false
+        tournamentPoints = 0
+        tournamentCarryOver = 0
+        tournamentGamesPlayed = 0
+      }
+    }
+
     const gamePoints = saved.gamePoints || 0
 
     return {
@@ -398,6 +436,11 @@ export function useGame() {
       playerLevel: calculateLevel(gamePoints),
       totalBattlesPlayed: saved.totalBattlesPlayed || 0,
       totalBattlesWon: saved.totalBattlesWon || 0,
+      tournamentJoined,
+      tournamentPoints,
+      tournamentCarryOver,
+      tournamentGamesPlayed,
+      gameHistory: saved.gameHistory || [],
     }
   })
 
@@ -405,6 +448,10 @@ export function useGame() {
 
   // Save data
   useEffect(() => {
+    const now = new Date()
+    const start = new Date(2025, 0, 6)
+    const currentWeek = Math.floor((now.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
+
     const data = {
       bestScore: state.bestScore,
       spinTickets: state.spinTickets,
@@ -427,15 +474,21 @@ export function useGame() {
       autoClaimCommission: state.autoClaimCommission,
       gamesPlayedToday: state.gamesPlayedToday,
       lastPlayDate: state.lastPlayDate,
-      notifications: state.notifications.slice(0, 50), // Keep last 50
+      notifications: state.notifications.slice(0, 50),
       playerName: state.playerName,
       playerAvatar: state.playerAvatar,
       playerLevel: state.playerLevel,
       totalBattlesPlayed: state.totalBattlesPlayed,
       totalBattlesWon: state.totalBattlesWon,
+      tournamentJoined: state.tournamentJoined,
+      tournamentPoints: state.tournamentPoints,
+      tournamentCarryOver: state.tournamentCarryOver,
+      tournamentGamesPlayed: state.tournamentGamesPlayed,
+      tournamentWeek: currentWeek,
+      gameHistory: state.gameHistory.slice(0, 30),
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.totalBattlesPlayed, state.totalBattlesWon])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.gameHistory])
 
   // Clear flash
   useEffect(() => {
@@ -477,6 +530,23 @@ export function useGame() {
     }))
   }, [])
 
+  // Add game to history
+  const addGameToHistory = useCallback((mode: GameMode, score: number, result: 'win' | 'lose' | 'classic', entryFee: number, timeLimit: number) => {
+    const entry: GameHistoryEntry = {
+      id: Date.now().toString(),
+      date: new Date().toISOString(),
+      mode,
+      score,
+      result,
+      entryFee,
+      timeLimit,
+    }
+    setState(prev => ({
+      ...prev,
+      gameHistory: [entry, ...prev.gameHistory].slice(0, 30),
+    }))
+  }, [])
+
   const handleMove = useCallback((direction: Direction) => {
     setState(prev => {
       if (prev.gameOver || (prev.won && !prev.keepPlaying) || prev.activePowerUp) return prev
@@ -496,10 +566,10 @@ export function useGame() {
         if (newConsecutiveMerges >= 3) {
           comboExtra = Math.round(scoreGain / 5)
           newComboBonus += comboExtra
-          newConsecutiveMerges = 0 // Reset after combo
+          newConsecutiveMerges = 0
         }
       } else {
-        newConsecutiveMerges = 0 // Reset if no merge
+        newConsecutiveMerges = 0
       }
 
       const newScore = prev.score + scoreGain + comboExtra
@@ -514,7 +584,7 @@ export function useGame() {
         if (newLives <= 0) { isGameOver = true; newLives = 0 }
       }
 
-      // Bot battle check - timer based
+      // Bot battle check
       let botBattleResult = prev.botBattleResult
       let modBestScore = prev.modBestScore
       let coinGameWon = prev.coinGameWon
@@ -538,6 +608,17 @@ export function useGame() {
         botBattleResult = coinGameWon ? 'win' : 'lose'
         totalBattlesPlayed++
         if (coinGameWon) {
+          modBestScore = Math.max(modBestScore, newScore)
+          totalBattlesWon++
+        }
+      }
+
+      // Tournament mode check
+      if (prev.gameMode === 'tournament' && isGameOver) {
+        const opponent = generateBotScore(prev.modBestScore)
+        botBattleResult = newScore > opponent.finalScore ? 'win' : 'lose'
+        totalBattlesPlayed++
+        if (botBattleResult === 'win') {
           modBestScore = Math.max(modBestScore, newScore)
           totalBattlesWon++
         }
@@ -663,7 +744,6 @@ export function useGame() {
     const tiles = initTiles()
     prevState.current = null
     setState(prev => {
-      // Check daily limit
       const today = getTodayStr()
       const gamesToday = prev.lastPlayDate === today ? prev.gamesPlayedToday : 0
       if (gamesToday >= prev.maxGamesPerDay) return prev
@@ -680,7 +760,7 @@ export function useGame() {
         undoCount: 0,
         lives: prev.maxLives,
         activePowerUp: null,
-        gameMode: 'bot',
+        gameMode: 'bot' as GameMode,
         botOpponent: opponent,
         botBattleResult: null,
         battleTimer: timeLimit,
@@ -699,7 +779,6 @@ export function useGame() {
     const tiles = initTiles()
     prevState.current = null
     setState(prev => {
-      // Check daily limit
       const today = getTodayStr()
       const gamesToday = prev.lastPlayDate === today ? prev.gamesPlayedToday : 0
       if (gamesToday >= prev.maxGamesPerDay) return prev
@@ -717,11 +796,11 @@ export function useGame() {
         undoCount: 0,
         lives: prev.maxLives,
         activePowerUp: null,
-        gameMode: 'coins',
+        gameMode: 'coins' as GameMode,
         botOpponent: opponent,
         botBattleResult: null,
-        battleTimer: 90,
-        battleTimeLimit: 90, // Coin games: 1:30 min = 90 seconds
+        battleTimer: 120, // 2 minutes for coins game
+        battleTimeLimit: 120,
         consecutiveMerges: 0,
         comboBonus: 0,
         coins: prev.coins - entryFee,
@@ -733,9 +812,76 @@ export function useGame() {
     })
   }, [])
 
+  // Tournament game: 90 seconds, point system
+  const startTournamentGame = useCallback(() => {
+    const tiles = initTiles()
+    prevState.current = null
+    setState(prev => {
+      if (!prev.tournamentJoined) return prev
+
+      const today = getTodayStr()
+      const gamesToday = prev.lastPlayDate === today ? prev.gamesPlayedToday : 0
+      if (gamesToday >= prev.maxGamesPerDay) return prev
+
+      const opponent = generateBotScore(prev.modBestScore)
+      return {
+        ...prev,
+        tiles,
+        score: 0,
+        gameOver: false,
+        won: false,
+        keepPlaying: false,
+        canUndo: false,
+        undoCount: 0,
+        lives: prev.maxLives,
+        activePowerUp: null,
+        gameMode: 'tournament' as GameMode,
+        botOpponent: opponent,
+        botBattleResult: null,
+        battleTimer: 90,
+        battleTimeLimit: 90,
+        consecutiveMerges: 0,
+        comboBonus: 0,
+        coinEntryFee: 0,
+        coinGameWon: null,
+        gamesPlayedToday: gamesToday + 1,
+        lastPlayDate: today,
+      }
+    })
+  }, [])
+
+  // Calculate and add tournament points after a game
+  const calculateTournamentPoints = useCallback((finalScore: number) => {
+    setState(prev => {
+      if (prev.gameMode !== 'tournament') return prev
+      const total = finalScore + prev.tournamentCarryOver
+      const newPoints = Math.floor(total / 10)
+      const newCarryOver = total % 10
+      return {
+        ...prev,
+        tournamentPoints: prev.tournamentPoints + newPoints,
+        tournamentCarryOver: newCarryOver,
+        tournamentGamesPlayed: prev.tournamentGamesPlayed + 1,
+      }
+    })
+  }, [])
+
+  // Join tournament (50 coins entry fee)
+  const joinTournament = useCallback(() => {
+    setState(prev => {
+      if (prev.tournamentJoined) return prev
+      if (prev.coins < 50) return prev
+      return {
+        ...prev,
+        tournamentJoined: true,
+        coins: prev.coins - 50,
+      }
+    })
+  }, [])
+
   const tickBattleTimer = useCallback(() => {
     setState(prev => {
-      if (prev.gameMode !== 'bot' && prev.gameMode !== 'coins') return prev
+      if (prev.gameMode !== 'bot' && prev.gameMode !== 'coins' && prev.gameMode !== 'tournament') return prev
       if (prev.botBattleResult || prev.battleTimer <= 0) return prev
       const newTimer = prev.battleTimer - 1
       if (newTimer <= 0) {
@@ -743,7 +889,32 @@ export function useGame() {
         const result = prev.score > (prev.botOpponent?.finalScore ?? 0) ? 'win' : 'lose'
         const newModBest = result === 'win' ? Math.max(prev.modBestScore, prev.score) : prev.modBestScore
         const coinGameWon = result === 'win' ? true : false
-        return { ...prev, battleTimer: 0, botBattleResult: result, gameOver: true, modBestScore: newModBest, coinGameWon, totalBattlesPlayed: prev.totalBattlesPlayed + 1, totalBattlesWon: result === 'win' ? prev.totalBattlesWon + 1 : prev.totalBattlesWon }
+
+        // Calculate tournament points if tournament mode
+        let tournamentPoints = prev.tournamentPoints
+        let tournamentCarryOver = prev.tournamentCarryOver
+        let tournamentGamesPlayed = prev.tournamentGamesPlayed
+        if (prev.gameMode === 'tournament') {
+          const total = prev.score + prev.tournamentCarryOver
+          const newPts = Math.floor(total / 10)
+          tournamentCarryOver = total % 10
+          tournamentPoints += newPts
+          tournamentGamesPlayed++
+        }
+
+        return {
+          ...prev,
+          battleTimer: 0,
+          botBattleResult: result,
+          gameOver: true,
+          modBestScore: newModBest,
+          coinGameWon,
+          totalBattlesPlayed: prev.totalBattlesPlayed + 1,
+          totalBattlesWon: result === 'win' ? prev.totalBattlesWon + 1 : prev.totalBattlesWon,
+          tournamentPoints,
+          tournamentCarryOver,
+          tournamentGamesPlayed,
+        }
       }
       return { ...prev, battleTimer: newTimer }
     })
@@ -810,7 +981,6 @@ export function useGame() {
   const addCoins = useCallback((amount: number) => {
     setState(prev => {
       const newCoins = prev.coins + amount
-      // If auto-claim is on and there's commission, auto-claim it
       let newCommissionBalance = prev.commissionBalance
       let newCommissionClaimed = prev.commissionClaimed
       if (prev.autoClaimCommission && prev.commissionBalance > 0) {
@@ -852,7 +1022,7 @@ export function useGame() {
       undoCount: 0,
       lives: prev.maxLives,
       activePowerUp: null,
-      gameMode: 'classic',
+      gameMode: 'classic' as GameMode,
       botOpponent: null,
       botBattleResult: null,
       battleTimer: 0,
@@ -872,7 +1042,7 @@ export function useGame() {
           coins: prev.coins + 500,
           spinTickets: prev.spinTickets + 2,
           magnetCount: prev.magnetCount + 2,
-          invitedBy: null, // Clear after claiming
+          invitedBy: null,
         }
       }
       return prev
@@ -951,6 +1121,9 @@ export function useGame() {
     addUndos,
     startBotBattle,
     startCoinGame,
+    startTournamentGame,
+    calculateTournamentPoints,
+    joinTournament,
     tickBattleTimer,
     goBackToDashboard,
     claimInviteReward,
@@ -963,5 +1136,6 @@ export function useGame() {
     markAllNotificationsRead,
     updatePlayerName,
     updatePlayerAvatar,
+    addGameToHistory,
   }
 }

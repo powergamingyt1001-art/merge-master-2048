@@ -2,16 +2,22 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Crown, Medal, Star, Trophy, Clock, Info, Coins, Users, Lock, Zap } from 'lucide-react'
+import { X, Crown, Medal, Star, Trophy, Clock, Info, Coins, Users, Lock, Zap, Play, Timer, Target, TrendingUp } from 'lucide-react'
 
 interface TournamentProps {
   isOpen: boolean
   onClose: () => void
   gamePoints: number
   coins: number
+  tournamentJoined: boolean
+  tournamentPoints: number
+  tournamentCarryOver: number
+  tournamentGamesPlayed: number
+  onJoinTournament: () => void
+  onStartTournamentGame: () => void
 }
 
-type TabType = 'info' | 'prize' | 'rankings'
+type TabType = 'play' | 'prize' | 'rankings'
 
 interface TournamentPlayer {
   rank: number
@@ -22,36 +28,28 @@ interface TournamentPlayer {
 }
 
 const FAKE_TOURNAMENT_PLAYERS = [
-  { name: 'Vikram Boss', avatar: '🔥', score: 5200 },
-  { name: 'Rahul Pro', avatar: '🦁', score: 4800 },
-  { name: 'Sneha Star', avatar: '⭐', score: 3900 },
-  { name: 'Amit King', avatar: '👑', score: 3500 },
-  { name: 'Pooja Queen', avatar: '👸', score: 2800 },
-  { name: 'Anjali Ace', avatar: '💎', score: 2200 },
-  { name: 'Priya Legend', avatar: '🌟', score: 1600 },
-  { name: 'Ravi Master', avatar: '🏆', score: 1200 },
-  { name: 'Karan Beast', avatar: '💪', score: 800 },
-  { name: 'Neha Champ', avatar: '🎯', score: 400 },
+  { name: 'Vikram Boss', avatar: '🔥', score: 520 },
+  { name: 'Rahul Pro', avatar: '🦁', score: 480 },
+  { name: 'Sneha Star', avatar: '⭐', score: 390 },
+  { name: 'Amit King', avatar: '👑', score: 350 },
+  { name: 'Pooja Queen', avatar: '👸', score: 280 },
+  { name: 'Anjali Ace', avatar: '💎', score: 220 },
+  { name: 'Priya Legend', avatar: '🌟', score: 160 },
+  { name: 'Ravi Master', avatar: '🏆', score: 120 },
+  { name: 'Karan Beast', avatar: '💪', score: 80 },
+  { name: 'Neha Champ', avatar: '🎯', score: 40 },
 ]
 
 // Week 1-3 prizes (7K budget)
-// 1st=700, 2nd=500, 3rd=300, 4th=200, 5th=100+3spins
-// After 5th until 7K runs out: 50 coins + 2 spins each
-// No coins: 2 spins
 const WEEK_PRIZES_EARLY = [
   { rank: 1, coins: 700, spins: 0, label: '1st' },
   { rank: 2, coins: 500, spins: 0, label: '2nd' },
   { rank: 3, coins: 300, spins: 0, label: '3rd' },
   { rank: 4, coins: 200, spins: 0, label: '4th' },
   { rank: 5, coins: 100, spins: 3, label: '5th' },
-  // 6th onwards: 50 coins + 2 spins until 7K runs out
-  // Those who don't get coins: 2 spins
 ]
 
 // Week 4+ prizes (15K budget)
-// 1st=1000, 2nd=500, 3rd=300, 4th=200, 5th=100, 6th=50+5spins
-// After 6th until 15K runs out: 50 coins + 4 spins
-// No coins: 3 spins
 const WEEK_PRIZES_LATE = [
   { rank: 1, coins: 1000, spins: 0, label: '1st' },
   { rank: 2, coins: 500, spins: 0, label: '2nd' },
@@ -59,8 +57,6 @@ const WEEK_PRIZES_LATE = [
   { rank: 4, coins: 200, spins: 0, label: '4th' },
   { rank: 5, coins: 100, spins: 0, label: '5th' },
   { rank: 6, coins: 50, spins: 5, label: '6th' },
-  // 7th onwards: 50 coins + 4 spins until 15K runs out
-  // No coins: 3 spins
 ]
 
 const ENTRY_FEE = 50
@@ -87,44 +83,44 @@ function getTimeLeftInWeek(): string {
 
 function getEarlyPoolRemaining(): number {
   const used = WEEK_PRIZES_EARLY.reduce((s, p) => s + p.coins, 0)
-  return 7000 - used // 7000 - 1800 = 5200 remaining for 50-coin ranks
+  return 7000 - used
 }
 
 function getLatePoolRemaining(): number {
   const used = WEEK_PRIZES_LATE.reduce((s, p) => s + p.coins, 0)
-  return 15000 - used // 15000 - 2150 = 12850 remaining
+  return 15000 - used
 }
 
-function getEarlyCoinRanksCount(): number {
-  const remaining = getEarlyPoolRemaining()
-  return Math.floor(remaining / 50) // How many 50-coin ranks
-}
-
-function getLateCoinRanksCount(): number {
-  const remaining = getLatePoolRemaining()
-  return Math.floor(remaining / 50) // How many 50-coin ranks
-}
-
-export function Tournament({ isOpen, onClose, gamePoints, coins }: TournamentProps) {
-  const [tab, setTab] = useState<TabType>('info')
-  const [joined, setJoined] = useState(false)
+export function Tournament({
+  isOpen, onClose, gamePoints, coins,
+  tournamentJoined, tournamentPoints, tournamentCarryOver, tournamentGamesPlayed,
+  onJoinTournament, onStartTournamentGame,
+}: TournamentProps) {
+  const [tab, setTab] = useState<TabType>('play')
   const weekNum = getWeekNumber()
   const timeLeft = getTimeLeftInWeek()
   const isLatePool = weekNum >= 4
   const prizes = isLatePool ? WEEK_PRIZES_LATE : WEEK_PRIZES_EARLY
   const totalPool = isLatePool ? 15000 : 7000
-  const coinRanksCount = isLatePool ? getLateCoinRanksCount() : getEarlyPoolRemaining() / 50
+  const earlyPoolRemaining = getEarlyPoolRemaining()
+  const latePoolRemaining = getLatePoolRemaining()
+  const coinRanksCount = isLatePool ? Math.floor(latePoolRemaining / 50) : Math.floor(earlyPoolRemaining / 50)
   const coinRankSpins = isLatePool ? 4 : 2
   const noCoinSpins = isLatePool ? 3 : 2
   const canJoin = coins >= ENTRY_FEE
 
-  // Build rankings based on GAME POINTS only (not coins)
+  // Build rankings based on tournament points
   const players: TournamentPlayer[] = FAKE_TOURNAMENT_PLAYERS.map(p => ({
     rank: 0, name: p.name, avatar: p.avatar, score: p.score, isPlayer: false,
   }))
-  players.push({ rank: 0, name: 'You', avatar: '😎', score: gamePoints, isPlayer: true })
+  players.push({ rank: 0, name: 'You', avatar: '😎', score: tournamentPoints, isPlayer: true })
   players.sort((a, b) => b.score - a.score)
   players.forEach((p, i) => { p.rank = i + 1 })
+
+  const handlePlay = () => {
+    onStartTournamentGame()
+    onClose()
+  }
 
   return (
     <AnimatePresence>
@@ -167,7 +163,7 @@ export function Tournament({ isOpen, onClose, gamePoints, coins }: TournamentPro
             </div>
 
             {/* Pool + Entry Fee */}
-            <div className="mx-4 mb-3 flex gap-2">
+            <div className="mx-4 mb-2 flex gap-2">
               <div className="flex-1 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
                 <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Prize Pool</p>
                 <p className="text-xs font-extrabold" style={{ color: '#EDC22E' }}>{totalPool.toLocaleString()} 💰</p>
@@ -176,13 +172,19 @@ export function Tournament({ isOpen, onClose, gamePoints, coins }: TournamentPro
                 <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Entry Fee</p>
                 <p className="text-xs font-extrabold" style={{ color: '#F65E3B' }}>{ENTRY_FEE} 🪙</p>
               </div>
+              {tournamentJoined && (
+                <div className="flex-1 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
+                  <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Your Points</p>
+                  <p className="text-xs font-extrabold" style={{ color: '#00E676' }}>{tournamentPoints} 🏆</p>
+                </div>
+              )}
             </div>
 
-            {/* Join button */}
-            {!joined && (
+            {/* Join button or Tournament stats */}
+            {!tournamentJoined && (
               <div className="mx-4 mb-3">
                 <button
-                  onClick={() => canJoin && setJoined(true)}
+                  onClick={() => canJoin && onJoinTournament()}
                   className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] active:scale-95"
                   style={{
                     background: canJoin ? 'linear-gradient(135deg, #EDC22E, #FF7A00)' : 'rgba(255,255,255,0.06)',
@@ -196,16 +198,71 @@ export function Tournament({ isOpen, onClose, gamePoints, coins }: TournamentPro
               </div>
             )}
 
-            {joined && (
-              <div className="mx-4 mb-3 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)' }}>
-                <p className="text-[10px] font-bold" style={{ color: '#00E676' }}>✅ Joined! Play games to earn points</p>
+            {tournamentJoined && (
+              <div className="mx-4 mb-2">
+                {/* Tournament Stats */}
+                <div className="p-3 rounded-xl mb-2" style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Target className="w-3.5 h-3.5" style={{ color: '#00E676' }} />
+                      <span className="text-[10px] font-bold" style={{ color: '#00E676' }}>Your Tournament Stats</span>
+                    </div>
+                    <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(0,230,118,0.15)', color: '#00E676' }}>
+                      {tournamentGamesPlayed} games
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}>
+                      <p className="text-lg font-extrabold" style={{ color: '#00E676' }}>{tournamentPoints}</p>
+                      <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Total Points</p>
+                    </div>
+                    <div className="p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}>
+                      <p className="text-lg font-extrabold" style={{ color: '#EDC22E' }}>{tournamentCarryOver}</p>
+                      <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Carry Over Score</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Point System Explanation */}
+                <div className="p-2.5 rounded-xl mb-2" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.12)' }}>
+                  <p className="text-[9px] font-bold mb-1" style={{ color: '#EDC22E' }}>📊 Point System</p>
+                  <ul className="space-y-0.5">
+                    <li className="text-[8px] flex items-start gap-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                      <span style={{ color: '#EDC22E' }}>•</span> 10 score = 1 tournament point
+                    </li>
+                    <li className="text-[8px] flex items-start gap-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                      <span style={{ color: '#EDC22E' }}>•</span> Remainder carries to next game
+                    </li>
+                    <li className="text-[8px] flex items-start gap-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                      <span style={{ color: '#EDC22E' }}>•</span> E.g. Score 25 → 2 pts, 5 carry over
+                    </li>
+                    <li className="text-[8px] flex items-start gap-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                      <span style={{ color: '#EDC22E' }}>•</span> Next game: 35 + 5 carry = 4 pts total
+                    </li>
+                  </ul>
+                </div>
+
+                {/* PLAY BUTTON */}
+                <button
+                  onClick={handlePlay}
+                  className="w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] active:scale-95"
+                  style={{
+                    background: 'linear-gradient(135deg, #00E676, #00C853)',
+                    color: '#FFFFFF',
+                    boxShadow: '0 6px 30px rgba(0,230,118,0.4), 0 0 60px rgba(0,230,118,0.15)',
+                  }}
+                >
+                  <Play className="w-6 h-6" fill="white" />
+                  <span>PLAY TOURNAMENT</span>
+                  <span className="text-[10px] font-normal" style={{ color: 'rgba(255,255,255,0.7)' }}>90s</span>
+                </button>
               </div>
             )}
 
             {/* Tab Switch */}
             <div className="flex mx-4 mb-3 rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
               {[
-                { key: 'info' as TabType, icon: <Info className="w-3 h-3" />, label: 'Info' },
+                { key: 'play' as TabType, icon: <Play className="w-3 h-3" />, label: 'Play' },
                 { key: 'prize' as TabType, icon: <Coins className="w-3 h-3" />, label: 'Prize' },
                 { key: 'rankings' as TabType, icon: <Users className="w-3 h-3" />, label: 'Rank' },
               ].map((t) => (
@@ -223,17 +280,18 @@ export function Tournament({ isOpen, onClose, gamePoints, coins }: TournamentPro
 
             {/* Tab Content */}
             <div className="px-4 pb-4">
-              {tab === 'info' && (
+              {tab === 'play' && (
                 <div>
                   <div className="p-3 rounded-xl mb-2" style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
-                    <p className="text-[10px] font-bold mb-1" style={{ color: '#EDC22E' }}>🏆 How It Works</p>
+                    <p className="text-[10px] font-bold mb-1" style={{ color: '#EDC22E' }}>🏆 How Tournament Works</p>
                     <ul className="space-y-1">
                       {[
                         `Entry fee: ${ENTRY_FEE} coins to join`,
-                        'Play games to earn game points',
-                        'Only game points count (not coins from spin/daily)',
-                        'Top players win coin prizes weekly',
-                        `Prize pool: ${isLatePool ? '15K' : '7K'} coins (increases after week 3)`,
+                        'Each game is 90 seconds',
+                        '10 score = 1 tournament point',
+                        'Partial scores carry over to next game',
+                        'Only tournament points count for ranking',
+                        `Prize pool: ${isLatePool ? '15K' : '7K'} coins weekly`,
                         'Rankings reset every Monday',
                         'Daily limit: 20 games',
                       ].map((item, i) => (
@@ -287,7 +345,7 @@ export function Tournament({ isOpen, onClose, gamePoints, coins }: TournamentPro
                   {/* Remaining ranks with 50 coins */}
                   <div className="p-2.5 rounded-xl" style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.1)' }}>
                     <p className="text-[10px] font-bold mb-1" style={{ color: '#00E676' }}>
-                      #{prizes.length + 1} to #{prizes.length + Math.floor(coinRanksCount)} — 50 coins + {coinRankSpins} spins each
+                      #{prizes.length + 1} to #{prizes.length + coinRanksCount} — 50 coins + {coinRankSpins} spins each
                     </p>
                     <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
                       Until {isLatePool ? '15K' : '7K'} pool is exhausted
@@ -315,7 +373,7 @@ export function Tournament({ isOpen, onClose, gamePoints, coins }: TournamentPro
                           style={{ backgroundColor: players[1].isPlayer ? 'rgba(237,194,46,0.2)' : 'rgba(192,192,192,0.15)', border: players[1].isPlayer ? '1px solid rgba(237,194,46,0.3)' : '1px solid rgba(192,192,192,0.2)' }}>
                           <Medal className="w-3 h-3 mx-auto mb-0.5" style={{ color: '#C0C0C0' }} />
                           <p className="text-[8px] font-bold truncate px-1" style={{ color: players[1].isPlayer ? '#EDC22E' : '#C0C0C0' }}>{players[1].name}</p>
-                          <p className="text-[7px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>{players[1].score.toLocaleString()}</p>
+                          <p className="text-[7px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>{players[1].score.toLocaleString()} pts</p>
                         </div>
                       </div>
                     )}
@@ -327,7 +385,7 @@ export function Tournament({ isOpen, onClose, gamePoints, coins }: TournamentPro
                           style={{ backgroundColor: players[0].isPlayer ? 'rgba(237,194,46,0.25)' : 'rgba(237,194,46,0.12)', border: '1px solid rgba(237,194,46,0.3)' }}>
                           <Crown className="w-4 h-4 mx-auto mb-0.5" style={{ color: '#FFD700' }} />
                           <p className="text-[9px] font-bold truncate px-1" style={{ color: players[0].isPlayer ? '#EDC22E' : '#FFD700' }}>{players[0].name}</p>
-                          <p className="text-[7px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>{players[0].score.toLocaleString()}</p>
+                          <p className="text-[7px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>{players[0].score.toLocaleString()} pts</p>
                         </div>
                       </div>
                     )}
@@ -339,7 +397,7 @@ export function Tournament({ isOpen, onClose, gamePoints, coins }: TournamentPro
                           style={{ backgroundColor: players[2].isPlayer ? 'rgba(237,194,46,0.2)' : 'rgba(205,127,50,0.12)', border: players[2].isPlayer ? '1px solid rgba(237,194,46,0.3)' : '1px solid rgba(205,127,50,0.2)' }}>
                           <Star className="w-3 h-3 mx-auto mb-0.5" style={{ color: '#CD7F32' }} />
                           <p className="text-[8px] font-bold truncate px-1" style={{ color: players[2].isPlayer ? '#EDC22E' : '#CD7F32' }}>{players[2].name}</p>
-                          <p className="text-[7px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>{players[2].score.toLocaleString()}</p>
+                          <p className="text-[7px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>{players[2].score.toLocaleString()} pts</p>
                         </div>
                       </div>
                     )}
