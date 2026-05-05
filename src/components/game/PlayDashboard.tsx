@@ -38,9 +38,15 @@ interface PlayDashboardProps {
   playerLevel: number
   totalBattlesPlayed: number
   totalBattlesWon: number
+  tournamentJoined: boolean
+  tournamentPoints: number
+  tournamentCarryOver: number
+  tournamentGamesPlayed: number
   onPlayClassic: () => void
   onStartBotBattle: (timeLimit: number) => void
   onStartCoinGame: (entryFee: number) => void
+  onJoinTournament: () => void
+  onStartTournamentGame: () => void
   onUseSpinTicket: () => void
   onAddSpinTickets: (count: number) => void
   onClaimWelcome: () => void
@@ -71,7 +77,9 @@ export function PlayDashboard({
   inviteCode, invitedUsers, commissionBalance, commissionClaimed, autoClaimCommission,
   gamesPlayedToday, maxGamesPerDay, notifications,
   playerName, playerAvatar, playerLevel, totalBattlesPlayed, totalBattlesWon,
+  tournamentJoined, tournamentPoints, tournamentCarryOver, tournamentGamesPlayed,
   onPlayClassic, onStartBotBattle, onStartCoinGame,
+  onJoinTournament, onStartTournamentGame,
   onUseSpinTicket, onAddSpinTickets, onClaimWelcome, onClaimStreakDay,
   onAddCoins, onAddPowerUp, onAddUndos, onClaimCommission, onToggleAutoClaim,
   onAddNotification, onMarkNotificationRead, onMarkAllNotificationsRead,
@@ -455,7 +463,13 @@ export function PlayDashboard({
       <Leaderboard isOpen={showLeaderboard} onClose={() => setShowLeaderboard(false)}
         gamePoints={gamePoints} bestScore={bestScore} coins={coins} />
       <Tournament isOpen={showTournament} onClose={() => setShowTournament(false)}
-        gamePoints={gamePoints} coins={coins} />
+        gamePoints={gamePoints} coins={coins}
+        tournamentJoined={tournamentJoined}
+        tournamentPoints={tournamentPoints}
+        tournamentCarryOver={tournamentCarryOver}
+        tournamentGamesPlayed={tournamentGamesPlayed}
+        onJoinTournament={onJoinTournament}
+        onStartTournamentGame={onStartTournamentGame} />
       <InvitePanel isOpen={showInvite} onClose={() => setShowInvite(false)}
         inviteCode={inviteCode} invitedUsers={invitedUsers}
         commissionBalance={commissionBalance} commissionClaimed={commissionClaimed}

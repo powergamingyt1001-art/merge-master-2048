@@ -1,32 +1,70 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { LoadingScreen } from '@/components/game/LoadingScreen'
 import { PlayDashboard } from '@/components/game/PlayDashboard'
 import { GameBoard } from '@/components/game/GameBoard'
+import { InterstitialAd } from '@/components/game/InterstitialAd'
 import { useGame } from '@/hooks/useGame'
+import { canShowAppOpen, canShowInterstitial, markAppOpenShown, markInterstitialShown } from '@/lib/admob'
 
 type GamePhase = 'loading' | 'dashboard' | 'game'
 
 export default function Home() {
   const [phase, setPhase] = useState<GamePhase>('loading')
+  const [showAppOpenAd, setShowAppOpenAd] = useState(false)
+  const [showInterstitialAd, setShowInterstitialAd] = useState(false)
   const game = useGame()
 
-  const handleLoadingComplete = useCallback(() => setPhase('dashboard'), [])
-  const handlePlayClassic = useCallback(() => setPhase('game'), [])
+  // Show App Open ad when app first loads
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (navigator.onLine && canShowAppOpen()) {
+        setShowAppOpenAd(true)
+      }
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [])
+
+  const handleLoadingComplete = useCallback(() => {
+    setPhase('dashboard')
+  }, [])
+
+  const handlePlayClassic = useCallback(() => {
+    setPhase('game')
+  }, [])
+
   const handleStartBotBattle = useCallback((timeLimit: number) => {
     game.startBotBattle(timeLimit)
     setPhase('game')
   }, [game])
+
   const handleStartCoinGame = useCallback((entryFee: number) => {
     game.startCoinGame(entryFee)
     setPhase('game')
   }, [game])
-  const handleBackToDashboard = useCallback(() => setPhase('dashboard'), [])
+
+  const handleStartTournamentGame = useCallback(() => {
+    game.startTournamentGame()
+    setPhase('game')
+  }, [game])
+
+  const handleBackToDashboard = useCallback(() => {
+    // Show interstitial ad when going back to dashboard after game
+    if (navigator.onLine && canShowInterstitial()) {
+      setShowInterstitialAd(true)
+    }
+    setPhase('dashboard')
+  }, [])
+
+  const handleInterstitialClose = useCallback(() => {
+    markInterstitialShown()
+    setShowInterstitialAd(false)
+  }, [])
 
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen" style={{ touchAction: 'none' }}>
       <AnimatePresence mode="wait">
         {phase === 'loading' && <LoadingScreen key="loading" onFinish={handleLoadingComplete} />}
         {phase === 'dashboard' && (
@@ -55,9 +93,15 @@ export default function Home() {
             playerLevel={game.playerLevel}
             totalBattlesPlayed={game.totalBattlesPlayed}
             totalBattlesWon={game.totalBattlesWon}
+            tournamentJoined={game.tournamentJoined}
+            tournamentPoints={game.tournamentPoints}
+            tournamentCarryOver={game.tournamentCarryOver}
+            tournamentGamesPlayed={game.tournamentGamesPlayed}
             onPlayClassic={handlePlayClassic}
             onStartBotBattle={handleStartBotBattle}
             onStartCoinGame={handleStartCoinGame}
+            onJoinTournament={game.joinTournament}
+            onStartTournamentGame={handleStartTournamentGame}
             onUseSpinTicket={game.useSpinTicket}
             onAddSpinTickets={game.addSpinTickets}
             onClaimWelcome={game.claimWelcome}
@@ -76,6 +120,20 @@ export default function Home() {
         )}
         {phase === 'game' && <GameBoard key="game" onBackToDashboard={handleBackToDashboard} />}
       </AnimatePresence>
+
+      {/* App Open Ad */}
+      <InterstitialAd
+        isOpen={showAppOpenAd}
+        onClose={() => { markAppOpenShown(); setShowAppOpenAd(false) }}
+        isOnline={typeof window !== 'undefined' ? navigator.onLine : false}
+      />
+
+      {/* Interstitial Ad - shown when going back to dashboard */}
+      <InterstitialAd
+        isOpen={showInterstitialAd}
+        onClose={handleInterstitialClose}
+        isOnline={typeof window !== 'undefined' ? navigator.onLine : false}
+      />
     </main>
   )
 }

@@ -557,17 +557,22 @@ export function useGame() {
       prevState.current = prev
       const tilesWithNew = addRandomTile(newTiles)
 
-      // Combo system: 3 consecutive merges = 1/5 extra point bonus
+      // Combo system: ONLY in Mods (bot) mode, NOT in tournament/coins/classic
       let newConsecutiveMerges = prev.consecutiveMerges
       let newComboBonus = prev.comboBonus
       let comboExtra = 0
-      if (mergeCount > 0) {
+      const isComboMode = prev.gameMode === 'bot'
+      if (isComboMode && mergeCount > 0) {
         newConsecutiveMerges += mergeCount
         if (newConsecutiveMerges >= 3) {
           comboExtra = Math.round(scoreGain / 5)
           newComboBonus += comboExtra
           newConsecutiveMerges = 0
         }
+      } else if (!isComboMode) {
+        // No combo in tournament/coins/classic
+        newConsecutiveMerges = 0
+        newComboBonus = 0
       } else {
         newConsecutiveMerges = 0
       }
@@ -624,7 +629,7 @@ export function useGame() {
         }
       }
 
-      // Game points only from actual gameplay
+      // Game points only from actual gameplay (combo only counts in mods mode)
       const newGamePoints = prev.gamePoints + scoreGain + comboExtra
 
       return {

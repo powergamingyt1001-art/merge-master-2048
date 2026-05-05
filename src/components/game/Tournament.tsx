@@ -119,7 +119,11 @@ export function Tournament({
 
   const handlePlay = () => {
     onStartTournamentGame()
-    onClose()
+    onClose() // close tournament panel, game board will show
+  }
+
+  const handleJoin = () => {
+    onJoinTournament()
   }
 
   return (
@@ -184,7 +188,7 @@ export function Tournament({
             {!tournamentJoined && (
               <div className="mx-4 mb-3">
                 <button
-                  onClick={() => canJoin && onJoinTournament()}
+                  onClick={() => canJoin && handleJoin()}
                   className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] active:scale-95"
                   style={{
                     background: canJoin ? 'linear-gradient(135deg, #EDC22E, #FF7A00)' : 'rgba(255,255,255,0.06)',
