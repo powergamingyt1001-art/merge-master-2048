@@ -961,8 +961,8 @@ export function useGame() {
         magnetCount: prev.magnetCount + 5,
         blastCount: prev.blastCount + 5,
         undoTotal: prev.undoTotal + 5,
-        spinTickets: prev.spinTickets + 3,
-        coins: prev.coins + 100, // Welcome bonus coins for new users
+        spinTickets: prev.spinTickets + 5,
+        coins: prev.coins + 500, // Welcome bonus coins for new users
       }
     })
   }, [])

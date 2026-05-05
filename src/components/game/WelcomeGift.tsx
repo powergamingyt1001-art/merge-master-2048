@@ -63,8 +63,8 @@ export function WelcomeGift({ isOpen, onClose, onClaim }: WelcomeGiftProps) {
                 { icon: <Magnet className="w-5 h-5" />, label: '5 Magnet', color: '#00E676' },
                 { icon: <Hammer className="w-5 h-5" />, label: '5 Hammer', color: '#F59563' },
                 { icon: <Undo2 className="w-5 h-5" />, label: '5 Undo', color: '#8f7a66' },
-                { icon: <Sparkles className="w-5 h-5" />, label: '3 Spins', color: '#EDC22E' },
-                { icon: <span className="text-lg">💰</span>, label: '100 Coins', color: '#EDC22E' },
+                { icon: <Sparkles className="w-5 h-5" />, label: '5 Spins', color: '#EDC22E' },
+                { icon: <span className="text-lg">💰</span>, label: '500 Coins', color: '#EDC22E' },
               ].map((item, i) => (
                 <motion.div
                   key={i}
