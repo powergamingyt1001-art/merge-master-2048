@@ -54,7 +54,7 @@ const WEEK_PRIZES_LATE = [
 ]
 
 function getWeekNumber(): number {
-  const start = new Date(2025, 0, 6) // Tournament started Jan 6, 2025
+  const start = new Date(2025, 0, 6)
   const now = new Date()
   const diffMs = now.getTime() - start.getTime()
   const diffWeeks = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000))
@@ -64,7 +64,6 @@ function getWeekNumber(): number {
 function getTimeLeftInWeek(): string {
   const now = new Date()
   const endOfWeek = new Date(now)
-  // Week ends on Sunday midnight
   const daysUntilEnd = 7 - now.getDay()
   endOfWeek.setDate(now.getDate() + daysUntilEnd)
   endOfWeek.setHours(23, 59, 59, 999)
@@ -103,11 +102,11 @@ export function Tournament({ isOpen, onClose, gamePoints, coins }: TournamentPro
             initial={{ scale: 0.8, y: 30 }}
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.8 }}
-            className="w-full max-w-sm rounded-2xl overflow-hidden"
+            className="w-full max-w-sm rounded-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
             style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 pb-2">
+            <div className="flex items-center justify-between p-4 pb-2 sticky top-0 z-10" style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)' }}>
               <div className="flex items-center gap-2">
                 <Trophy className="w-5 h-5" style={{ color: '#EDC22E' }} />
                 <div>
@@ -161,6 +160,7 @@ export function Tournament({ isOpen, onClose, gamePoints, coins }: TournamentPro
                         'Top players win coin prizes weekly',
                         'Prize pool increases every 4 weeks',
                         'Rankings reset every Monday',
+                        'Daily limit: 20 games',
                       ].map((item, i) => (
                         <li key={i} className="text-[9px] flex items-start gap-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
                           <span style={{ color: '#EDC22E' }}>•</span> {item}
@@ -208,47 +208,47 @@ export function Tournament({ isOpen, onClose, gamePoints, coins }: TournamentPro
 
               {tab === 'rankings' && (
                 <div>
-                  {/* Top 3 Podium */}
+                  {/* Top 3 Podium with Medals */}
                   <div className="flex items-end justify-center gap-2 mb-3">
                     {/* 2nd Place */}
                     {players[1] && (
-                      <div className="flex flex-col items-center">
+                      <div className="flex flex-col items-center" style={{ minWidth: 68 }}>
                         <span className="text-2xl mb-0.5">{players[1].avatar}</span>
-                        <div className="w-16 py-1.5 rounded-t-lg text-center"
+                        <div className="w-full py-1.5 rounded-t-lg text-center"
                           style={{ backgroundColor: players[1].isPlayer ? 'rgba(237,194,46,0.2)' : 'rgba(192,192,192,0.15)', border: players[1].isPlayer ? '1px solid rgba(237,194,46,0.3)' : '1px solid rgba(192,192,192,0.2)' }}>
                           <Medal className="w-3 h-3 mx-auto mb-0.5" style={{ color: '#C0C0C0' }} />
-                          <p className="text-[8px] font-bold truncate" style={{ color: players[1].isPlayer ? '#EDC22E' : '#C0C0C0' }}>{players[1].name}</p>
+                          <p className="text-[8px] font-bold truncate px-1" style={{ color: players[1].isPlayer ? '#EDC22E' : '#C0C0C0' }}>{players[1].name}</p>
                           <p className="text-[7px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>{players[1].score.toLocaleString()}</p>
                         </div>
                       </div>
                     )}
                     {/* 1st Place */}
                     {players[0] && (
-                      <div className="flex flex-col items-center">
+                      <div className="flex flex-col items-center" style={{ minWidth: 80 }}>
                         <span className="text-3xl mb-0.5">{players[0].avatar}</span>
-                        <div className="w-18 py-2 rounded-t-lg text-center"
+                        <div className="w-full py-2.5 rounded-t-lg text-center"
                           style={{ backgroundColor: players[0].isPlayer ? 'rgba(237,194,46,0.25)' : 'rgba(237,194,46,0.12)', border: '1px solid rgba(237,194,46,0.3)' }}>
                           <Crown className="w-4 h-4 mx-auto mb-0.5" style={{ color: '#FFD700' }} />
-                          <p className="text-[9px] font-bold truncate" style={{ color: players[0].isPlayer ? '#EDC22E' : '#FFD700' }}>{players[0].name}</p>
+                          <p className="text-[9px] font-bold truncate px-1" style={{ color: players[0].isPlayer ? '#EDC22E' : '#FFD700' }}>{players[0].name}</p>
                           <p className="text-[7px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>{players[0].score.toLocaleString()}</p>
                         </div>
                       </div>
                     )}
                     {/* 3rd Place */}
                     {players[2] && (
-                      <div className="flex flex-col items-center">
+                      <div className="flex flex-col items-center" style={{ minWidth: 68 }}>
                         <span className="text-2xl mb-0.5">{players[2].avatar}</span>
-                        <div className="w-16 py-1 rounded-t-lg text-center"
+                        <div className="w-full py-1 rounded-t-lg text-center"
                           style={{ backgroundColor: players[2].isPlayer ? 'rgba(237,194,46,0.2)' : 'rgba(205,127,50,0.12)', border: players[2].isPlayer ? '1px solid rgba(237,194,46,0.3)' : '1px solid rgba(205,127,50,0.2)' }}>
                           <Star className="w-3 h-3 mx-auto mb-0.5" style={{ color: '#CD7F32' }} />
-                          <p className="text-[8px] font-bold truncate" style={{ color: players[2].isPlayer ? '#EDC22E' : '#CD7F32' }}>{players[2].name}</p>
+                          <p className="text-[8px] font-bold truncate px-1" style={{ color: players[2].isPlayer ? '#EDC22E' : '#CD7F32' }}>{players[2].name}</p>
                           <p className="text-[7px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>{players[2].score.toLocaleString()}</p>
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* List */}
+                  {/* List below 3rd */}
                   <div className="max-h-48 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
                     {players.slice(3).map((entry) => (
                       <div key={entry.rank}

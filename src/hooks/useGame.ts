@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 
 export type Direction = 'up' | 'down' | 'left' | 'right'
 export type PowerUp = 'hammer' | 'magnet' | 'blast'
-export type GameMode = 'classic' | 'bot'
+export type GameMode = 'classic' | 'bot' | 'coins'
 
 export interface Tile {
   id: number
@@ -27,6 +27,16 @@ export interface InvitedUser {
   name: string
   joinedAt: string
   commissionEarned: number
+}
+
+export interface Notification {
+  id: string
+  title: string
+  message: string
+  type: 'reward' | 'rank' | 'invite' | 'commission' | 'system' | 'battle'
+  emoji: string
+  timestamp: string
+  read: boolean
 }
 
 export interface GameState {
@@ -72,6 +82,19 @@ export interface GameState {
   commissionBalance: number
   commissionClaimed: number
   autoClaimCommission: boolean
+  // Daily game limit
+  gamesPlayedToday: number
+  lastPlayDate: string
+  maxGamesPerDay: number
+  // Notifications
+  notifications: Notification[]
+  // Coin game mode
+  coinEntryFee: number
+  coinGameWon: boolean | null
+  // Player profile
+  playerName: string
+  playerAvatar: string
+  playerLevel: number
 }
 
 const BOT_NAMES = [
@@ -86,6 +109,8 @@ const BOT_NAMES = [
   { name: 'Karan Beast', avatar: '💪' },
   { name: 'Neha Champ', avatar: '🎯' },
 ]
+
+const PLAYER_AVATARS = ['😎', '🦊', '🐺', '🦅', '🐉', '🦁', '👑', '🔥', '💎', '⚡']
 
 let tileId = 0
 
@@ -226,12 +251,20 @@ function loadSavedData() {
 function generateBotScore(playerBestScore: number): BotOpponent {
   const bot = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]
   // Base score around player's ability for 50-50 chance
-  // In 1 minute, typical scores range from 100-800 for beginners, 300-2000 for experienced
   const base = Math.max(playerBestScore, 200)
   // Add randomness: 50% chance bot scores higher, 50% lower
   const variance = base * 0.5
   const finalScore = Math.round(Math.max(50, base + (Math.random() * variance * 2 - variance)))
   return { ...bot, finalScore }
+}
+
+// Calculate player level from game points
+function calculateLevel(gamePoints: number): number {
+  if (gamePoints >= 10000) return 5
+  if (gamePoints >= 5000) return 4
+  if (gamePoints >= 2000) return 3
+  if (gamePoints >= 500) return 2
+  return 1
 }
 
 export function useGame() {
@@ -278,6 +311,15 @@ export function useGame() {
       commissionBalance: 0,
       commissionClaimed: 0,
       autoClaimCommission: false,
+      gamesPlayedToday: 0,
+      lastPlayDate: today,
+      maxGamesPerDay: 20,
+      notifications: [],
+      coinEntryFee: 0,
+      coinGameWon: null,
+      playerName: 'Player',
+      playerAvatar: '😎',
+      playerLevel: 1,
     }
 
     if (!saved) {
@@ -303,7 +345,7 @@ export function useGame() {
       }
     }
 
-    // Check URL for invite code
+    // Check URL for invite code (auto-detect)
     let invitedBy = saved.invitedBy || null
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
@@ -312,6 +354,15 @@ export function useGame() {
         invitedBy = ref
       }
     }
+
+    // Reset daily game count if new day
+    let gamesPlayedToday = saved.gamesPlayedToday || 0
+    const savedLastPlayDate = saved.lastPlayDate || today
+    if (savedLastPlayDate !== today) {
+      gamesPlayedToday = 0
+    }
+
+    const gamePoints = saved.gamePoints || 0
 
     return {
       ...defaults,
@@ -326,7 +377,7 @@ export function useGame() {
       blastCount: saved.blastCount ?? 0,
       undoTotal: saved.undoTotal ?? 5,
       coins: saved.coins || 0,
-      gamePoints: saved.gamePoints || 0,
+      gamePoints,
       modBestScore: saved.modBestScore || 0,
       inviteCode: saved.inviteCode || generateInviteCode(),
       invitedBy,
@@ -334,6 +385,12 @@ export function useGame() {
       commissionBalance: saved.commissionBalance || 0,
       commissionClaimed: saved.commissionClaimed || 0,
       autoClaimCommission: saved.autoClaimCommission || false,
+      gamesPlayedToday,
+      lastPlayDate: today,
+      notifications: saved.notifications || [],
+      playerName: saved.playerName || 'Player',
+      playerAvatar: saved.playerAvatar || '😎',
+      playerLevel: calculateLevel(gamePoints),
     }
   })
 
@@ -361,9 +418,15 @@ export function useGame() {
       commissionBalance: state.commissionBalance,
       commissionClaimed: state.commissionClaimed,
       autoClaimCommission: state.autoClaimCommission,
+      gamesPlayedToday: state.gamesPlayedToday,
+      lastPlayDate: state.lastPlayDate,
+      notifications: state.notifications.slice(0, 50), // Keep last 50
+      playerName: state.playerName,
+      playerAvatar: state.playerAvatar,
+      playerLevel: state.playerLevel,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel])
 
   // Clear flash
   useEffect(() => {
@@ -374,6 +437,36 @@ export function useGame() {
       return () => clearTimeout(timer)
     }
   }, [state.tiles])
+
+  const addNotification = useCallback((title: string, message: string, type: Notification['type'], emoji: string) => {
+    const notif: Notification = {
+      id: Date.now().toString(),
+      title,
+      message,
+      type,
+      emoji,
+      timestamp: new Date().toISOString(),
+      read: false,
+    }
+    setState(prev => ({
+      ...prev,
+      notifications: [notif, ...prev.notifications].slice(0, 50),
+    }))
+  }, [])
+
+  const markNotificationRead = useCallback((id: string) => {
+    setState(prev => ({
+      ...prev,
+      notifications: prev.notifications.map(n => n.id === id ? { ...n, read: true } : n),
+    }))
+  }, [])
+
+  const markAllNotificationsRead = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      notifications: prev.notifications.map(n => ({ ...n, read: true })),
+    }))
+  }, [])
 
   const handleMove = useCallback((direction: Direction) => {
     setState(prev => {
@@ -415,13 +508,23 @@ export function useGame() {
       // Bot battle check - timer based
       let botBattleResult = prev.botBattleResult
       let modBestScore = prev.modBestScore
+      let coinGameWon = prev.coinGameWon
       if (prev.gameMode === 'bot' && prev.botOpponent && !botBattleResult) {
         if (isGameOver) {
-          // Compare scores
           botBattleResult = newScore > prev.botOpponent.finalScore ? 'win' : 'lose'
           if (botBattleResult === 'win') {
             modBestScore = Math.max(modBestScore, newScore)
           }
+        }
+      }
+
+      // Coin game mode check
+      if (prev.gameMode === 'coins' && isGameOver) {
+        const opponent = generateBotScore(prev.modBestScore)
+        coinGameWon = newScore > opponent.finalScore ? true : false
+        botBattleResult = coinGameWon ? 'win' : 'lose'
+        if (coinGameWon) {
+          modBestScore = Math.max(modBestScore, newScore)
         }
       }
 
@@ -443,6 +546,8 @@ export function useGame() {
         consecutiveMerges: newConsecutiveMerges,
         comboBonus: newComboBonus,
         gamePoints: newGamePoints,
+        coinGameWon,
+        playerLevel: calculateLevel(newGamePoints),
       }
     })
   }, [])
@@ -532,6 +637,8 @@ export function useGame() {
       battleTimer: 0,
       consecutiveMerges: 0,
       comboBonus: 0,
+      coinEntryFee: 0,
+      coinGameWon: null,
     }))
   }, [])
 
@@ -539,6 +646,11 @@ export function useGame() {
     const tiles = initTiles()
     prevState.current = null
     setState(prev => {
+      // Check daily limit
+      const today = getTodayStr()
+      const gamesToday = prev.lastPlayDate === today ? prev.gamesPlayedToday : 0
+      if (gamesToday >= prev.maxGamesPerDay) return prev
+
       const opponent = generateBotScore(prev.modBestScore)
       return {
         ...prev,
@@ -558,19 +670,63 @@ export function useGame() {
         battleTimeLimit: timeLimit,
         consecutiveMerges: 0,
         comboBonus: 0,
+        gamesPlayedToday: gamesToday + 1,
+        lastPlayDate: today,
+        coinEntryFee: 0,
+        coinGameWon: null,
+      }
+    })
+  }, [])
+
+  const startCoinGame = useCallback((entryFee: number) => {
+    const tiles = initTiles()
+    prevState.current = null
+    setState(prev => {
+      // Check daily limit
+      const today = getTodayStr()
+      const gamesToday = prev.lastPlayDate === today ? prev.gamesPlayedToday : 0
+      if (gamesToday >= prev.maxGamesPerDay) return prev
+      if (prev.coins < entryFee) return prev
+
+      const opponent = generateBotScore(prev.modBestScore)
+      return {
+        ...prev,
+        tiles,
+        score: 0,
+        gameOver: false,
+        won: false,
+        keepPlaying: false,
+        canUndo: false,
+        undoCount: 0,
+        lives: prev.maxLives,
+        activePowerUp: null,
+        gameMode: 'coins',
+        botOpponent: opponent,
+        botBattleResult: null,
+        battleTimer: 60,
+        battleTimeLimit: 60,
+        consecutiveMerges: 0,
+        comboBonus: 0,
+        coins: prev.coins - entryFee,
+        coinEntryFee: entryFee,
+        coinGameWon: null,
+        gamesPlayedToday: gamesToday + 1,
+        lastPlayDate: today,
       }
     })
   }, [])
 
   const tickBattleTimer = useCallback(() => {
     setState(prev => {
-      if (prev.gameMode !== 'bot' || prev.botBattleResult || prev.battleTimer <= 0) return prev
+      if (prev.gameMode !== 'bot' && prev.gameMode !== 'coins') return prev
+      if (prev.botBattleResult || prev.battleTimer <= 0) return prev
       const newTimer = prev.battleTimer - 1
       if (newTimer <= 0) {
         // Time's up - compare scores
         const result = prev.score > (prev.botOpponent?.finalScore ?? 0) ? 'win' : 'lose'
         const newModBest = result === 'win' ? Math.max(prev.modBestScore, prev.score) : prev.modBestScore
-        return { ...prev, battleTimer: 0, botBattleResult: result, gameOver: true, modBestScore: newModBest }
+        const coinGameWon = result === 'win' ? true : false
+        return { ...prev, battleTimer: 0, botBattleResult: result, gameOver: true, modBestScore: newModBest, coinGameWon }
       }
       return { ...prev, battleTimer: newTimer }
     })
@@ -685,6 +841,8 @@ export function useGame() {
       battleTimer: 0,
       consecutiveMerges: 0,
       comboBonus: 0,
+      coinEntryFee: 0,
+      coinGameWon: null,
     }))
   }, [])
 
@@ -749,6 +907,14 @@ export function useGame() {
     setState(prev => ({ ...prev, autoClaimCommission: !prev.autoClaimCommission }))
   }, [])
 
+  const updatePlayerName = useCallback((name: string) => {
+    setState(prev => ({ ...prev, playerName: name }))
+  }, [])
+
+  const updatePlayerAvatar = useCallback((avatar: string) => {
+    setState(prev => ({ ...prev, playerAvatar: avatar }))
+  }, [])
+
   return {
     ...state,
     handleMove,
@@ -767,6 +933,7 @@ export function useGame() {
     addPowerUp,
     addUndos,
     startBotBattle,
+    startCoinGame,
     tickBattleTimer,
     goBackToDashboard,
     claimInviteReward,
@@ -774,5 +941,10 @@ export function useGame() {
     addCommission,
     claimCommission,
     toggleAutoClaim,
+    addNotification,
+    markNotificationRead,
+    markAllNotificationsRead,
+    updatePlayerName,
+    updatePlayerAvatar,
   }
 }

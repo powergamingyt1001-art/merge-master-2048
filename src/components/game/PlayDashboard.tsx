@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Swords, Clock, Trophy, Coins, X, ChevronRight, Crown, UserPlus, Megaphone } from 'lucide-react'
+import { Play, Swords, Clock, Trophy, Coins, X, ChevronRight, Crown, UserPlus, Megaphone, User, Bell, Zap, Lock } from 'lucide-react'
 import { SpinWheel, SpinPrize } from './SpinWheel'
 import { LoginStreak } from './LoginStreak'
 import { WelcomeGift } from './WelcomeGift'
@@ -10,7 +10,8 @@ import { Leaderboard } from './Leaderboard'
 import { Tournament } from './Tournament'
 import { InvitePanel } from './InvitePanel'
 import { BannerAd } from './BannerAd'
-import { PowerUp } from '@/hooks/useGame'
+import { ProfilePanel, NotificationsPanel } from './ProfilePanel'
+import { PowerUp, Notification } from '@/hooks/useGame'
 
 interface PlayDashboardProps {
   coins: number
@@ -29,8 +30,15 @@ interface PlayDashboardProps {
   commissionBalance: number
   commissionClaimed: number
   autoClaimCommission: boolean
+  gamesPlayedToday: number
+  maxGamesPerDay: number
+  notifications: Notification[]
+  playerName: string
+  playerAvatar: string
+  playerLevel: number
   onPlayClassic: () => void
   onStartBotBattle: (timeLimit: number) => void
+  onStartCoinGame: (entryFee: number) => void
   onUseSpinTicket: () => void
   onAddSpinTickets: (count: number) => void
   onClaimWelcome: () => void
@@ -40,24 +48,48 @@ interface PlayDashboardProps {
   onAddUndos: (count: number) => void
   onClaimCommission: () => void
   onToggleAutoClaim: () => void
+  onAddNotification: (title: string, message: string, type: Notification['type'], emoji: string) => void
+  onMarkNotificationRead: (id: string) => void
+  onMarkAllNotificationsRead: () => void
+  onUpdatePlayerName: (name: string) => void
+  onUpdatePlayerAvatar: (avatar: string) => void
 }
+
+const COIN_GAME_MODES = [
+  { fee: 50, win: 100, color: '#00E676', label: '₹50' },
+  { fee: 100, win: 200, color: '#00FFFF', label: '₹100' },
+  { fee: 200, win: 400, color: '#EDC22E', label: '₹200' },
+  { fee: 500, win: 1000, color: '#FF7A00', label: '₹500' },
+  { fee: 1000, win: 2000, color: '#F65E3B', label: '₹1000' },
+]
 
 export function PlayDashboard({
   coins, spinTickets, streakDay, streakClaimed, welcomeClaimed,
   hammerCount, magnetCount, blastCount, modBestScore, gamePoints, bestScore,
   inviteCode, invitedUsers, commissionBalance, commissionClaimed, autoClaimCommission,
-  onPlayClassic, onStartBotBattle,
+  gamesPlayedToday, maxGamesPerDay, notifications,
+  playerName, playerAvatar, playerLevel,
+  onPlayClassic, onStartBotBattle, onStartCoinGame,
   onUseSpinTicket, onAddSpinTickets, onClaimWelcome, onClaimStreakDay,
   onAddCoins, onAddPowerUp, onAddUndos, onClaimCommission, onToggleAutoClaim,
+  onAddNotification, onMarkNotificationRead, onMarkAllNotificationsRead,
+  onUpdatePlayerName, onUpdatePlayerAvatar,
 }: PlayDashboardProps) {
   const [showSpin, setShowSpin] = useState(false)
   const [showStreak, setShowStreak] = useState(false)
   const [showWelcome, setShowWelcome] = useState(false)
   const [showLeaderboard, setShowLeaderboard] = useState(false)
   const [showBattleModes, setShowBattleModes] = useState(false)
+  const [showCoinGames, setShowCoinGames] = useState(false)
   const [showTournament, setShowTournament] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
+
+  const unreadNotifications = notifications.filter(n => !n.read).length
+  const gamesLeft = maxGamesPerDay - gamesPlayedToday
+  const isGameLimitReached = gamesLeft <= 0
 
   // Show welcome gift for new users
   useEffect(() => {
@@ -86,11 +118,33 @@ export function PlayDashboard({
       case 'coin': onAddCoins(prize.count); break
       case 'respin': onAddSpinTickets(1); break
     }
-  }, [onAddPowerUp, onAddUndos, onAddSpinTickets, onAddCoins])
+    onAddNotification('Spin Prize!', `You won ${prize.emoji} ${prize.label}!`, 'reward', '🎰')
+  }, [onAddPowerUp, onAddUndos, onAddSpinTickets, onAddCoins, onAddNotification])
 
   const handleAdForSpin = useCallback(() => {
     onAddSpinTickets(1)
-  }, [onAddSpinTickets])
+    onAddNotification('Free Spin!', 'Watched ad for +1 spin ticket', 'reward', '📺')
+  }, [onAddSpinTickets, onAddNotification])
+
+  const handlePlayClassic = useCallback(() => {
+    if (isGameLimitReached) {
+      onAddNotification('Daily Limit', `You've played ${maxGamesPerDay} games today. Come back tomorrow!`, 'system', '⏰')
+      return
+    }
+    onPlayClassic()
+  }, [isGameLimitReached, onPlayClassic, onAddNotification, maxGamesPerDay])
+
+  const handleCoinGame = useCallback((fee: number) => {
+    if (isGameLimitReached) {
+      onAddNotification('Daily Limit', `You've played ${maxGamesPerDay} games today. Come back tomorrow!`, 'system', '⏰')
+      return
+    }
+    if (coins < fee) {
+      onAddNotification('Not Enough Coins', `You need ${fee} coins to play. You have ${coins}.`, 'system', '💰')
+      return
+    }
+    onStartCoinGame(fee)
+  }, [isGameLimitReached, coins, onStartCoinGame, onAddNotification, maxGamesPerDay])
 
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden"
@@ -103,25 +157,58 @@ export function PlayDashboard({
       <div className="relative z-10 flex-1 overflow-y-auto">
         <div className="flex flex-col items-center max-w-sm w-full mx-auto px-4 py-4 gap-3">
 
-          {/* Top bar: Coins + Title */}
+          {/* Top bar: Profile + Title + Bell */}
           <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="w-full flex items-center justify-between">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
+            {/* Profile Icon */}
+            <button onClick={() => setShowProfile(true)}
+              className="flex items-center gap-1.5 px-2 py-1.5 rounded-xl transition-transform hover:scale-105 active:scale-95"
+              style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center"
+                style={{
+                  background: playerLevel >= 4 ? 'linear-gradient(135deg, #EDC22E, #FF7A00)' : playerLevel >= 2 ? 'linear-gradient(135deg, #00E676, #00C853)' : 'rgba(255,255,255,0.1)',
+                  border: '1.5px solid rgba(255,255,255,0.2)',
+                }}>
+                <span className="text-base">{playerAvatar}</span>
+              </div>
+              <div className="text-left">
+                <p className="text-[9px] font-bold leading-tight" style={{ color: '#FFFFFF' }}>{playerName}</p>
+                <p className="text-[7px] leading-tight" style={{ color: 'rgba(255,255,255,0.4)' }}>Lv.{playerLevel}</p>
+              </div>
+            </button>
+
+            {/* Title */}
+            <div className="text-center">
+              <h1 className="text-lg sm:text-xl font-extrabold tracking-tight">
                 <span style={{ color: '#FFD700', textShadow: '0 0 20px rgba(255,215,0,0.5)' }}>MERGE</span>{' '}
                 <span style={{ color: '#FFFFFF' }}>MASTER</span>
               </h1>
               <div className="px-2 py-0.5 rounded-full inline-block" style={{ backgroundColor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <span className="text-[8px] font-bold tracking-widest" style={{ color: '#EDC22E' }}>2048 CHALLENGE</span>
+                <span className="text-[7px] font-bold tracking-widest" style={{ color: '#EDC22E' }}>2048 CHALLENGE</span>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl"
-              style={{ backgroundColor: 'rgba(237,194,46,0.12)', border: '1px solid rgba(237,194,46,0.25)' }}>
-              <Coins className="w-4 h-4" style={{ color: '#EDC22E' }} />
-              <span className="text-sm font-extrabold" style={{ color: '#EDC22E' }}>{coins}</span>
+
+            {/* Bell + Coins */}
+            <div className="flex items-center gap-1.5">
+              <button onClick={() => setShowNotifications(true)}
+                className="relative w-8 h-8 rounded-xl flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <Bell className="w-4 h-4" style={{ color: unreadNotifications > 0 ? '#EDC22E' : 'rgba(255,255,255,0.4)' }} />
+                {unreadNotifications > 0 && (
+                  <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold"
+                    style={{ backgroundColor: '#F65E3B', color: '#FFFFFF' }}>
+                    {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                  </div>
+                )}
+              </button>
+              <div className="flex items-center gap-1 px-2 py-1.5 rounded-xl"
+                style={{ backgroundColor: 'rgba(237,194,46,0.12)', border: '1px solid rgba(237,194,46,0.25)' }}>
+                <Coins className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
+                <span className="text-xs font-extrabold" style={{ color: '#EDC22E' }}>{coins}</span>
+              </div>
             </div>
           </motion.div>
 
-          {/* Inventory bar */}
+          {/* Inventory bar + Games Left */}
           <motion.div initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }}
             className="w-full flex items-center justify-between px-2 py-1.5 rounded-xl"
             style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -130,20 +217,36 @@ export function PlayDashboard({
               <InventoryItem emoji="🧲" count={magnetCount} color="#00E676" />
               <InventoryItem emoji="💣" count={blastCount} color="#FF7A00" />
             </div>
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg" style={{ backgroundColor: 'rgba(0,230,118,0.08)' }}>
-              <span className="text-sm">🎫</span>
-              <span className="text-[10px] font-bold" style={{ color: '#00E676' }}>{spinTickets} Spins</span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg" style={{ backgroundColor: 'rgba(0,230,118,0.08)' }}>
+                <span className="text-xs">🎫</span>
+                <span className="text-[9px] font-bold" style={{ color: '#00E676' }}>{spinTickets}</span>
+              </div>
+              <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg" style={{ backgroundColor: isGameLimitReached ? 'rgba(246,94,59,0.12)' : 'rgba(255,255,255,0.06)' }}>
+                <span className="text-xs">{isGameLimitReached ? '🚫' : '🎮'}</span>
+                <span className="text-[9px] font-bold" style={{ color: isGameLimitReached ? '#F65E3B' : 'rgba(255,255,255,0.5)' }}>{gamesLeft}</span>
+              </div>
             </div>
           </motion.div>
 
           {/* Central PLAY Button */}
           <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}>
-            <button onClick={onPlayClassic}
+            <button onClick={handlePlayClassic}
               className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full flex flex-col items-center justify-center gap-0.5 transition-transform hover:scale-105 active:scale-95"
-              style={{ background: 'linear-gradient(135deg, #EDC22E 0%, #FF7A00 100%)', boxShadow: '0 6px 30px rgba(237,194,46,0.5), 0 0 60px rgba(237,194,46,0.2), inset 0 -4px 12px rgba(0,0,0,0.2)' }}>
-              <Play className="w-10 h-10 sm:w-12 sm:h-12" style={{ color: '#FFFFFF', marginLeft: 4 }} fill="white" />
-              <span className="text-base sm:text-lg font-extrabold" style={{ color: '#FFFFFF', textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>PLAY</span>
-              <span className="text-[7px] font-semibold tracking-wider" style={{ color: 'rgba(255,255,255,0.8)' }}>CLASSIC</span>
+              style={{ background: isGameLimitReached ? 'linear-gradient(135deg, #555, #333)' : 'linear-gradient(135deg, #EDC22E 0%, #FF7A00 100%)', boxShadow: isGameLimitReached ? 'none' : '0 6px 30px rgba(237,194,46,0.5), 0 0 60px rgba(237,194,46,0.2), inset 0 -4px 12px rgba(0,0,0,0.2)' }}>
+              {isGameLimitReached ? (
+                <>
+                  <Lock className="w-8 h-8" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                  <span className="text-sm font-extrabold" style={{ color: 'rgba(255,255,255,0.5)' }}>LIMIT</span>
+                  <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Tomorrow</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-10 h-10 sm:w-12 sm:h-12" style={{ color: '#FFFFFF', marginLeft: 4 }} fill="white" />
+                  <span className="text-base sm:text-lg font-extrabold" style={{ color: '#FFFFFF', textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>PLAY</span>
+                  <span className="text-[7px] font-semibold tracking-wider" style={{ color: 'rgba(255,255,255,0.8)' }}>CLASSIC</span>
+                </>
+              )}
             </button>
           </motion.div>
 
@@ -170,16 +273,16 @@ export function PlayDashboard({
                       { time: '5 min', seconds: 300, icon: <Clock className="w-3 h-3" /> },
                       { time: '10 min', seconds: 600, icon: <Trophy className="w-3 h-3" /> },
                     ].map((mode, i) => (
-                      <button key={i} onClick={() => isOnline && onStartBotBattle(mode.seconds)}
+                      <button key={i} onClick={() => isOnline && !isGameLimitReached && onStartBotBattle(mode.seconds)}
                         className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform hover:scale-105 active:scale-95"
-                        style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', opacity: isOnline ? 1 : 0.4 }}>
+                        style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', opacity: isOnline && !isGameLimitReached ? 1 : 0.4 }}>
                         <div style={{ color: '#F65E3B' }}>{mode.icon}</div>
                         <span className="text-[8px] font-semibold" style={{ color: 'rgba(255,255,255,0.7)' }}>{mode.time}</span>
                       </button>
                     ))}
                   </div>
                   <p className="text-[8px] text-center" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                    {isOnline ? '1v1 Battle — Highest score wins! 50/50 chance 🏆' : '⚠️ Internet required for Battle Mode'}
+                    {isGameLimitReached ? '⚠️ Daily game limit reached' : isOnline ? '1v1 Battle — Highest score wins! 50/50 chance 🏆' : '⚠️ Internet required for Battle Mode'}
                   </p>
                 </motion.div>
               )}
@@ -191,7 +294,70 @@ export function PlayDashboard({
             </div>
           </motion.div>
 
-          {/* Quick Actions: Streak + Spin + Leaderboard */}
+          {/* Coin Games */}
+          <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.35 }} className="w-full">
+            <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(237,194,46,0.04)', border: '1px solid rgba(237,194,46,0.08)' }}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <Coins className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
+                  <span className="text-xs font-bold" style={{ color: '#FFFFFF' }}>Coin Games</span>
+                  <span className="text-[7px] px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(237,194,46,0.15)', color: '#EDC22E' }}>2x WIN</span>
+                </div>
+                <button onClick={() => setShowCoinGames(!showCoinGames)}
+                  className="text-[8px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
+                  style={{ backgroundColor: 'rgba(237,194,46,0.15)', color: '#EDC22E' }}>
+                  {showCoinGames ? 'HIDE' : 'SHOW'} <ChevronRight className="w-2.5 h-2.5" style={{ transform: showCoinGames ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
+                </button>
+              </div>
+              {showCoinGames && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} transition={{ duration: 0.3 }}>
+                  <div className="space-y-1.5">
+                    {COIN_GAME_MODES.map((mode) => {
+                      const canPlay = coins >= mode.fee && isOnline && !isGameLimitReached
+                      return (
+                        <button key={mode.fee} onClick={() => handleCoinGame(mode.fee)}
+                          className="w-full flex items-center justify-between p-2.5 rounded-xl transition-transform hover:scale-[1.01] active:scale-95"
+                          style={{
+                            backgroundColor: canPlay ? `${mode.color}08` : 'rgba(255,255,255,0.02)',
+                            border: `1px solid ${canPlay ? `${mode.color}20` : 'rgba(255,255,255,0.04)'}`,
+                            opacity: canPlay ? 1 : 0.4,
+                          }}>
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+                              style={{ backgroundColor: `${mode.color}15`, border: `1px solid ${mode.color}25` }}>
+                              <span className="text-xs font-extrabold" style={{ color: mode.color }}>{mode.fee}</span>
+                            </div>
+                            <div className="text-left">
+                              <p className="text-[10px] font-bold" style={{ color: canPlay ? mode.color : 'rgba(255,255,255,0.4)' }}>
+                                Entry: {mode.fee} coins
+                              </p>
+                              <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                Win: {mode.win} coins
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Zap className="w-3 h-3" style={{ color: mode.color }} />
+                            <span className="text-[9px] font-bold" style={{ color: mode.color }}>PLAY</span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[8px] text-center mt-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    {isGameLimitReached ? '⚠️ Daily game limit reached' : isOnline ? '1v1 • 1 min • Win 2x your entry! 🪙' : '⚠️ Internet required for Coin Games'}
+                  </p>
+                </motion.div>
+              )}
+              {!showCoinGames && (
+                <p className="text-[8px] text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  Play with coins • Win 2x! 🪙
+                </p>
+              )}
+            </div>
+          </motion.div>
+
+          {/* Quick Actions: Streak + Spin + Leaderboard + Invite */}
           <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }}
             className="w-full grid grid-cols-4 gap-2">
             <button onClick={() => setShowStreak(true)}
@@ -285,7 +451,7 @@ export function PlayDashboard({
         streakClaimed={streakClaimed} onClaim={onClaimStreakDay} />
       <WelcomeGift isOpen={showWelcome} onClose={() => setShowWelcome(false)} onClaim={() => { onClaimWelcome(); setShowWelcome(false) }} />
       <Leaderboard isOpen={showLeaderboard} onClose={() => setShowLeaderboard(false)}
-        gamePoints={gamePoints} bestScore={bestScore} />
+        gamePoints={gamePoints} bestScore={bestScore} coins={coins} />
       <Tournament isOpen={showTournament} onClose={() => setShowTournament(false)}
         gamePoints={gamePoints} coins={coins} />
       <InvitePanel isOpen={showInvite} onClose={() => setShowInvite(false)}
@@ -293,6 +459,13 @@ export function PlayDashboard({
         commissionBalance={commissionBalance} commissionClaimed={commissionClaimed}
         autoClaimCommission={autoClaimCommission} onClaimCommission={onClaimCommission}
         onToggleAutoClaim={onToggleAutoClaim} />
+      <ProfilePanel isOpen={showProfile} onClose={() => setShowProfile(false)}
+        playerName={playerName} playerAvatar={playerAvatar} playerLevel={playerLevel}
+        gamePoints={gamePoints} bestScore={bestScore} modBestScore={modBestScore}
+        coins={coins} gamesPlayedToday={gamesPlayedToday} maxGamesPerDay={maxGamesPerDay}
+        invitedUsers={invitedUsers} onUpdateName={onUpdatePlayerName} onUpdateAvatar={onUpdatePlayerAvatar} />
+      <NotificationsPanel isOpen={showNotifications} onClose={() => setShowNotifications(false)}
+        notifications={notifications} onMarkRead={onMarkNotificationRead} onMarkAllRead={onMarkAllNotificationsRead} />
     </div>
   )
 }

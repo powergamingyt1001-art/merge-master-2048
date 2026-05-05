@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Heart, Gift } from 'lucide-react'
+import { ADMOB_CONFIG } from '@/lib/admob'
 
 interface RewardedAdProps {
   isOpen: boolean
@@ -11,6 +12,9 @@ interface RewardedAdProps {
   isOnline: boolean
 }
 
+// Only 1 reward per ad watch
+let lastRewardTime = 0
+
 export function RewardedAd({ isOpen, onClose, onReward, isOnline }: RewardedAdProps) {
   const [phase, setPhase] = useState<'ready' | 'playing' | 'complete'>('ready')
   const [countdown, setCountdown] = useState(5)
@@ -18,13 +22,11 @@ export function RewardedAd({ isOpen, onClose, onReward, isOnline }: RewardedAdPr
   const countdownRef = useRef<NodeJS.Timeout | null>(null)
   const dismissRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Reset when opened - use key-based remount instead of setState in effect
-  // Countdown logic: use refs to avoid setState in effect
+  // Reset when opened
   useEffect(() => {
     if (!isOpen) return
     if (phase !== 'playing') return
     if (countdown <= 0) {
-      // Use microtask to avoid synchronous setState
       const id = setTimeout(() => setPhase('complete'), 0)
       return () => clearTimeout(id)
     }
@@ -44,7 +46,14 @@ export function RewardedAd({ isOpen, onClose, onReward, isOnline }: RewardedAdPr
     setPhase('playing')
   }, [isOnline, onReward, onClose])
 
-  const handleClaim = useCallback(() => { onReward(); onClose() }, [onReward, onClose])
+  const handleClaim = useCallback(() => {
+    // Only 1 reward per watch
+    const now = Date.now()
+    if (now - lastRewardTime < 1000) return
+    lastRewardTime = now
+    onReward()
+    onClose()
+  }, [onReward, onClose])
 
   return (
     <AnimatePresence>
@@ -98,6 +107,9 @@ export function RewardedAd({ isOpen, onClose, onReward, isOnline }: RewardedAdPr
                     style={{ background: 'linear-gradient(135deg, #F65E3B, #F67C5F)', color: '#FFFFFF', boxShadow: '0 4px 20px rgba(246,94,59,0.4)' }}>
                     📺 Watch Ad
                   </button>
+                  <p className="text-[8px] mt-2" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                    Ad ID: {ADMOB_CONFIG.rewarded.id}
+                  </p>
                 </div>
               ) : phase === 'playing' ? (
                 <div className="text-center py-8">

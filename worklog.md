@@ -23,3 +23,32 @@ Stage Summary:
 - Leaderboard with Coins/Score tabs and simulated players
 - Bigger game tiles for better mobile experience
 - No ad-based earning inside game
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Add profile icon, bell notifications, coin game modes, 3-section leaderboard, daily game limit, AdMob config
+
+Work Log:
+- Updated `useGame.ts` - Added: GameMode 'coins', Notification type, daily game limit (20/day), coinEntryFee, coinGameWon, playerName, playerAvatar, playerLevel, gamesPlayedToday/lastPlayDate/maxGamesPerDay, addNotification, markNotificationRead, markAllNotificationsRead, updatePlayerName, updatePlayerAvatar, startCoinGame, calculateLevel function, PLAYER_AVATARS array
+- Created `ProfilePanel.tsx` - Player avatar with level badge, name editing, avatar picker (10 emojis), level progress bar (5 levels: Beginner→Legend), stats grid (Best Score, Mod Best, Game Points, Coins, Games Today, Invited), points info section, NotificationsPanel component with read/unread, mark all read
+- Updated `PlayDashboard.tsx` - Profile icon (top-left with avatar+name+level), Bell icon (top-right with unread count badge), Coins display, Coin Games section (50/100/200/500/1000 entry fees with 2x win), daily game limit indicator, all new modal integrations
+- Redesigned `Leaderboard.tsx` - 3 tabs: Modes Best Score (podium with medals for 1st/2nd/3rd, list below), Coins Rank (most coins on top, podium + list), Offline Rank (progressive beating system - 10 ranks from Rookie Raj to Godlike Guru, beat target score to advance, shows next target, progress bar)
+- Updated `Tournament.tsx` - Podium with medals (Crown 1st, Medal 2nd, Star 3rd) at top, scrollable list below, added daily limit info
+- Updated `GameBoard.tsx` - Coin game mode support, battle timer works for both bot and coin games, coin game result overlay shows win/loss amount, no bot name/score during gameplay (only in result), combo indicator works in all modes
+- Updated `page.tsx` - All new props passed (notifications, profile data, coin game handler, notification handlers, profile update handlers)
+- Created `src/lib/admob.ts` - AdMob configuration with all IDs (Banner, Reward, Interstitial, AppOpen)
+- Updated `BannerAd.tsx` - Added AdMob banner ID reference, non-clickable, offline hidden
+- Updated `RewardedAd.tsx` - Added AdMob rewarded ID, only 1 reward per ad watch, offline free life
+- Updated `capacitor.config.ts` - Added AdMob plugin config with all ad unit IDs
+- Installed @capacitor/core, @capacitor/cli, @capacitor/android, @capacitor-community/admob
+- All lint checks pass, dev server compiles successfully
+
+Stage Summary:
+- Profile icon + Bell icon notifications fully implemented
+- Coin game modes: 50/100/200/500/1000 entry, 2x win, 1v1 battle
+- 3-section leaderboard: Modes Score, Coins Rank, Offline Rank (progressive)
+- Daily game limit: 20 games/day
+- Player level system: 5 levels (Beginner→Legend) based on game points
+- AdMob configured with all specific IDs
+- Tournament has proper podium with medals

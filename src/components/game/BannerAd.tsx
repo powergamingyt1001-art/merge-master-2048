@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion'
 import { Megaphone } from 'lucide-react'
+import { ADMOB_CONFIG } from '@/lib/admob'
 
 interface BannerAdProps {
   position: 'top' | 'bottom'
@@ -39,7 +40,7 @@ export function BannerAd({ position, isOnline }: BannerAdProps) {
               Merge Master 2048 — Download the App!
             </p>
             <p className="text-[7px] truncate" style={{ color: 'rgba(255,255,255,0.25)' }}>
-              Play anytime, anywhere. Free on iOS &amp; Android
+              Play anytime, anywhere. Free on Android
             </p>
           </div>
           <div
@@ -49,6 +50,8 @@ export function BannerAd({ position, isOnline }: BannerAdProps) {
             AD
           </div>
         </div>
+        {/* Hidden data attribute for AdMob integration */}
+        <span className="hidden" data-ad-unit={ADMOB_CONFIG.banner.id} data-ad-position={position} />
       </motion.div>
     </AnimatePresence>
   )
