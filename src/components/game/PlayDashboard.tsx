@@ -36,6 +36,8 @@ interface PlayDashboardProps {
   playerName: string
   playerAvatar: string
   playerLevel: number
+  totalBattlesPlayed: number
+  totalBattlesWon: number
   onPlayClassic: () => void
   onStartBotBattle: (timeLimit: number) => void
   onStartCoinGame: (entryFee: number) => void
@@ -68,7 +70,7 @@ export function PlayDashboard({
   hammerCount, magnetCount, blastCount, modBestScore, gamePoints, bestScore,
   inviteCode, invitedUsers, commissionBalance, commissionClaimed, autoClaimCommission,
   gamesPlayedToday, maxGamesPerDay, notifications,
-  playerName, playerAvatar, playerLevel,
+  playerName, playerAvatar, playerLevel, totalBattlesPlayed, totalBattlesWon,
   onPlayClassic, onStartBotBattle, onStartCoinGame,
   onUseSpinTicket, onAddSpinTickets, onClaimWelcome, onClaimStreakDay,
   onAddCoins, onAddPowerUp, onAddUndos, onClaimCommission, onToggleAutoClaim,
@@ -463,7 +465,8 @@ export function PlayDashboard({
         playerName={playerName} playerAvatar={playerAvatar} playerLevel={playerLevel}
         gamePoints={gamePoints} bestScore={bestScore} modBestScore={modBestScore}
         coins={coins} gamesPlayedToday={gamesPlayedToday} maxGamesPerDay={maxGamesPerDay}
-        invitedUsers={invitedUsers} onUpdateName={onUpdatePlayerName} onUpdateAvatar={onUpdatePlayerAvatar} />
+        invitedUsers={invitedUsers} onUpdateName={onUpdatePlayerName} onUpdateAvatar={onUpdatePlayerAvatar}
+        totalBattlesPlayed={totalBattlesPlayed} totalBattlesWon={totalBattlesWon} />
       <NotificationsPanel isOpen={showNotifications} onClose={() => setShowNotifications(false)}
         notifications={notifications} onMarkRead={onMarkNotificationRead} onMarkAllRead={onMarkAllNotificationsRead} />
     </div>

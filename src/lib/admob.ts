@@ -11,8 +11,36 @@ export const ADMOB_CONFIG = {
   },
   interstitial: {
     id: 'ca-app-pub-4486474550864010/3118624132',
+    // Show between game transitions
   },
   appOpen: {
     id: 'ca-app-pub-4486474550864010/9199757262',
+    // Show when app opens
   },
+}
+
+// Track last ad show times to prevent showing too frequently
+let lastInterstitialTime = 0
+let lastAppOpenTime = 0
+
+export function canShowInterstitial(): boolean {
+  const now = Date.now()
+  // Minimum 60 seconds between interstitial ads
+  if (now - lastInterstitialTime < 60000) return false
+  return true
+}
+
+export function canShowAppOpen(): boolean {
+  const now = Date.now()
+  // Minimum 30 seconds between app open ads
+  if (now - lastAppOpenTime < 30000) return false
+  return true
+}
+
+export function markInterstitialShown() {
+  lastInterstitialTime = Date.now()
+}
+
+export function markAppOpenShown() {
+  lastAppOpenTime = Date.now()
 }

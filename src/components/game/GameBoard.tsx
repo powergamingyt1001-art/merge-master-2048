@@ -30,7 +30,8 @@ function useResponsiveSize() {
     function calc() {
       const vw = window.innerWidth
       const vh = window.innerHeight
-      const maxBoard = Math.min(vw - 24, vh - 340, 420)
+      // Leave room for header (50), timer (40), lives row (40), power-ups (50), footer (40)
+      const maxBoard = Math.min(vw - 24, vh - 300, 420)
       const gap = maxBoard > 300 ? 10 : 8
       const cellSize = Math.floor((maxBoard - gap * 5) / 4)
       setSizes({ cellSize, gap })
@@ -123,11 +124,18 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
     if (dir) { e.preventDefault(); onMove(dir) }
   }, [onMove])
 
+  // Touch handlers with strict prevention of page scroll
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    e.preventDefault()
     touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
   }, [])
 
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    e.preventDefault()
+  }, [])
+
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    e.preventDefault()
     if (!touchStart.current) return
     const dx = e.changedTouches[0].clientX - touchStart.current.x
     const dy = e.changedTouches[0].clientY - touchStart.current.y
@@ -153,12 +161,12 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
   }, [isCoinGame, botBattleResult, coinEntryFee, addCoins, addNotification, newGame, onBackToDashboard])
 
   return (
-    <div className="flex flex-col items-center gap-2 sm:gap-3 select-none outline-none min-h-screen"
-      style={{ background: 'linear-gradient(180deg, #1a0533 0%, #0d1b3e 100%)' }}
+    <div className="fixed inset-0 flex flex-col items-center justify-center select-none outline-none"
+      style={{ background: 'linear-gradient(180deg, #1a0533 0%, #0d1b3e 100%)', overflow: 'hidden' }}
       onKeyDown={handleKeyDown} tabIndex={0} role="application" aria-label="Merge Master 2048 Challenge">
 
-      {/* Header */}
-      <div className="flex items-center justify-between w-full px-3 pt-2" style={{ maxWidth: boardSize + 20 }}>
+      {/* Header - Compact */}
+      <div className="flex items-center justify-between w-full px-3 py-1.5 flex-shrink-0" style={{ maxWidth: boardSize + 20 }}>
         <button onClick={handleBack} className="flex items-center gap-1 p-1.5 rounded-lg"
           style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
           <ArrowLeftCircle className="w-5 h-5" style={{ color: 'rgba(255,255,255,0.6)' }} />
@@ -191,7 +199,7 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
       {/* Battle Timer Bar - only show timer, no bot name/score during play */}
       {isBattleMode && !botBattleResult && (
         <motion.div initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-          className="flex items-center justify-between w-full px-3 py-2 rounded-xl"
+          className="flex items-center justify-between w-full px-3 py-1.5 rounded-xl flex-shrink-0"
           style={{ maxWidth: boardSize, backgroundColor: isCoinGame ? 'rgba(237,194,46,0.1)' : 'rgba(246,94,59,0.1)', border: `1px solid ${isCoinGame ? 'rgba(237,194,46,0.2)' : 'rgba(246,94,59,0.2)'}` }}>
           <div className="flex items-center gap-2">
             {isCoinGame ? <Coins className="w-4 h-4" style={{ color: '#EDC22E' }} /> : <Swords className="w-4 h-4" style={{ color: '#F65E3B' }} />}
@@ -214,7 +222,7 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
       <AnimatePresence>
         {(consecutiveMerges >= 2 || comboFlashActive) && (
           <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
-            className="px-3 py-1 rounded-full text-[9px] font-bold flex items-center gap-1"
+            className="px-3 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1 flex-shrink-0"
             style={{
               backgroundColor: comboFlashActive ? 'rgba(237,194,46,0.25)' : 'rgba(255,122,0,0.15)',
               color: comboFlashActive ? '#EDC22E' : '#FF7A00',
@@ -226,44 +234,19 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
         )}
       </AnimatePresence>
 
-      {/* Lives + Power-ups row */}
-      <div className="flex items-center w-full px-3" style={{ maxWidth: boardSize }}>
-        <div className="flex items-center gap-0.5">
-          {Array.from({ length: maxLives }).map((_, i) => (
-            <Heart key={i} className="w-4 h-4 sm:w-5 sm:h-5"
-              style={{ color: i < lives ? '#F65E3B' : 'rgba(255,255,255,0.12)', fill: i < lives ? '#F65E3B' : 'none', filter: i < lives ? 'drop-shadow(0 0 3px rgba(246,94,59,0.5))' : 'none' }} />
-          ))}
-        </div>
-        <div className="w-2" />
-        <div className="flex items-center gap-1.5">
-          <PowerUpBtn icon={<Hammer className="w-3.5 h-3.5" />} count={hammerCount} active={activePowerUp === 'hammer'} onClick={() => handlePowerUp('hammer')} color="#F59563" />
-          <PowerUpBtn icon={<Magnet className="w-3.5 h-3.5" />} count={magnetCount} active={activePowerUp === 'magnet'} onClick={() => handlePowerUp('magnet')} color="#00E676" />
-          <PowerUpBtn icon={<Bomb className="w-3.5 h-3.5" />} count={blastCount} active={false} onClick={() => handlePowerUp('blast')} color="#FF7A00" />
-          <PowerUpBtn icon={<Undo2 className="w-3.5 h-3.5" />} count={undoTotal - undoCount} active={false} onClick={undo} color="#8f7a66" disabled={!canUndo || undoCount >= undoTotal} />
-        </div>
+      {/* Lives row */}
+      <div className="flex items-center gap-0.5 flex-shrink-0 py-1">
+        {Array.from({ length: maxLives }).map((_, i) => (
+          <Heart key={i} className="w-4 h-4 sm:w-5 sm:h-5"
+            style={{ color: i < lives ? '#F65E3B' : 'rgba(255,255,255,0.12)', fill: i < lives ? '#F65E3B' : 'none', filter: i < lives ? 'drop-shadow(0 0 3px rgba(246,94,59,0.5))' : 'none' }} />
+        ))}
       </div>
 
-      {/* Active Power-up indicator */}
-      <AnimatePresence>
-        {activePowerUp && (
-          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-            className="px-3 py-1 rounded-full text-[9px] font-bold flex items-center gap-1"
-            style={{
-              backgroundColor: activePowerUp === 'hammer' ? 'rgba(245,149,99,0.15)' : 'rgba(0,230,118,0.15)',
-              color: activePowerUp === 'hammer' ? '#F59563' : '#00E676',
-              border: `1px solid ${activePowerUp === 'hammer' ? 'rgba(245,149,99,0.25)' : 'rgba(0,230,118,0.25)'}`,
-            }}>
-            <Zap className="w-2.5 h-2.5" />
-            {activePowerUp === 'hammer' ? 'Tap tile to destroy' : 'Tap tile to merge'}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Game Board */}
-      <div className="relative rounded-xl overflow-hidden" style={{
-        width: boardSize, height: boardSize, backgroundColor: '#2d1b4e', touchAction: 'none',
+      {/* Game Board - CENTERED */}
+      <div className="relative rounded-xl overflow-hidden game-touch-area flex-shrink-0" style={{
+        width: boardSize, height: boardSize, backgroundColor: '#2d1b4e',
         boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 40px rgba(237,194,46,0.08)', border: '1px solid rgba(255,255,255,0.06)',
-      }} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      }} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
         {Array.from({ length: 16 }).map((_, i) => {
           const row = Math.floor(i / 4), col = i % 4
           return <div key={`bg-${i}`} className="absolute rounded-lg" style={{
@@ -324,7 +307,6 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
               <p className="text-2xl font-extrabold mb-2" style={{ color: '#FFFFFF' }}>
                 {botBattleResult === 'win' ? 'You Won!' : 'You Lost!'}
               </p>
-              {/* Show both scores in result */}
               <div className="flex items-center gap-6 mb-4">
                 <div className="text-center">
                   <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.6)' }}>Your Score</p>
@@ -363,8 +345,32 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
         </AnimatePresence>
       </div>
 
+      {/* Power-ups row - BELOW the board */}
+      <div className="flex items-center gap-2 py-1.5 flex-shrink-0">
+        <PowerUpBtn icon={<Hammer className="w-3.5 h-3.5" />} count={hammerCount} active={activePowerUp === 'hammer'} onClick={() => handlePowerUp('hammer')} color="#F59563" />
+        <PowerUpBtn icon={<Magnet className="w-3.5 h-3.5" />} count={magnetCount} active={activePowerUp === 'magnet'} onClick={() => handlePowerUp('magnet')} color="#00E676" />
+        <PowerUpBtn icon={<Bomb className="w-3.5 h-3.5" />} count={blastCount} active={false} onClick={() => handlePowerUp('blast')} color="#FF7A00" />
+        <PowerUpBtn icon={<Undo2 className="w-3.5 h-3.5" />} count={undoTotal - undoCount} active={false} onClick={undo} color="#8f7a66" disabled={!canUndo || undoCount >= undoTotal} />
+      </div>
+
+      {/* Active Power-up indicator */}
+      <AnimatePresence>
+        {activePowerUp && (
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+            className="px-3 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1 flex-shrink-0"
+            style={{
+              backgroundColor: activePowerUp === 'hammer' ? 'rgba(245,149,99,0.15)' : 'rgba(0,230,118,0.15)',
+              color: activePowerUp === 'hammer' ? '#F59563' : '#00E676',
+              border: `1px solid ${activePowerUp === 'hammer' ? 'rgba(245,149,99,0.25)' : 'rgba(0,230,118,0.25)'}`,
+            }}>
+            <Zap className="w-2.5 h-2.5" />
+            {activePowerUp === 'hammer' ? 'Tap tile to destroy' : 'Tap tile to merge'}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Mobile direction buttons */}
-      <div className="flex gap-1 sm:hidden">
+      <div className="flex gap-1 sm:hidden flex-shrink-0">
         {(['up', 'down', 'left', 'right'] as Direction[]).map(dir => (
           <button key={dir} onClick={() => onMove(dir)} className="w-10 h-10 rounded-lg flex items-center justify-center"
             style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>
@@ -372,10 +378,11 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
           </button>
         ))}
       </div>
-      <p className="text-[8px] sm:text-[9px]" style={{ color: 'rgba(255,255,255,0.25)' }}>Arrow keys / WASD / Swipe to play</p>
 
-      {/* Banner Ad - bottom, non-clickable, only when online */}
-      <BannerAd position="bottom" isOnline={isOnline} />
+      {/* Banner Ad - bottom */}
+      <div className="mt-auto flex-shrink-0">
+        <BannerAd position="bottom" isOnline={isOnline} />
+      </div>
 
       {/* Game Over Modal - only for classic mode */}
       <AnimatePresence>

@@ -95,6 +95,9 @@ export interface GameState {
   playerName: string
   playerAvatar: string
   playerLevel: number
+  // Win/loss tracking for percentage
+  totalBattlesPlayed: number
+  totalBattlesWon: number
 }
 
 const BOT_NAMES = [
@@ -320,6 +323,8 @@ export function useGame() {
       playerName: 'Player',
       playerAvatar: '😎',
       playerLevel: 1,
+      totalBattlesPlayed: 0,
+      totalBattlesWon: 0,
     }
 
     if (!saved) {
@@ -391,6 +396,8 @@ export function useGame() {
       playerName: saved.playerName || 'Player',
       playerAvatar: saved.playerAvatar || '😎',
       playerLevel: calculateLevel(gamePoints),
+      totalBattlesPlayed: saved.totalBattlesPlayed || 0,
+      totalBattlesWon: saved.totalBattlesWon || 0,
     }
   })
 
@@ -424,9 +431,11 @@ export function useGame() {
       playerName: state.playerName,
       playerAvatar: state.playerAvatar,
       playerLevel: state.playerLevel,
+      totalBattlesPlayed: state.totalBattlesPlayed,
+      totalBattlesWon: state.totalBattlesWon,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.totalBattlesPlayed, state.totalBattlesWon])
 
   // Clear flash
   useEffect(() => {
@@ -509,11 +518,15 @@ export function useGame() {
       let botBattleResult = prev.botBattleResult
       let modBestScore = prev.modBestScore
       let coinGameWon = prev.coinGameWon
+      let totalBattlesPlayed = prev.totalBattlesPlayed
+      let totalBattlesWon = prev.totalBattlesWon
       if (prev.gameMode === 'bot' && prev.botOpponent && !botBattleResult) {
         if (isGameOver) {
           botBattleResult = newScore > prev.botOpponent.finalScore ? 'win' : 'lose'
+          totalBattlesPlayed++
           if (botBattleResult === 'win') {
             modBestScore = Math.max(modBestScore, newScore)
+            totalBattlesWon++
           }
         }
       }
@@ -523,8 +536,10 @@ export function useGame() {
         const opponent = generateBotScore(prev.modBestScore)
         coinGameWon = newScore > opponent.finalScore ? true : false
         botBattleResult = coinGameWon ? 'win' : 'lose'
+        totalBattlesPlayed++
         if (coinGameWon) {
           modBestScore = Math.max(modBestScore, newScore)
+          totalBattlesWon++
         }
       }
 
@@ -548,6 +563,8 @@ export function useGame() {
         gamePoints: newGamePoints,
         coinGameWon,
         playerLevel: calculateLevel(newGamePoints),
+        totalBattlesPlayed,
+        totalBattlesWon,
       }
     })
   }, [])
@@ -703,8 +720,8 @@ export function useGame() {
         gameMode: 'coins',
         botOpponent: opponent,
         botBattleResult: null,
-        battleTimer: 60,
-        battleTimeLimit: 60,
+        battleTimer: 90,
+        battleTimeLimit: 90, // Coin games: 1:30 min = 90 seconds
         consecutiveMerges: 0,
         comboBonus: 0,
         coins: prev.coins - entryFee,
@@ -726,7 +743,7 @@ export function useGame() {
         const result = prev.score > (prev.botOpponent?.finalScore ?? 0) ? 'win' : 'lose'
         const newModBest = result === 'win' ? Math.max(prev.modBestScore, prev.score) : prev.modBestScore
         const coinGameWon = result === 'win' ? true : false
-        return { ...prev, battleTimer: 0, botBattleResult: result, gameOver: true, modBestScore: newModBest, coinGameWon }
+        return { ...prev, battleTimer: 0, botBattleResult: result, gameOver: true, modBestScore: newModBest, coinGameWon, totalBattlesPlayed: prev.totalBattlesPlayed + 1, totalBattlesWon: result === 'win' ? prev.totalBattlesWon + 1 : prev.totalBattlesWon }
       }
       return { ...prev, battleTimer: newTimer }
     })

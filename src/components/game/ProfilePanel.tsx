@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users } from 'lucide-react'
+import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users, TrendingUp, Percent } from 'lucide-react'
 import { Notification, PLAYER_AVATARS } from '@/hooks/useGame'
 
 interface ProfilePanelProps {
@@ -20,6 +20,8 @@ interface ProfilePanelProps {
   invitedUsers: { id: string; name: string }[]
   onUpdateName: (name: string) => void
   onUpdateAvatar: (avatar: string) => void
+  totalBattlesPlayed: number
+  totalBattlesWon: number
 }
 
 const LEVEL_INFO = [
@@ -49,6 +51,7 @@ export function ProfilePanel({
   gamePoints, bestScore, modBestScore, coins,
   gamesPlayedToday, maxGamesPerDay, invitedUsers,
   onUpdateName, onUpdateAvatar,
+  totalBattlesPlayed, totalBattlesWon,
 }: ProfilePanelProps) {
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState(playerName)
@@ -60,6 +63,10 @@ export function ProfilePanel({
   const progressPct = nextLevelPts > currentLevelPts
     ? Math.min(100, ((gamePoints - currentLevelPts) / (nextLevelPts - currentLevelPts)) * 100)
     : 100
+
+  const winPercentage = totalBattlesPlayed > 0
+    ? Math.round((totalBattlesWon / totalBattlesPlayed) * 100)
+    : 0
 
   const handleSaveName = () => {
     if (nameInput.trim()) {
@@ -86,7 +93,7 @@ export function ProfilePanel({
             style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 pb-2">
+            <div className="flex items-center justify-between p-4 pb-2 sticky top-0 z-10" style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)' }}>
               <h3 className="text-lg font-bold" style={{ color: '#FFFFFF' }}>👤 Profile</h3>
               <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
                 <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
@@ -184,6 +191,34 @@ export function ProfilePanel({
                 {playerLevel >= 5 && (
                   <p className="text-[8px] mt-1 text-center" style={{ color: '#FF00FF' }}>MAX LEVEL! 🎉</p>
                 )}
+              </div>
+
+              {/* Win Rate Box - Prominent */}
+              <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)' }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Percent className="w-4 h-4" style={{ color: '#F65E3B' }} />
+                  <span className="text-xs font-bold" style={{ color: '#F65E3B' }}>Win Rate</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-extrabold" style={{ color: winPercentage >= 50 ? '#00E676' : '#F65E3B' }}>
+                      {totalBattlesPlayed > 0 ? `${winPercentage}%` : '-'}
+                    </p>
+                    <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                      {totalBattlesWon}W / {totalBattlesPlayed - totalBattlesWon}L ({totalBattlesPlayed} battles)
+                    </p>
+                  </div>
+                  <div className="w-14 h-14 rounded-full flex items-center justify-center relative" style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '3px solid rgba(255,255,255,0.1)' }}>
+                    <svg className="absolute inset-0" viewBox="0 0 36 36">
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                        fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="2.5" />
+                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                        fill="none" stroke={winPercentage >= 50 ? '#00E676' : '#F65E3B'} strokeWidth="2.5"
+                        strokeDasharray={`${winPercentage}, 100`} strokeLinecap="round" />
+                    </svg>
+                    <TrendingUp className="w-5 h-5" style={{ color: winPercentage >= 50 ? '#00E676' : '#F65E3B' }} />
+                  </div>
+                </div>
               </div>
 
               {/* Stats Grid */}
@@ -340,5 +375,3 @@ function getTypeColor(type: Notification['type']): string {
     default: return '#FFFFFF'
   }
 }
-
-// PLAYER_AVATARS is already exported from useGame

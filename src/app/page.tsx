@@ -53,6 +53,8 @@ export default function Home() {
             playerName={game.playerName}
             playerAvatar={game.playerAvatar}
             playerLevel={game.playerLevel}
+            totalBattlesPlayed={game.totalBattlesPlayed}
+            totalBattlesWon={game.totalBattlesWon}
             onPlayClassic={handlePlayClassic}
             onStartBotBattle={handleStartBotBattle}
             onStartCoinGame={handleStartCoinGame}
