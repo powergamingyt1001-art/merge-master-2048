@@ -76,7 +76,6 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
   const [showRewardAd, setShowRewardAd] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
   const [gameOverDismissed, setGameOverDismissed] = useState(false)
-  const [countdownOverlay, setCountdownOverlay] = useState<null | { seconds: number; total: number }>(null)
   const countdownRef = useRef<NodeJS.Timeout | null>(null)
 
   const isStuck = !checkCanMove(tiles) && lives > 0 && !gameOver
