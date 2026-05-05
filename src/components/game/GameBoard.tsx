@@ -5,9 +5,10 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useGame, Direction, PowerUp } from '@/hooks/useGame'
 import { TileComponent } from './Tile'
 import { RewardedAd } from './RewardedAd'
+import { BannerAd } from './BannerAd'
 import {
   Trophy, RotateCcw, Undo2, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
-  Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle,
+  Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle, Clock, Swords, Flame,
 } from 'lucide-react'
 
 function checkCanMove(tiles: { row: number; col: number; value: number }[]): boolean {
@@ -29,7 +30,7 @@ function useResponsiveSize() {
     function calc() {
       const vw = window.innerWidth
       const vh = window.innerHeight
-      const maxBoard = Math.min(vw - 24, vh - 300, 420)
+      const maxBoard = Math.min(vw - 24, vh - 340, 420)
       const gap = maxBoard > 300 ? 10 : 8
       const cellSize = Math.floor((maxBoard - gap * 5) / 4)
       setSizes({ cellSize, gap })
@@ -39,6 +40,12 @@ function useResponsiveSize() {
     return () => window.removeEventListener('resize', calc)
   }, [])
   return sizes
+}
+
+function formatTimer(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
 }
 
 interface GameBoardProps {
@@ -52,8 +59,9 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
     canUndo, undoCount, undoTotal,
     lives, maxLives, hammerCount, magnetCount, blastCount, activePowerUp,
     gameMode, botOpponent, botBattleResult,
+    battleTimer, battleTimeLimit, consecutiveMerges, comboBonus,
     handleMove, newGame, continueGame, undo, activatePowerUp, handleTileClick,
-    reviveWithAd, restartAfterStuck,
+    reviveWithAd, restartAfterStuck, tickBattleTimer,
   } = game
 
   const touchStart = useRef<{ x: number; y: number } | null>(null)
@@ -63,8 +71,8 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
   const [scoreGain, setScoreGain] = useState(0)
   const [showRewardAd, setShowRewardAd] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
-
   const [gameOverDismissed, setGameOverDismissed] = useState(false)
+
   const isStuck = !checkCanMove(tiles) && lives > 0 && !gameOver
   const showGameOverModal = gameOver && lives <= 0 && !gameOverDismissed
 
@@ -76,6 +84,17 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
     window.addEventListener('offline', off)
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
   }, [])
+
+  // Battle timer
+  useEffect(() => {
+    if (gameMode !== 'bot' || botBattleResult || battleTimer <= 0) return
+    const interval = setInterval(() => { tickBattleTimer() }, 1000)
+    return () => clearInterval(interval)
+  }, [gameMode, botBattleResult, battleTimer, tickBattleTimer])
+
+  // Combo flash - simply use comboBonus > 0 as indicator (no setState needed)
+  // comboBonus increases each time a combo triggers, so we just check if it changed
+  const comboFlashActive = comboBonus > 0 && consecutiveMerges === 0
 
   // Score gain animation
   useEffect(() => {
@@ -112,27 +131,15 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
     touchStart.current = null
   }, [onMove])
 
-  const handlePowerUp = useCallback((pu: PowerUp) => {
-    activatePowerUp(pu)
-  }, [activatePowerUp])
-
-  const handleStuckContinue = useCallback(() => {
-    restartAfterStuck()
-  }, [restartAfterStuck])
-
-  const handleBack = useCallback(() => {
-    onBackToDashboard()
-  }, [onBackToDashboard])
+  const handlePowerUp = useCallback((pu: PowerUp) => { activatePowerUp(pu) }, [activatePowerUp])
+  const handleStuckContinue = useCallback(() => { restartAfterStuck() }, [restartAfterStuck])
+  const handleBack = useCallback(() => { onBackToDashboard() }, [onBackToDashboard])
 
   return (
-    <div
-      className="flex flex-col items-center gap-2 sm:gap-3 select-none outline-none min-h-screen"
+    <div className="flex flex-col items-center gap-2 sm:gap-3 select-none outline-none min-h-screen"
       style={{ background: 'linear-gradient(180deg, #1a0533 0%, #0d1b3e 100%)' }}
-      onKeyDown={handleKeyDown}
-      tabIndex={0}
-      role="application"
-      aria-label="Merge Master 2048 Challenge"
-    >
+      onKeyDown={handleKeyDown} tabIndex={0} role="application" aria-label="Merge Master 2048 Challenge">
+
       {/* Header */}
       <div className="flex items-center justify-between w-full px-3 pt-2" style={{ maxWidth: boardSize + 20 }}>
         <button onClick={handleBack} className="flex items-center gap-1 p-1.5 rounded-lg"
@@ -164,58 +171,58 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
         </div>
       </div>
 
-      {/* Bot Battle Bar */}
-      {gameMode === 'bot' && botOpponent && (
+      {/* Bot Battle Timer Bar - only show timer, no bot name/score */}
+      {gameMode === 'bot' && !botBattleResult && (
         <motion.div initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
           className="flex items-center justify-between w-full px-3 py-2 rounded-xl"
           style={{ maxWidth: boardSize, backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)' }}>
           <div className="flex items-center gap-2">
-            <span className="text-xl">{botOpponent.avatar}</span>
-            <div>
-              <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>{botOpponent.name}</p>
-              <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                Target: <span style={{ color: '#F65E3B' }}>{botOpponent.targetScore}</span>
-              </p>
-            </div>
+            <Swords className="w-4 h-4" style={{ color: '#F65E3B' }} />
+            <span className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>1v1 Battle</span>
           </div>
           <div className="flex items-center gap-2">
-            {/* Progress towards target */}
-            <div className="w-20 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
-              <div className="h-full rounded-full transition-all"
-                style={{
-                  width: `${Math.min((score / botOpponent.targetScore) * 100, 100)}%`,
-                  background: score >= botOpponent.targetScore ? 'linear-gradient(90deg, #00E676, #00C853)' : 'linear-gradient(90deg, #F65E3B, #EDC22E)',
-                }} />
-            </div>
-            <span className="text-[9px] font-bold" style={{ color: score >= botOpponent.targetScore ? '#00E676' : '#F65E3B' }}>
-              {Math.min(score, botOpponent.targetScore)}/{botOpponent.targetScore}
+            <Clock className="w-3.5 h-3.5" style={{ color: battleTimer <= 10 ? '#F65E3B' : '#EDC22E' }} />
+            <span className="text-sm font-extrabold" style={{ color: battleTimer <= 10 ? '#F65E3B' : '#FFFFFF' }}>
+              {formatTimer(battleTimer)}
             </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Score:</span>
+            <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>{score}</span>
           </div>
         </motion.div>
       )}
 
+      {/* Combo indicator */}
+      <AnimatePresence>
+        {(consecutiveMerges >= 2 || comboFlashActive) && gameMode !== 'bot' && (
+          <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
+            className="px-3 py-1 rounded-full text-[9px] font-bold flex items-center gap-1"
+            style={{
+              backgroundColor: comboFlashActive ? 'rgba(237,194,46,0.25)' : 'rgba(255,122,0,0.15)',
+              color: comboFlashActive ? '#EDC22E' : '#FF7A00',
+              border: `1px solid ${comboFlashActive ? 'rgba(237,194,46,0.3)' : 'rgba(255,122,0,0.25)'}`,
+            }}>
+            <Flame className="w-2.5 h-2.5" />
+            {comboFlashActive ? 'COMBO! Bonus earned!' : `${consecutiveMerges}/3 merges → combo!`}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Lives + Power-ups row */}
       <div className="flex items-center w-full px-3" style={{ maxWidth: boardSize }}>
-        {/* Hearts */}
         <div className="flex items-center gap-0.5">
           {Array.from({ length: maxLives }).map((_, i) => (
             <Heart key={i} className="w-4 h-4 sm:w-5 sm:h-5"
               style={{ color: i < lives ? '#F65E3B' : 'rgba(255,255,255,0.12)', fill: i < lives ? '#F65E3B' : 'none', filter: i < lives ? 'drop-shadow(0 0 3px rgba(246,94,59,0.5))' : 'none' }} />
           ))}
         </div>
-
         <div className="w-2" />
-
-        {/* Power-ups */}
         <div className="flex items-center gap-1.5">
-          <PowerUpBtn icon={<Hammer className="w-3.5 h-3.5" />} count={hammerCount} active={activePowerUp === 'hammer'}
-            onClick={() => handlePowerUp('hammer')} color="#F59563" />
-          <PowerUpBtn icon={<Magnet className="w-3.5 h-3.5" />} count={magnetCount} active={activePowerUp === 'magnet'}
-            onClick={() => handlePowerUp('magnet')} color="#00E676" />
-          <PowerUpBtn icon={<Bomb className="w-3.5 h-3.5" />} count={blastCount} active={false}
-            onClick={() => handlePowerUp('blast')} color="#FF7A00" />
-          <PowerUpBtn icon={<Undo2 className="w-3.5 h-3.5" />} count={undoTotal - undoCount} active={false}
-            onClick={undo} color="#8f7a66" disabled={!canUndo || undoCount >= undoTotal} />
+          <PowerUpBtn icon={<Hammer className="w-3.5 h-3.5" />} count={hammerCount} active={activePowerUp === 'hammer'} onClick={() => handlePowerUp('hammer')} color="#F59563" />
+          <PowerUpBtn icon={<Magnet className="w-3.5 h-3.5" />} count={magnetCount} active={activePowerUp === 'magnet'} onClick={() => handlePowerUp('magnet')} color="#00E676" />
+          <PowerUpBtn icon={<Bomb className="w-3.5 h-3.5" />} count={blastCount} active={false} onClick={() => handlePowerUp('blast')} color="#FF7A00" />
+          <PowerUpBtn icon={<Undo2 className="w-3.5 h-3.5" />} count={undoTotal - undoCount} active={false} onClick={undo} color="#8f7a66" disabled={!canUndo || undoCount >= undoTotal} />
         </div>
       </div>
 
@@ -240,7 +247,6 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
         width: boardSize, height: boardSize, backgroundColor: '#2d1b4e', touchAction: 'none',
         boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 40px rgba(237,194,46,0.08)', border: '1px solid rgba(255,255,255,0.06)',
       }} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-        {/* Background Grid */}
         {Array.from({ length: 16 }).map((_, i) => {
           const row = Math.floor(i / 4), col = i % 4
           return <div key={`bg-${i}`} className="absolute rounded-lg" style={{
@@ -248,8 +254,6 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
             left: col * (cellSize + gap) + gap, top: row * (cellSize + gap) + gap,
           }} />
         })}
-
-        {/* Tiles */}
         <AnimatePresence>
           {tiles.map(tile => (
             <TileComponent key={tile.id} id={tile.id} value={tile.value} row={tile.row} col={tile.col}
@@ -258,7 +262,7 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
           ))}
         </AnimatePresence>
 
-        {/* Stuck overlay (lives > 0) */}
+        {/* Stuck overlay */}
         <AnimatePresence>
           {isStuck && lives > 0 && !gameOver && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -266,11 +270,8 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
               <Heart className="w-8 h-8 mb-2" style={{ color: '#F65E3B', fill: '#F65E3B' }} />
               <p className="text-lg font-bold mb-1" style={{ color: '#FFFFFF' }}>Stuck!</p>
               <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>-1 ❤️ • {lives - 1} lives left</p>
-              <button onClick={handleStuckContinue}
-                className="px-5 py-2 rounded-lg font-bold text-xs transition-transform hover:scale-105 active:scale-95"
-                style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
-                Continue
-              </button>
+              <button onClick={handleStuckContinue} className="px-5 py-2 rounded-lg font-bold text-xs transition-transform hover:scale-105 active:scale-95"
+                style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>Continue</button>
             </motion.div>
           )}
         </AnimatePresence>
@@ -286,10 +287,8 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
               <p className="text-2xl sm:text-3xl font-extrabold mb-2" style={{ color: '#FFFFFF' }}>You Win! 🎉</p>
               <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.8)' }}>Score: {score}</p>
               <div className="flex gap-3">
-                <button onClick={continueGame} className="px-4 py-2 rounded-lg font-bold text-xs"
-                  style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)' }}>Keep Going</button>
-                <button onClick={() => { newGame(); onBackToDashboard(); }} className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1"
-                  style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
+                <button onClick={continueGame} className="px-4 py-2 rounded-lg font-bold text-xs" style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)' }}>Keep Going</button>
+                <button onClick={() => { newGame(); onBackToDashboard(); }} className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1" style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
                   <RotateCcw className="w-3 h-3" /> Dashboard
                 </button>
               </div>
@@ -297,7 +296,7 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
           )}
         </AnimatePresence>
 
-        {/* Bot Battle Result overlay */}
+        {/* Bot Battle Result overlay - show BOTH scores */}
         <AnimatePresence>
           {gameMode === 'bot' && botBattleResult && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -305,26 +304,26 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
               <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200 }}>
                 <span className="text-5xl mb-2 block">{botBattleResult === 'win' ? '🏆' : '😔'}</span>
               </motion.div>
-              <p className="text-2xl font-extrabold mb-1" style={{ color: '#FFFFFF' }}>
+              <p className="text-2xl font-extrabold mb-2" style={{ color: '#FFFFFF' }}>
                 {botBattleResult === 'win' ? 'You Won!' : 'You Lost!'}
               </p>
-              <p className="text-sm mb-1" style={{ color: 'rgba(255,255,255,0.8)' }}>
-                Your Score: {score}
+              <div className="flex items-center gap-6 mb-4">
+                <div className="text-center">
+                  <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.6)' }}>Your Score</p>
+                  <p className="text-xl font-extrabold" style={{ color: '#FFFFFF' }}>{score}</p>
+                </div>
+                <span className="text-lg font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>vs</span>
+                <div className="text-center">
+                  <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.6)' }}>{botOpponent?.avatar} {botOpponent?.name}</p>
+                  <p className="text-xl font-extrabold" style={{ color: '#FFFFFF' }}>{botOpponent?.finalScore}</p>
+                </div>
+              </div>
+              <p className="text-[9px] mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                {botBattleResult === 'win' ? `You scored ${score - (botOpponent?.finalScore ?? 0)} more!` : `Bot scored ${(botOpponent?.finalScore ?? 0) - score} more`}
               </p>
-              {botOpponent && (
-                <p className="text-xs mb-4" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                  {botOpponent.avatar} {botOpponent.name}: {botOpponent.targetScore}
-                </p>
-              )}
               <div className="flex gap-3">
-                <button onClick={() => { newGame(); onBackToDashboard(); }}
-                  className="px-4 py-2 rounded-lg font-bold text-xs"
-                  style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)' }}>
-                  Dashboard
-                </button>
-                <button onClick={() => { newGame(); onBackToDashboard(); }}
-                  className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1"
-                  style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
+                <button onClick={() => { newGame(); onBackToDashboard(); }} className="px-4 py-2 rounded-lg font-bold text-xs" style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)' }}>Dashboard</button>
+                <button onClick={() => { game.startBotBattle(battleTimeLimit); }} className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1" style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
                   Play Again
                 </button>
               </div>
@@ -342,17 +341,18 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
           </button>
         ))}
       </div>
-
       <p className="text-[8px] sm:text-[9px]" style={{ color: 'rgba(255,255,255,0.25)' }}>Arrow keys / WASD / Swipe to play</p>
 
-      {/* Game Over Modal (all lives gone) */}
+      {/* Banner Ad - bottom, non-clickable, only when online */}
+      <BannerAd position="bottom" isOnline={isOnline} />
+
+      {/* Game Over Modal */}
       <AnimatePresence>
-        {showGameOverModal && gameOver && lives <= 0 && (
+        {showGameOverModal && gameOver && lives <= 0 && gameMode !== 'bot' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[150] flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}>
             <motion.div initial={{ scale: 0.8, y: 30 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.8 }}
-              className="w-full max-w-xs rounded-2xl p-6 text-center"
-              style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}>
+              className="w-full max-w-xs rounded-2xl p-6 text-center" style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}>
               <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 1.5 }}>
                 <Heart className="w-12 h-12 mx-auto mb-3" style={{ color: '#F65E3B' }} />
               </motion.div>
@@ -375,7 +375,6 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
         )}
       </AnimatePresence>
 
-      {/* Rewarded Ad Modal */}
       <RewardedAd isOpen={showRewardAd} onClose={() => setShowRewardAd(false)} onReward={reviveWithAd} isOnline={isOnline} />
     </div>
   )
@@ -395,18 +394,9 @@ function PowerUpBtn({ icon, count, active, onClick, color, disabled }: {
   icon: React.ReactNode; count: number; active: boolean; onClick: () => void; color: string; disabled?: boolean
 }) {
   return (
-    <motion.button onClick={onClick} disabled={disabled}
-      className="relative flex items-center justify-center rounded-lg"
-      style={{
-        width: 36, height: 36,
-        backgroundColor: active ? `${color}20` : 'rgba(255,255,255,0.04)',
-        border: active ? `1.5px solid ${color}` : '1px solid rgba(255,255,255,0.06)',
-        boxShadow: active ? `0 0 10px ${color}25` : 'none',
-        opacity: disabled ? 0.35 : 1,
-      }}
-      whileTap={!disabled ? { scale: 0.9 } : {}}
-      animate={active ? { scale: [1, 1.05, 1] } : {}}
-      transition={{ duration: 0.8, repeat: active ? Infinity : 0 }}>
+    <motion.button onClick={onClick} disabled={disabled} className="relative flex items-center justify-center rounded-lg"
+      style={{ width: 36, height: 36, backgroundColor: active ? `${color}20` : 'rgba(255,255,255,0.04)', border: active ? `1.5px solid ${color}` : '1px solid rgba(255,255,255,0.06)', boxShadow: active ? `0 0 10px ${color}25` : 'none', opacity: disabled ? 0.35 : 1 }}
+      whileTap={!disabled ? { scale: 0.9 } : {}} animate={active ? { scale: [1, 1.05, 1] } : {}} transition={{ duration: 0.8, repeat: active ? Infinity : 0 }}>
       <div style={{ color: count > 0 ? color : 'rgba(255,255,255,0.15)' }}>{icon}</div>
       <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold"
         style={{ backgroundColor: count > 0 ? color : 'rgba(255,255,255,0.08)', color: '#FFFFFF' }}>{count}</div>

@@ -15,8 +15,8 @@ export default function Home() {
 
   const handleLoadingComplete = useCallback(() => setPhase('dashboard'), [])
   const handlePlayClassic = useCallback(() => setPhase('game'), [])
-  const handleStartBotBattle = useCallback(() => {
-    game.startBotBattle()
+  const handleStartBotBattle = useCallback((timeLimit: number) => {
+    game.startBotBattle(timeLimit)
     setPhase('game')
   }, [game])
   const handleBackToDashboard = useCallback(() => setPhase('dashboard'), [])
@@ -36,6 +36,13 @@ export default function Home() {
             magnetCount={game.magnetCount}
             blastCount={game.blastCount}
             modBestScore={game.modBestScore}
+            gamePoints={game.gamePoints}
+            bestScore={game.bestScore}
+            inviteCode={game.inviteCode}
+            invitedUsers={game.invitedUsers}
+            commissionBalance={game.commissionBalance}
+            commissionClaimed={game.commissionClaimed}
+            autoClaimCommission={game.autoClaimCommission}
             onPlayClassic={handlePlayClassic}
             onStartBotBattle={handleStartBotBattle}
             onUseSpinTicket={game.useSpinTicket}
@@ -45,6 +52,8 @@ export default function Home() {
             onAddCoins={game.addCoins}
             onAddPowerUp={game.addPowerUp}
             onAddUndos={game.addUndos}
+            onClaimCommission={game.claimCommission}
+            onToggleAutoClaim={game.toggleAutoClaim}
           />
         )}
         {phase === 'game' && <GameBoard key="game" onBackToDashboard={handleBackToDashboard} />}

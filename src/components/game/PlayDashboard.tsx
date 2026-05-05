@@ -2,11 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Swords, Clock, Trophy, Coins, X, ChevronRight, Crown, Star, Medal, Sparkles } from 'lucide-react'
+import { Play, Swords, Clock, Trophy, Coins, X, ChevronRight, Crown, UserPlus, Megaphone } from 'lucide-react'
 import { SpinWheel, SpinPrize } from './SpinWheel'
 import { LoginStreak } from './LoginStreak'
 import { WelcomeGift } from './WelcomeGift'
 import { Leaderboard } from './Leaderboard'
+import { Tournament } from './Tournament'
+import { InvitePanel } from './InvitePanel'
+import { BannerAd } from './BannerAd'
 import { PowerUp } from '@/hooks/useGame'
 
 interface PlayDashboardProps {
@@ -19,8 +22,15 @@ interface PlayDashboardProps {
   magnetCount: number
   blastCount: number
   modBestScore: number
+  gamePoints: number
+  bestScore: number
+  inviteCode: string
+  invitedUsers: { id: string; name: string; joinedAt: string; commissionEarned: number }[]
+  commissionBalance: number
+  commissionClaimed: number
+  autoClaimCommission: boolean
   onPlayClassic: () => void
-  onStartBotBattle: () => void
+  onStartBotBattle: (timeLimit: number) => void
   onUseSpinTicket: () => void
   onAddSpinTickets: (count: number) => void
   onClaimWelcome: () => void
@@ -28,20 +38,26 @@ interface PlayDashboardProps {
   onAddCoins: (amount: number) => void
   onAddPowerUp: (pu: PowerUp, count: number) => void
   onAddUndos: (count: number) => void
+  onClaimCommission: () => void
+  onToggleAutoClaim: () => void
 }
 
 export function PlayDashboard({
   coins, spinTickets, streakDay, streakClaimed, welcomeClaimed,
-  hammerCount, magnetCount, blastCount, modBestScore,
+  hammerCount, magnetCount, blastCount, modBestScore, gamePoints, bestScore,
+  inviteCode, invitedUsers, commissionBalance, commissionClaimed, autoClaimCommission,
   onPlayClassic, onStartBotBattle,
   onUseSpinTicket, onAddSpinTickets, onClaimWelcome, onClaimStreakDay,
-  onAddCoins, onAddPowerUp, onAddUndos,
+  onAddCoins, onAddPowerUp, onAddUndos, onClaimCommission, onToggleAutoClaim,
 }: PlayDashboardProps) {
   const [showSpin, setShowSpin] = useState(false)
   const [showStreak, setShowStreak] = useState(false)
   const [showWelcome, setShowWelcome] = useState(false)
   const [showLeaderboard, setShowLeaderboard] = useState(false)
   const [showBattleModes, setShowBattleModes] = useState(false)
+  const [showTournament, setShowTournament] = useState(false)
+  const [showInvite, setShowInvite] = useState(false)
+  const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
 
   // Show welcome gift for new users
   useEffect(() => {
@@ -50,6 +66,15 @@ export function PlayDashboard({
       return () => clearTimeout(timer)
     }
   }, [welcomeClaimed])
+
+  // Internet detection
+  useEffect(() => {
+    const on = () => setIsOnline(true)
+    const off = () => setIsOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
 
   const handleSpinPrize = useCallback((prize: SpinPrize) => {
     switch (prize.type) {
@@ -89,8 +114,6 @@ export function PlayDashboard({
                 <span className="text-[8px] font-bold tracking-widest" style={{ color: '#EDC22E' }}>2048 CHALLENGE</span>
               </div>
             </div>
-
-            {/* Coins display */}
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl"
               style={{ backgroundColor: 'rgba(237,194,46,0.12)', border: '1px solid rgba(237,194,46,0.25)' }}>
               <Coins className="w-4 h-4" style={{ color: '#EDC22E' }} />
@@ -138,30 +161,28 @@ export function PlayDashboard({
                   {showBattleModes ? 'HIDE' : 'SHOW'} <ChevronRight className="w-2.5 h-2.5" style={{ transform: showBattleModes ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
                 </button>
               </div>
-
               {showBattleModes && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} transition={{ duration: 0.3 }}>
                   <div className="grid grid-cols-4 gap-2 mb-2">
                     {[
-                      { time: '2 min', icon: <Clock className="w-3 h-3" /> },
-                      { time: '5 min', icon: <Clock className="w-3 h-3" /> },
-                      { time: '10 min', icon: <Clock className="w-3 h-3" /> },
-                      { time: '6 hrs', icon: <Trophy className="w-3 h-3" /> },
+                      { time: '1 min', seconds: 60, icon: <Clock className="w-3 h-3" /> },
+                      { time: '2 min', seconds: 120, icon: <Clock className="w-3 h-3" /> },
+                      { time: '5 min', seconds: 300, icon: <Clock className="w-3 h-3" /> },
+                      { time: '10 min', seconds: 600, icon: <Trophy className="w-3 h-3" /> },
                     ].map((mode, i) => (
-                      <button key={i} onClick={onStartBotBattle}
+                      <button key={i} onClick={() => isOnline && onStartBotBattle(mode.seconds)}
                         className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform hover:scale-105 active:scale-95"
-                        style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', opacity: isOnline ? 1 : 0.4 }}>
                         <div style={{ color: '#F65E3B' }}>{mode.icon}</div>
                         <span className="text-[8px] font-semibold" style={{ color: 'rgba(255,255,255,0.7)' }}>{mode.time}</span>
                       </button>
                     ))}
                   </div>
                   <p className="text-[8px] text-center" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                    1v1 Bot Battle — 50/50 chance • Beat the bot&apos;s score to win!
+                    {isOnline ? '1v1 Battle — Highest score wins! 50/50 chance 🏆' : '⚠️ Internet required for Battle Mode'}
                   </p>
                 </motion.div>
               )}
-
               {!showBattleModes && (
                 <p className="text-[8px] text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
                   1v1 Battle — Highest score wins! 🏆
@@ -172,7 +193,7 @@ export function PlayDashboard({
 
           {/* Quick Actions: Streak + Spin + Leaderboard */}
           <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }}
-            className="w-full grid grid-cols-3 gap-2">
+            className="w-full grid grid-cols-4 gap-2">
             <button onClick={() => setShowStreak(true)}
               className="flex flex-col items-center gap-1 p-2.5 rounded-xl transition-transform hover:scale-[1.02] active:scale-95"
               style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '1px solid rgba(237,194,46,0.2)' }}>
@@ -194,11 +215,40 @@ export function PlayDashboard({
               <p className="text-[8px] font-bold" style={{ color: '#F65E3B' }}>Rank</p>
               <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Leaderboard</p>
             </button>
+            <button onClick={() => setShowInvite(true)}
+              className="flex flex-col items-center gap-1 p-2.5 rounded-xl transition-transform hover:scale-[1.02] active:scale-95"
+              style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
+              <span className="text-lg">🤝</span>
+              <p className="text-[8px] font-bold" style={{ color: '#00E676' }}>Invite</p>
+              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Earn 5%</p>
+            </button>
+          </motion.div>
+
+          {/* Tournament + Game Points */}
+          <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}
+            className="w-full grid grid-cols-2 gap-2">
+            <button onClick={() => isOnline && setShowTournament(true)}
+              className="flex items-center gap-2 p-3 rounded-xl transition-transform hover:scale-[1.02] active:scale-95"
+              style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)', opacity: isOnline ? 1 : 0.5 }}>
+              <Trophy className="w-5 h-5" style={{ color: '#EDC22E' }} />
+              <div className="text-left">
+                <p className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>Tournament</p>
+                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{isOnline ? 'Weekly Prizes!' : 'Need Internet'}</p>
+              </div>
+            </button>
+            <div className="flex items-center gap-2 p-3 rounded-xl"
+              style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <Crown className="w-5 h-5" style={{ color: '#EDC22E' }} />
+              <div className="text-left">
+                <p className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.7)' }}>Game Points</p>
+                <p className="text-xs font-extrabold" style={{ color: '#EDC22E' }}>{gamePoints}</p>
+              </div>
+            </div>
           </motion.div>
 
           {/* Mod Best Score */}
           {modBestScore > 0 && (
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.6 }}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-xl"
               style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
               <Crown className="w-4 h-4" style={{ color: '#EDC22E' }} />
@@ -207,17 +257,42 @@ export function PlayDashboard({
             </motion.div>
           )}
 
+          {/* Invite quick info */}
+          {invitedUsers.length > 0 && (
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.7 }}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-xl"
+              style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.1)' }}>
+              <div className="flex items-center gap-2">
+                <UserPlus className="w-3.5 h-3.5" style={{ color: '#00E676' }} />
+                <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{invitedUsers.length} invited</span>
+              </div>
+              {commissionBalance > 0 && (
+                <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>{commissionBalance} 💰 pending</span>
+              )}
+            </motion.div>
+          )}
+
         </div>
       </div>
 
+      {/* Banner Ad footer */}
+      <BannerAd position="bottom" isOnline={isOnline} />
+
       {/* Modals */}
       <SpinWheel isOpen={showSpin} onClose={() => setShowSpin(false)} spinTickets={spinTickets}
-        onUseTicket={onUseSpinTicket} onWinPrize={handleSpinPrize} onWatchAdForSpin={handleAdForSpin} isOnline={navigator.onLine} />
+        onUseTicket={onUseSpinTicket} onWinPrize={handleSpinPrize} onWatchAdForSpin={handleAdForSpin} isOnline={isOnline} />
       <LoginStreak isOpen={showStreak} onClose={() => setShowStreak(false)} streakDay={streakDay}
         streakClaimed={streakClaimed} onClaim={onClaimStreakDay} />
       <WelcomeGift isOpen={showWelcome} onClose={() => setShowWelcome(false)} onClaim={() => { onClaimWelcome(); setShowWelcome(false) }} />
       <Leaderboard isOpen={showLeaderboard} onClose={() => setShowLeaderboard(false)}
-        coins={coins} modBestScore={modBestScore} />
+        gamePoints={gamePoints} bestScore={bestScore} />
+      <Tournament isOpen={showTournament} onClose={() => setShowTournament(false)}
+        gamePoints={gamePoints} coins={coins} />
+      <InvitePanel isOpen={showInvite} onClose={() => setShowInvite(false)}
+        inviteCode={inviteCode} invitedUsers={invitedUsers}
+        commissionBalance={commissionBalance} commissionClaimed={commissionClaimed}
+        autoClaimCommission={autoClaimCommission} onClaimCommission={onClaimCommission}
+        onToggleAutoClaim={onToggleAutoClaim} />
     </div>
   )
 }
