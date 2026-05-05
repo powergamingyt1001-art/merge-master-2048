@@ -341,4 +341,4 @@ function getTypeColor(type: Notification['type']): string {
   }
 }
 
-export { PLAYER_AVATARS }
+// PLAYER_AVATARS is already exported from useGame

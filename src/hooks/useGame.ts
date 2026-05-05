@@ -110,7 +110,7 @@ const BOT_NAMES = [
   { name: 'Neha Champ', avatar: '🎯' },
 ]
 
-const PLAYER_AVATARS = ['😎', '🦊', '🐺', '🦅', '🐉', '🦁', '👑', '🔥', '💎', '⚡']
+export const PLAYER_AVATARS = ['😎', '🦊', '🐺', '🦅', '🐉', '🦁', '👑', '🔥', '💎', '⚡']
 
 let tileId = 0
 
