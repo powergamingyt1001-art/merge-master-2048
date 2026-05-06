@@ -1,46 +1,101 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { LoadingScreen } from '@/components/game/LoadingScreen'
 import { PlayDashboard } from '@/components/game/PlayDashboard'
 import { GameBoard } from '@/components/game/GameBoard'
+import { InterstitialAd } from '@/components/game/InterstitialAd'
 import { useGame } from '@/hooks/useGame'
 import { GameProvider } from '@/context/GameContext'
 
-type GamePhase = 'loading' | 'dashboard' | 'game'
+type GamePhase = 'loading' | 'dashboard' | 'game' | 'ad'
 
 export default function Home() {
   const [phase, setPhase] = useState<GamePhase>('loading')
   const game = useGame()
 
+  // Ad system state
+  const [showInterstitial, setShowInterstitial] = useState(false)
+  const [adDuration, setAdDuration] = useState(5)
+  const [isAppOpenAd, setIsAppOpenAd] = useState(false)
+  const totalGamesPlayedRef = useRef(0)
+  const pendingGameActionRef = useRef<(() => void) | null>(null)
+  const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
+
+  // Internet detection
+  useEffect(() => {
+    const on = () => setIsOnline(true)
+    const off = () => setIsOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => {
+      window.removeEventListener('online', on)
+      window.removeEventListener('offline', off)
+    }
+  }, [])
+
   const handleLoadingComplete = useCallback(() => {
     setPhase('dashboard')
   }, [])
 
+  // Common game start handler: shows ad before starting game
+  const startGameWithAd = useCallback((startAction: () => void) => {
+    totalGamesPlayedRef.current += 1
+
+    // After every 2 games, show app open ad (8 seconds)
+    // Every other game, show interstitial ad (5 seconds)
+    if (totalGamesPlayedRef.current % 2 === 0) {
+      // App open ad after every 2 games
+      setIsAppOpenAd(true)
+      setAdDuration(8)
+      setShowInterstitial(true)
+      pendingGameActionRef.current = startAction
+      setPhase('ad')
+    } else {
+      // Interstitial ad on every game start
+      setIsAppOpenAd(false)
+      setAdDuration(5)
+      setShowInterstitial(true)
+      pendingGameActionRef.current = startAction
+      setPhase('ad')
+    }
+  }, [])
+
+  const handleAdClose = useCallback(() => {
+    setShowInterstitial(false)
+    // Execute the pending game action after ad closes
+    const action = pendingGameActionRef.current
+    pendingGameActionRef.current = null
+    if (action) {
+      action()
+      setPhase('game')
+    } else {
+      setPhase('dashboard')
+    }
+  }, [])
+
   const handlePlayClassic = useCallback(() => {
-    game.newGame()
-    setPhase('game')
-  }, [game])
+    startGameWithAd(() => { game.newGame() })
+  }, [game, startGameWithAd])
 
   const handleStartBotBattle = useCallback((timeLimit: number) => {
-    game.startBotBattle(timeLimit)
-    setPhase('game')
-  }, [game])
+    startGameWithAd(() => { game.startBotBattle(timeLimit) })
+  }, [game, startGameWithAd])
 
   const handleStartCoinGame = useCallback((entryFee: number) => {
-    game.startCoinGame(entryFee)
-    setPhase('game')
-  }, [game])
+    startGameWithAd(() => { game.startCoinGame(entryFee) })
+  }, [game, startGameWithAd])
 
   const handleStartTournamentGame = useCallback(() => {
-    game.startTournamentGame()
-    setPhase('game')
-  }, [game])
+    startGameWithAd(() => { game.startTournamentGame() })
+  }, [game, startGameWithAd])
 
   const handleBackToDashboard = useCallback(() => {
+    // IMPORTANT: Reset game state before going back to dashboard
+    game.goBackToDashboard()
     setPhase('dashboard')
-  }, [])
+  }, [game])
 
   return (
     <GameProvider game={game}>
@@ -104,6 +159,16 @@ export default function Home() {
             />
           )}
           {phase === 'game' && <GameBoard key="game" onBackToDashboard={handleBackToDashboard} />}
+          {phase === 'ad' && (
+            <InterstitialAd
+              key="ad"
+              isOpen={showInterstitial}
+              onClose={handleAdClose}
+              isOnline={isOnline}
+              duration={adDuration}
+              isAppOpen={isAppOpenAd}
+            />
+          )}
         </AnimatePresence>
       </main>
     </GameProvider>
