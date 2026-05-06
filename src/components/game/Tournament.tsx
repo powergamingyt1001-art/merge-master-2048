@@ -41,25 +41,29 @@ const FAKE_TOURNAMENT_PLAYERS = [
 ]
 
 // Week 1-3 prizes (7K budget)
+// 1st: 700, 2nd: 400, 3rd: 250, 4th: 150, 5th: 100
+// 6th+: 50 + 2 spins each (until 7K pool exhausted)
+// Non-ranked: 3 spins each
 const WEEK_PRIZES_EARLY = [
   { rank: 1, coins: 700, spins: 0, label: '1st' },
-  { rank: 2, coins: 500, spins: 0, label: '2nd' },
-  { rank: 3, coins: 300, spins: 0, label: '3rd' },
-  { rank: 4, coins: 200, spins: 0, label: '4th' },
-  { rank: 5, coins: 100, spins: 3, label: '5th' },
-]
-
-// Week 4+ prizes (15K budget)
-const WEEK_PRIZES_LATE = [
-  { rank: 1, coins: 1000, spins: 0, label: '1st' },
-  { rank: 2, coins: 500, spins: 0, label: '2nd' },
-  { rank: 3, coins: 300, spins: 0, label: '3rd' },
-  { rank: 4, coins: 200, spins: 0, label: '4th' },
+  { rank: 2, coins: 400, spins: 0, label: '2nd' },
+  { rank: 3, coins: 250, spins: 0, label: '3rd' },
+  { rank: 4, coins: 150, spins: 0, label: '4th' },
   { rank: 5, coins: 100, spins: 0, label: '5th' },
-  { rank: 6, coins: 50, spins: 5, label: '6th' },
 ]
 
-const ENTRY_FEE = 50
+// Week 4+ prizes (15K budget) - entry fee 100
+const WEEK_PRIZES_LATE = [
+  { rank: 1, coins: 1500, spins: 0, label: '1st' },
+  { rank: 2, coins: 1000, spins: 0, label: '2nd' },
+  { rank: 3, coins: 700, spins: 0, label: '3rd' },
+  { rank: 4, coins: 400, spins: 0, label: '4th' },
+  { rank: 5, coins: 200, spins: 2, label: '5th' },
+  { rank: 6, coins: 50, spins: 2, label: '6th' },
+]
+
+const ENTRY_FEE_EARLY = 50
+const ENTRY_FEE_LATE = 100
 
 function getWeekNumber(): number {
   const start = new Date(2025, 0, 6)
@@ -102,11 +106,12 @@ export function Tournament({
   // Always use 7K pool as per user request
   const prizes = WEEK_PRIZES_EARLY
   const totalPool = 7000
+  const entryFee = ENTRY_FEE_EARLY
   const earlyPoolRemaining = getEarlyPoolRemaining()
   const coinRanksCount = Math.floor(earlyPoolRemaining / 50)
   const coinRankSpins = 2
-  const noCoinSpins = 2
-  const canJoin = coins >= ENTRY_FEE
+  const noCoinSpins = 3
+  const canJoin = coins >= entryFee
 
   // Build rankings based on tournament points
   const players: TournamentPlayer[] = FAKE_TOURNAMENT_PLAYERS.map(p => ({
@@ -173,7 +178,7 @@ export function Tournament({
               </div>
               <div className="flex-1 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)' }}>
                 <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Entry Fee</p>
-                <p className="text-xs font-extrabold" style={{ color: '#F65E3B' }}>{ENTRY_FEE} 🪙</p>
+                <p className="text-xs font-extrabold" style={{ color: '#F65E3B' }}>{entryFee} 🪙</p>
               </div>
               {tournamentJoined && (
                 <div className="flex-1 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
@@ -196,7 +201,7 @@ export function Tournament({
                   }}
                   disabled={!canJoin}
                 >
-                  {canJoin ? <><Zap className="w-5 h-5" /> Join Tournament ({ENTRY_FEE} coins)</> : <><Lock className="w-5 h-5" /> Need {ENTRY_FEE} coins to join</>}
+                  {canJoin ? <><Zap className="w-5 h-5" /> Join Tournament ({entryFee} coins)</> : <><Lock className="w-5 h-5" /> Need {entryFee} coins to join</>}
                 </button>
               </div>
             ) : (
@@ -261,7 +266,7 @@ export function Tournament({
                     <p className="text-[10px] font-bold mb-1" style={{ color: '#EDC22E' }}>🏆 How Tournament Works</p>
                     <ul className="space-y-1">
                       {[
-                        `Entry fee: ${ENTRY_FEE} coins to join`,
+                        `Entry fee: ${entryFee} coins to join`,
                         'Each game is 90 seconds',
                         '10 score = 1 tournament point',
                         'Partial scores carry over to next game',
@@ -327,10 +332,10 @@ export function Tournament({
                     </p>
                   </div>
 
-                  {/* No coin ranks */}
+                  {/* No coin ranks - everyone gets spins */}
                   <div className="p-2.5 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
                     <p className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                      Remaining players: {noCoinSpins} spins each 🎫
+                      All other players: {noCoinSpins} spins each 🎫
                     </p>
                   </div>
                 </div>

@@ -9,7 +9,6 @@ import { WelcomeGift } from './WelcomeGift'
 import { Leaderboard } from './Leaderboard'
 import { Tournament } from './Tournament'
 import { InvitePanel } from './InvitePanel'
-import { BannerAd } from './BannerAd'
 import { ProfilePanel, NotificationsPanel } from './ProfilePanel'
 import { PowerUp, Notification, DailyTask } from '@/hooks/useGame'
 
@@ -89,6 +88,8 @@ export function PlayDashboard({
   onAddCoins, onAddPowerUp, onAddUndos, onClaimCommission, onToggleAutoClaim,
   onAddNotification, onMarkNotificationRead, onMarkAllNotificationsRead,
   onUpdatePlayerName, onUpdatePlayerAvatar,
+  dailyTasks, onClaimDailyTask, onResetAllData,
+  weeklyBonusClaimed = false, onClaimWeeklyBonus,
 }: PlayDashboardProps) {
   const [showSpin, setShowSpin] = useState(false)
   const [showStreak, setShowStreak] = useState(false)
@@ -136,10 +137,7 @@ export function PlayDashboard({
     onAddNotification('Spin Prize!', `You won ${prize.emoji} ${prize.label}!`, 'reward', '🎰')
   }, [onAddPowerUp, onAddUndos, onAddSpinTickets, onAddCoins, onAddNotification])
 
-  const handleAdForSpin = useCallback(() => {
-    onAddSpinTickets(1)
-    onAddNotification('Free Spin!', 'Watched ad for +1 spin ticket', 'reward', '📺')
-  }, [onAddSpinTickets, onAddNotification])
+
 
   const handlePlayClassic = useCallback(() => {
     if (isGameLimitReached) {
@@ -496,12 +494,9 @@ export function PlayDashboard({
         </div>
       </div>
 
-      {/* Banner Ad footer */}
-      <BannerAd position="bottom" isOnline={isOnline} />
-
       {/* Modals */}
       <SpinWheel isOpen={showSpin} onClose={() => setShowSpin(false)} spinTickets={spinTickets}
-        onUseTicket={onUseSpinTicket} onWinPrize={handleSpinPrize} onWatchAdForSpin={handleAdForSpin} isOnline={isOnline} />
+        onUseTicket={onUseSpinTicket} onWinPrize={handleSpinPrize} onWatchAdForSpin={() => {}} isOnline={isOnline} />
       <LoginStreak isOpen={showStreak} onClose={() => setShowStreak(false)} streakDay={streakDay}
         streakClaimed={streakClaimed} onClaim={onClaimStreakDay} />
       <WelcomeGift isOpen={showWelcome} onClose={() => setShowWelcome(false)} onClaim={() => { onClaimWelcome(); setShowWelcome(false) }} />

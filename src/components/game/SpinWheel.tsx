@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Play, Gift } from 'lucide-react'
-import { ADMOB_CONFIG } from '@/lib/admob'
+import { X, Play } from 'lucide-react'
 
 interface SpinWheelProps {
   isOpen: boolean
@@ -47,14 +46,11 @@ function pickPrize(): { index: number; prize: SpinPrize } {
   return { index: 0, prize: { ...PRIZE_POOL[0].prize } }
 }
 
-export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPrize, onWatchAdForSpin, isOnline }: SpinWheelProps) {
+export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPrize, onWatchAdForSpin: _onWatchAdForSpin, isOnline: _isOnline }: SpinWheelProps) {
   const [spinning, setSpinning] = useState(false)
   const [result, setResult] = useState<{ index: number; prize: SpinPrize } | null>(null)
   const [rotation, setRotation] = useState(0)
   const spinCountRef = useRef(0)
-  const [showRewardAd, setShowRewardAd] = useState(false)
-  const [rewardAdPhase, setRewardAdPhase] = useState<'ready' | 'playing' | 'complete'>('ready')
-  const [rewardCountdown, setRewardCountdown] = useState(5)
 
   const handleSpin = useCallback(() => {
     if (spinTickets <= 0 || spinning) return
@@ -205,78 +201,11 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
                 </button>
               )}
 
-              {/* Watch ad for spin - with rewarded ad */}
-              {isOnline && !result && !showRewardAd && (
-                <button
-                  onClick={() => { setShowRewardAd(true); setRewardAdPhase('ready'); setRewardCountdown(5) }}
-                  className="w-full mt-2 py-2.5 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-transform hover:scale-[1.01] active:scale-95"
-                  style={{ backgroundColor: 'rgba(246,94,59,0.08)', color: '#F65E3B', border: '1px solid rgba(246,94,59,0.15)' }}
-                >
-                  📺 Watch Ad → +1 Spin Ticket
-                </button>
-              )}
-
-              {/* Rewarded Ad Flow */}
-              {showRewardAd && (
-                <div className="mt-2 p-3 rounded-xl text-center" style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)' }}>
-                  {rewardAdPhase === 'ready' ? (
-                    <>
-                      <Gift className="w-6 h-6 mx-auto mb-1.5" style={{ color: '#F65E3B' }} />
-                      <p className="text-[10px] font-bold mb-1.5" style={{ color: '#FFFFFF' }}>Watch a short ad for +1 Spin!</p>
-                      <button
-                        onClick={() => setRewardAdPhase('playing')}
-                        className="px-5 py-2 rounded-lg font-bold text-[10px]"
-                        style={{ background: 'linear-gradient(135deg, #F65E3B, #F67C5F)', color: '#FFFFFF' }}
-                      >
-                        📺 Watch Now
-                      </button>
-                      <p className="text-[7px] mt-1" style={{ color: 'rgba(255,255,255,0.25)' }}>Ad ID: {ADMOB_CONFIG.rewarded.id}</p>
-                    </>
-                  ) : rewardAdPhase === 'playing' ? (
-                    <>
-                      <div className="w-full h-2 rounded-full overflow-hidden mb-1.5" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
-                        <motion.div
-                          className="h-full rounded-full"
-                          style={{ background: 'linear-gradient(90deg, #F65E3B, #EDC22E)' }}
-                          animate={{ width: `${((5 - rewardCountdown) / 5) * 100}%` }}
-                          transition={{ duration: 0.3 }}
-                        />
-                      </div>
-                      <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>Ad playing... {rewardCountdown}s</p>
-                      {/* Auto countdown */}
-                      <RewardedCountdown
-                        isPlaying={rewardAdPhase === 'playing'}
-                        countdown={rewardCountdown}
-                        setCountdown={setRewardCountdown}
-                        onComplete={() => setRewardAdPhase('complete')}
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300 }}
-                        className="text-2xl mb-1">🎫</motion.div>
-                      <p className="text-[10px] font-bold mb-1.5" style={{ color: '#00E676' }}>Spin Ticket Earned!</p>
-                      <button
-                        onClick={() => {
-                          onWatchAdForSpin()
-                          setShowRewardAd(false)
-                          setRewardAdPhase('ready')
-                        }}
-                        className="px-5 py-2 rounded-lg font-bold text-[10px]"
-                        style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF' }}
-                      >
-                        ✅ Claim
-                      </button>
-                    </>
-                  )}
-                  <button
-                    onClick={() => { setShowRewardAd(false); setRewardAdPhase('ready') }}
-                    className="block mx-auto mt-1.5 text-[8px]"
-                    style={{ color: 'rgba(255,255,255,0.3)' }}
-                  >
-                    Close
-                  </button>
-                </div>
+              {/* No tickets info */}
+              {spinTickets <= 0 && !result && (
+                <p className="text-center text-[10px] mt-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  No spin tickets! Play games, claim daily rewards, or get them from the shop.
+                </p>
               )}
             </div>
           </motion.div>
@@ -284,27 +213,4 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
       )}
     </AnimatePresence>
   )
-}
-
-// Countdown component for rewarded ad
-function RewardedCountdown({ isPlaying, countdown, setCountdown, onComplete }: {
-  isPlaying: boolean
-  countdown: number
-  setCountdown: (val: number) => void
-  onComplete: () => void
-}) {
-  const completedRef = useRef(false)
-
-  useEffect(() => {
-    if (!isPlaying || completedRef.current) return
-    if (countdown <= 0) {
-      completedRef.current = true
-      onComplete()
-      return
-    }
-    const timer = setTimeout(() => setCountdown(countdown - 1), 1000)
-    return () => clearTimeout(timer)
-  }, [isPlaying, countdown, setCountdown, onComplete])
-
-  return null // invisible - just handles the countdown logic
 }

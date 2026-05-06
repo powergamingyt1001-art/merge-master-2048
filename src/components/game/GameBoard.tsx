@@ -12,8 +12,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Direction, PowerUp } from '@/hooks/useGame'
 import { useGameContext } from '@/context/GameContext'
 import { TileComponent } from './Tile'
-import { RewardedAd } from './RewardedAd'
-import { BannerAd } from './BannerAd'
 import {
   Trophy, RotateCcw, Undo2, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
   Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle, Swords, Coins,
@@ -116,17 +114,11 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
   const boardSize = 4 * (cellSize + gap) + gap
   const prevScore = useRef(score)
   const [scoreGain, setScoreGain] = useState(0)
-  const [showRewardAd, setShowRewardAd] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
   const [gameOverDismissed, setGameOverDismissed] = useState(false)
 
-  // AD CONTROL: Track mid-game ad for TIME MODE (1 ad at halfway point)
-  const [showMidGameAd, setShowMidGameAd] = useState(false)
-  const midGameAdShown = useRef(false)
-
   // Determine game type
   const isBattleMode = gameMode === 'bot' || gameMode === 'coins' || gameMode === 'tournament'
-  const isTimeMode = gameMode === 'bot'
   const isCoinGame = gameMode === 'coins'
   const isTournament = gameMode === 'tournament'
   const isClassic = gameMode === 'classic'
@@ -143,13 +135,6 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
     const timer = setTimeout(() => { tickCountdown() }, 1000)
     return () => clearTimeout(timer)
   }, [countdownActive, countdownSecondsLeft, tickCountdown])
-
-  // Reset mid-game ad flag when new game starts
-  useEffect(() => {
-    if (isBattleMode && battleTimer === battleTimeLimit && countdownActive) {
-      midGameAdShown.current = false
-    }
-  }, [isBattleMode, battleTimer, battleTimeLimit, countdownActive])
 
   // Internet detection
   useEffect(() => {
@@ -178,21 +163,7 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
     prevScore.current = score
   }, [score])
 
-  // ============================================================
-  // AD CONTROL: TIME MODE - Show 1 ad at halfway point
-  // COINS MODE - NO ads during game (only 1 at start)
-  // TOURNAMENT - NO ads before/during, only after
-  // ============================================================
-  useEffect(() => {
-    if (!isOnline || !isBattleMode || botBattleResult || countdownOverlay || midGameAdShown.current) return
-    if (isTimeMode && battleTimeLimit > 0) {
-      const halfwayPoint = Math.floor(battleTimeLimit / 2)
-      if (battleTimer === halfwayPoint) {
-        midGameAdShown.current = true
-        setTimeout(() => setShowMidGameAd(true), 0)
-      }
-    }
-  }, [isOnline, isBattleMode, isTimeMode, battleTimer, battleTimeLimit, botBattleResult, countdownOverlay])
+
 
   const onMove = useCallback((dir: Direction) => { handleMove(dir) }, [handleMove])
 
@@ -268,8 +239,7 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
 
   const shouldBlink = progress <= 0.15 && isBattleMode && battleTimer > 0 && !botBattleResult
 
-  // Banner ad control
-  const showBannerAd = isClassic || (isTimeMode && !isCoinGame && !isTournament)
+
 
   // ============================================================
   // RENDER - Main game screen layout
@@ -465,7 +435,7 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
               Timer paused at {battleTimer}s • Score: {score}
             </p>
             <button
-              onClick={() => { setGameOverDismissed(true); setShowRewardAd(true) }}
+              onClick={() => { setGameOverDismissed(true); reviveWithAd() }}
               style={{
                 padding: '8px 24px',
                 borderRadius: 8,
@@ -481,7 +451,7 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
                 gap: 8,
                 margin: '0 auto',
               }}>
-              📺 Watch Ad & Get ❤️
+              ❤️ Get Free Life
             </button>
           </motion.div>
         )}
@@ -679,10 +649,7 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
         ))}
       </div>
 
-      {/* Banner Ad - bottom */}
-      <div className="mt-auto flex-shrink-0">
-        <BannerAd position="bottom" isOnline={isOnline && showBannerAd} />
-      </div>
+
 
       {/* Game Over Modal - for classic mode */}
       <AnimatePresence>
@@ -697,10 +664,10 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
               <h2 className="text-2xl font-extrabold mb-1" style={{ color: '#FFFFFF' }}>Game Over!</h2>
               <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>Score: {score} • Best: {bestScore}</p>
               <div className="space-y-2">
-                <button onClick={() => { setGameOverDismissed(true); setShowRewardAd(true) }}
+                <button onClick={() => { setGameOverDismissed(true); reviveWithAd() }}
                   className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
                   style={{ background: 'linear-gradient(135deg, #F65E3B, #F67C5F)', color: '#FFFFFF' }}>
-                  <Heart className="w-4 h-4" /> Watch Ad & Revive
+                  <Heart className="w-4 h-4" /> Get Free Life
                 </button>
                 <button onClick={() => {
                   addGameToHistory('classic', score, 'classic', 0, 0)
@@ -717,24 +684,6 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Rewarded Ad for revival */}
-      <RewardedAd isOpen={showRewardAd} onClose={() => setShowRewardAd(false)} onReward={reviveWithAd} isOnline={isOnline} />
-
-      {/* Mid-game ad for TIME MODE */}
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, display: showMidGameAd ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.7)' }}>
-        {showMidGameAd && (
-          <div style={{ background: '#1a0533', borderRadius: 16, padding: 24, textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)', maxWidth: 300 }}>
-            <p className="text-lg font-bold mb-2" style={{ color: '#FFFFFF' }}>📢 Mid-Game Ad</p>
-            <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>Continue watching to support the game</p>
-            <button onClick={() => setShowMidGameAd(false)}
-              className="px-6 py-2 rounded-lg font-bold text-xs"
-              style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
-              Close Ad
-            </button>
-          </div>
-        )}
-      </div>
 
       {/* ============================================================ */}
       {/* BLINK CSS ANIMATION - Injected via useEffect                 */}
