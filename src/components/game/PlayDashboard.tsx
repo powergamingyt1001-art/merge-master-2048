@@ -61,6 +61,11 @@ interface PlayDashboardProps {
   onMarkAllNotificationsRead: () => void
   onUpdatePlayerName: (name: string) => void
   onUpdatePlayerAvatar: (avatar: string) => void
+  dailyTasks?: { id: string; description: string; emoji: string; target: number; progress: number; reward: number; claimed: boolean }[]
+  onClaimDailyTask?: (id: string) => void
+  onResetAllData?: () => void
+  weeklyBonusClaimed?: boolean
+  onClaimWeeklyBonus?: () => void
 }
 
 const COIN_GAME_MODES = [

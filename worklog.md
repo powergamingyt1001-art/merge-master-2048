@@ -24,3 +24,35 @@ Stage Summary:
 - Interstitial ad: 5 seconds after going back to dashboard from game
 - Rewarded ad: In Lucky Spin (already was there)
 - LoadingScreen/Intro: Kept as original flash/intro style (no timing/countdown in intro)
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: FIX TIMER VISIBILITY - Create GameContext + Rewrite timer UI EXACTLY per HTML reference
+
+Work Log:
+- Diagnosed ROOT CAUSE (again): GameBoard.tsx still had `const game = useGame()` creating SEPARATE state
+- Created /src/context/GameContext.tsx with GameProvider and useGameContext hook
+- Rewrote /src/app/page.tsx to wrap everything in GameProvider
+- Completely rewrote /src/components/game/GameBoard.tsx:
+  - Uses useGameContext() instead of useGame() - NOW shares same state as page.tsx
+  - Timer UI EXACTLY like user's HTML reference:
+    - Timer text: fontSize 28, bold, white (or colored when blinking), monospace
+    - Layout: [SCORE] [TIMER] on top row
+    - Loading bar: 90% width, 10px height, #333 background, rounded corners
+    - Bar decreases left→right based on progress = timeLeft / totalTime
+    - Colors: >60% GREEN (#00e676), 30-60% YELLOW (#ffeb3b), 15-30% ORANGE (#ff9800), <15% RED (#ff3d00)
+    - Blink animation on BOTH timer text AND bar when <15% (timerBlink keyframes)
+  - Final countdown 5-4-3-2-1 overlay preserved
+  - Hearts/lives row below loading bar
+  - Ad control per mode preserved
+  - Background color matches user's reference: #1e1b3a
+- Added missing optional props to PlayDashboard.tsx interface (dailyTasks, weeklyBonus, etc.)
+- All lint checks pass, dev server compiles successfully
+
+Stage Summary:
+- ROOT CAUSE FIXED: GameBoard now uses GameContext instead of creating its own useGame()
+- Timer + Loading bar WILL NOW BE VISIBLE because gameMode and battleTimer are correctly shared
+- Timer UI matches user's HTML reference EXACTLY (simple text + thin bar + blink)
+- Colors match: GREEN >60%, YELLOW 30-60%, ORANGE 15-30%, RED+BLINK <15%
+- Background: #1e1b3a (matches user's reference)
