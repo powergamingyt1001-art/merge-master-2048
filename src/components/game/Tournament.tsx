@@ -99,14 +99,13 @@ export function Tournament({
   const [tab, setTab] = useState<TabType>('play')
   const weekNum = getWeekNumber()
   const timeLeft = getTimeLeftInWeek()
-  const isLatePool = weekNum >= 4
-  const prizes = isLatePool ? WEEK_PRIZES_LATE : WEEK_PRIZES_EARLY
-  const totalPool = isLatePool ? 15000 : 7000
+  // Always use 7K pool as per user request
+  const prizes = WEEK_PRIZES_EARLY
+  const totalPool = 7000
   const earlyPoolRemaining = getEarlyPoolRemaining()
-  const latePoolRemaining = getLatePoolRemaining()
-  const coinRanksCount = isLatePool ? Math.floor(latePoolRemaining / 50) : Math.floor(earlyPoolRemaining / 50)
-  const coinRankSpins = isLatePool ? 4 : 2
-  const noCoinSpins = isLatePool ? 3 : 2
+  const coinRanksCount = Math.floor(earlyPoolRemaining / 50)
+  const coinRankSpins = 2
+  const noCoinSpins = 2
   const canJoin = coins >= ENTRY_FEE
 
   // Build rankings based on tournament points
@@ -267,7 +266,7 @@ export function Tournament({
                         '10 score = 1 tournament point',
                         'Partial scores carry over to next game',
                         'Only tournament points count for ranking',
-                        `Prize pool: ${isLatePool ? '15K' : '7K'} coins weekly`,
+                        `Prize pool: 7K coins weekly`,
                         'Rankings reset every Monday',
                         'Daily limit: 20 games',
                       ].map((item, i) => (
@@ -324,7 +323,7 @@ export function Tournament({
                       #{prizes.length + 1} to #{prizes.length + coinRanksCount} — 50 coins + {coinRankSpins} spins each
                     </p>
                     <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                      Until {isLatePool ? '15K' : '7K'} pool is exhausted
+                      Until 7K pool is exhausted
                     </p>
                   </div>
 

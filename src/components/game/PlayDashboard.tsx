@@ -11,7 +11,7 @@ import { Tournament } from './Tournament'
 import { InvitePanel } from './InvitePanel'
 import { BannerAd } from './BannerAd'
 import { ProfilePanel, NotificationsPanel } from './ProfilePanel'
-import { PowerUp, Notification } from '@/hooks/useGame'
+import { PowerUp, Notification, DailyTask } from '@/hooks/useGame'
 
 interface PlayDashboardProps {
   coins: number
@@ -61,7 +61,7 @@ interface PlayDashboardProps {
   onMarkAllNotificationsRead: () => void
   onUpdatePlayerName: (name: string) => void
   onUpdatePlayerAvatar: (avatar: string) => void
-  dailyTasks?: { id: string; description: string; emoji: string; target: number; progress: number; reward: number; claimed: boolean }[]
+  dailyTasks?: DailyTask[]
   onClaimDailyTask?: (id: string) => void
   onResetAllData?: () => void
   weeklyBonusClaimed?: boolean
@@ -372,7 +372,7 @@ export function PlayDashboard({
             </div>
           </motion.div>
 
-          {/* Quick Actions: Streak + Spin + Leaderboard + Invite */}
+          {/* Quick Actions: Streak + Spin + Weekly + Leaderboard */}
           <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }}
             className="w-full grid grid-cols-4 gap-2">
             <button onClick={() => setShowStreak(true)}
@@ -389,6 +389,17 @@ export function PlayDashboard({
               <p className="text-[8px] font-bold" style={{ color: '#00E676' }}>Spin</p>
               <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{spinTickets} tickets</p>
             </button>
+            <button onClick={() => !weeklyBonusClaimed && onClaimWeeklyBonus?.()}
+              className="flex flex-col items-center gap-1 p-2.5 rounded-xl transition-transform hover:scale-[1.02] active:scale-95"
+              style={{
+                backgroundColor: weeklyBonusClaimed ? 'rgba(255,255,255,0.03)' : 'rgba(237,194,46,0.12)',
+                border: weeklyBonusClaimed ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(237,194,46,0.3)',
+                opacity: weeklyBonusClaimed ? 0.5 : 1,
+              }}>
+              <span className="text-lg">🎁</span>
+              <p className="text-[8px] font-bold" style={{ color: weeklyBonusClaimed ? 'rgba(255,255,255,0.3)' : '#EDC22E' }}>Weekly</p>
+              <p className="text-[7px]" style={{ color: weeklyBonusClaimed ? 'rgba(255,255,255,0.2)' : '#00E676' }}>{weeklyBonusClaimed ? 'Claimed' : '400 💰'}</p>
+            </button>
             <button onClick={() => setShowLeaderboard(true)}
               className="flex flex-col items-center gap-1 p-2.5 rounded-xl transition-transform hover:scale-[1.02] active:scale-95"
               style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)' }}>
@@ -396,12 +407,22 @@ export function PlayDashboard({
               <p className="text-[8px] font-bold" style={{ color: '#F65E3B' }}>Rank</p>
               <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Leaderboard</p>
             </button>
+          </motion.div>
+
+          {/* Invite Quick Action */}
+          <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.45 }}
+            className="w-full">
             <button onClick={() => setShowInvite(true)}
-              className="flex flex-col items-center gap-1 p-2.5 rounded-xl transition-transform hover:scale-[1.02] active:scale-95"
-              style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
-              <span className="text-lg">🤝</span>
-              <p className="text-[8px] font-bold" style={{ color: '#00E676' }}>Invite</p>
-              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Earn 5%</p>
+              className="w-full flex items-center justify-between p-2.5 rounded-xl transition-transform hover:scale-[1.01] active:scale-95"
+              style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.12)' }}>
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🤝</span>
+                <div className="text-left">
+                  <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>Invite Friends</p>
+                  <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Earn 5% commission</p>
+                </div>
+              </div>
+              <ChevronRight className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.3)' }} />
             </button>
           </motion.div>
 
@@ -504,7 +525,8 @@ export function PlayDashboard({
         gamePoints={gamePoints} bestScore={bestScore} modBestScore={modBestScore}
         coins={coins} gamesPlayedToday={gamesPlayedToday} maxGamesPerDay={maxGamesPerDay}
         invitedUsers={invitedUsers} onUpdateName={onUpdatePlayerName} onUpdateAvatar={onUpdatePlayerAvatar}
-        totalBattlesPlayed={totalBattlesPlayed} totalBattlesWon={totalBattlesWon} />
+        totalBattlesPlayed={totalBattlesPlayed} totalBattlesWon={totalBattlesWon}
+        onResetAllData={onResetAllData} />
       <NotificationsPanel isOpen={showNotifications} onClose={() => setShowNotifications(false)}
         notifications={notifications} onMarkRead={onMarkNotificationRead} onMarkAllRead={onMarkAllNotificationsRead} />
     </div>

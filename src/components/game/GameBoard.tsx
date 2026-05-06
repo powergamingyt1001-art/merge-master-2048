@@ -560,48 +560,7 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
           )}
         </AnimatePresence>
 
-        {/* Final countdown 5-4-3-2-1 - Before game ends */}
-        <AnimatePresence>
-          {isBattleMode && !botBattleResult && !countdownOverlay && battleTimer > 0 && battleTimer <= 5 && !timerPaused && (
-            <motion.div
-              key={`final-${battleTimer}`}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 flex flex-col items-center justify-center rounded-xl pointer-events-none"
-              style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 120 }}
-            >
-              <motion.div
-                key={battleTimer}
-                initial={{ scale: 3, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.3, opacity: 0 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-              >
-                <span
-                  className="text-8xl sm:text-9xl font-black"
-                  style={{
-                    color: battleTimer <= 2 ? '#EF4444' : '#FFD700',
-                    textShadow: battleTimer <= 2
-                      ? '0 0 60px rgba(239,68,68,0.8), 0 0 120px rgba(239,68,68,0.4)'
-                      : '0 0 40px rgba(255,215,0,0.6), 0 0 80px rgba(255,215,0,0.3)',
-                  }}
-                >
-                  {battleTimer}
-                </span>
-              </motion.div>
-              <motion.p
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="text-base font-bold mt-2"
-                style={{ color: battleTimer <= 2 ? '#EF4444' : 'rgba(255,255,255,0.7)' }}
-              >
-                {battleTimer <= 2 ? '⚠️ HURRY UP!' : '⏰ Time Running Out!'}
-              </motion.p>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Final countdown removed - no 5-4-3-2-1 overlay to waste user's time */}
 
         {/* Stuck overlay */}
         <AnimatePresence>

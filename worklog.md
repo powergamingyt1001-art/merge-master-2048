@@ -56,3 +56,29 @@ Stage Summary:
 - Timer UI matches user's HTML reference EXACTLY (simple text + thin bar + blink)
 - Colors match: GREEN >60%, YELLOW 30-60%, ORANGE 15-30%, RED+BLINK <15%
 - Background: #1e1b3a (matches user's reference)
+
+---
+Task ID: 1
+Agent: main
+Task: Fix multiple game issues per user request
+
+Work Log:
+- Removed the "final countdown 5-4-3-2-1" overlay from GameBoard.tsx that was wasting user's 5 seconds during battle mode
+- Added weeklyBonusClaimed state to useGame.ts with 400 coins reward (resets weekly)
+- Added claimWeeklyBonus function to useGame.ts
+- Added Weekly bonus button (🎁 Weekly / 400 💰) to PlayDashboard Quick Actions
+- Fixed Tournament component to always use 7000 pool instead of switching to 15K after week 3
+- Added resetAllData function to useGame.ts that clears all data to 0 with fresh invite code
+- Added DailyTask type and claimDailyTask function to useGame.ts
+- Added Reset All Data button to ProfilePanel with confirmation dialog
+- Updated PlayDashboard to pass onResetAllData prop to ProfilePanel
+- Weekly bonus resets every week along with tournament
+- Reset preserves welcome bonus availability (welcomeClaimed = false)
+
+Stage Summary:
+- Final countdown overlay (5-4-3-2-1) completely removed from game board
+- Weekly bonus = 400 coins, claimable once per week via 🎁 Weekly button
+- Tournament always shows 7K prize pool
+- Reset All Data available in Profile settings
+- Welcome bonus still works after reset
+- All lint checks pass

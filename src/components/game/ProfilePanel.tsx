@@ -22,6 +22,7 @@ interface ProfilePanelProps {
   onUpdateAvatar: (avatar: string) => void
   totalBattlesPlayed: number
   totalBattlesWon: number
+  onResetAllData?: () => void
 }
 
 const LEVEL_INFO = [
@@ -52,6 +53,7 @@ export function ProfilePanel({
   gamesPlayedToday, maxGamesPerDay, invitedUsers,
   onUpdateName, onUpdateAvatar,
   totalBattlesPlayed, totalBattlesWon,
+  onResetAllData,
 }: ProfilePanelProps) {
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState(playerName)
@@ -249,6 +251,22 @@ export function ProfilePanel({
                   </li>
                 </ul>
               </div>
+
+              {/* Reset Data Button */}
+              {onResetAllData && (
+                <button
+                  onClick={() => {
+                    if (window.confirm('Reset ALL data? This will clear everything and start fresh. Welcome bonus will be available again.')) {
+                      onResetAllData()
+                      onClose()
+                    }
+                  }}
+                  className="w-full mt-3 py-2.5 rounded-xl text-[10px] font-bold flex items-center justify-center gap-1.5 transition-transform hover:scale-[1.01] active:scale-95"
+                  style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)', color: '#F65E3B' }}
+                >
+                  🔄 Reset All Data
+                </button>
+              )}
             </div>
           </motion.div>
         </motion.div>

@@ -49,6 +49,16 @@ export interface GameHistoryEntry {
   timeLimit: number
 }
 
+export interface DailyTask {
+  id: string
+  description: string
+  emoji: string
+  target: number
+  progress: number
+  reward: number
+  claimed: boolean
+}
+
 export interface GameState {
   tiles: Tile[]
   score: number
@@ -120,6 +130,10 @@ export interface GameState {
   tournamentGamesPlayed: number
   // Game history
   gameHistory: GameHistoryEntry[]
+  // Weekly bonus
+  weeklyBonusClaimed: boolean
+  // Daily tasks
+  dailyTasks: DailyTask[]
 }
 
 const BOT_NAMES = [
@@ -353,6 +367,8 @@ export function useGame() {
       tournamentCarryOver: 0,
       tournamentGamesPlayed: 0,
       gameHistory: [],
+      weeklyBonusClaimed: false,
+      dailyTasks: [],
     }
 
     if (!saved) {
@@ -400,6 +416,7 @@ export function useGame() {
     let tournamentPoints = saved.tournamentPoints || 0
     let tournamentCarryOver = saved.tournamentCarryOver || 0
     let tournamentGamesPlayed = saved.tournamentGamesPlayed || 0
+    let weeklyBonusClaimed = saved.weeklyBonusClaimed || false
     // Simple weekly reset: check if last tournament week is different from current week
     if (saved.tournamentWeek) {
       const start = new Date(2025, 0, 6)
@@ -410,6 +427,7 @@ export function useGame() {
         tournamentPoints = 0
         tournamentCarryOver = 0
         tournamentGamesPlayed = 0
+        weeklyBonusClaimed = false // Reset weekly bonus each week
       }
     }
 
@@ -449,6 +467,8 @@ export function useGame() {
       tournamentCarryOver,
       tournamentGamesPlayed,
       gameHistory: saved.gameHistory || [],
+      weeklyBonusClaimed,
+      dailyTasks: saved.dailyTasks || [],
     }
   })
 
@@ -494,9 +514,11 @@ export function useGame() {
       tournamentGamesPlayed: state.tournamentGamesPlayed,
       tournamentWeek: currentWeek,
       gameHistory: state.gameHistory.slice(0, 30),
+      weeklyBonusClaimed: state.weeklyBonusClaimed,
+      dailyTasks: state.dailyTasks,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.gameHistory])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks])
 
   // Clear flash
   useEffect(() => {
@@ -1171,6 +1193,104 @@ export function useGame() {
     setState(prev => ({ ...prev, playerAvatar: avatar }))
   }, [])
 
+  // Weekly bonus: 400 coins, once per week
+  const claimWeeklyBonus = useCallback(() => {
+    setState(prev => {
+      if (prev.weeklyBonusClaimed) return prev
+      return {
+        ...prev,
+        weeklyBonusClaimed: true,
+        coins: prev.coins + 400,
+      }
+    })
+  }, [])
+
+  // Claim daily task reward
+  const claimDailyTask = useCallback((taskId: string) => {
+    setState(prev => {
+      const tasks = prev.dailyTasks.map(t => {
+        if (t.id === taskId && !t.claimed && t.progress >= t.target) {
+          return { ...t, claimed: true }
+        }
+        return t
+      })
+      const task = prev.dailyTasks.find(t => t.id === taskId)
+      if (!task || task.claimed || task.progress < task.target) return prev
+      return {
+        ...prev,
+        dailyTasks: tasks,
+        coins: prev.coins + task.reward,
+      }
+    })
+  }, [])
+
+  // Reset ALL data to 0 - fresh start (keeps welcome bonus available)
+  const resetAllData = useCallback(() => {
+    localStorage.removeItem('mergeMaster2048')
+    const tiles = initTiles()
+    prevState.current = null
+    setState({
+      tiles,
+      score: 0,
+      bestScore: 0,
+      gameOver: false,
+      won: false,
+      keepPlaying: false,
+      canUndo: false,
+      undoCount: 0,
+      maxUndos: 5,
+      undoTotal: 5,
+      lives: 3,
+      maxLives: 3,
+      hammerCount: 0,
+      magnetCount: 0,
+      blastCount: 0,
+      activePowerUp: null,
+      spinTickets: 0,
+      streakDay: 0,
+      lastLoginDate: getTodayStr(),
+      streakClaimed: [false, false, false, false, false, false, false],
+      welcomeClaimed: false, // Reset so welcome bonus can be claimed again
+      coins: 0,
+      gamePoints: 0,
+      gameMode: 'classic',
+      botOpponent: null,
+      botBattleResult: null,
+      modBestScore: 0,
+      battleTimer: 0,
+      battleTimeLimit: 60,
+      timerPaused: false,
+      countdownActive: false,
+      countdownSecondsLeft: 0,
+      consecutiveMerges: 0,
+      comboBonus: 0,
+      inviteCode: generateInviteCode(), // New fresh invite code
+      invitedBy: null,
+      invitedUsers: [],
+      commissionBalance: 0,
+      commissionClaimed: 0,
+      autoClaimCommission: false,
+      gamesPlayedToday: 0,
+      lastPlayDate: getTodayStr(),
+      maxGamesPerDay: 20,
+      notifications: [],
+      coinEntryFee: 0,
+      coinGameWon: null,
+      playerName: 'Player',
+      playerAvatar: '😎',
+      playerLevel: 1,
+      totalBattlesPlayed: 0,
+      totalBattlesWon: 0,
+      tournamentJoined: false,
+      tournamentPoints: 0,
+      tournamentCarryOver: 0,
+      tournamentGamesPlayed: 0,
+      gameHistory: [],
+      weeklyBonusClaimed: false,
+      dailyTasks: [],
+    })
+  }, [])
+
   return {
     ...state,
     handleMove,
@@ -1207,5 +1327,8 @@ export function useGame() {
     updatePlayerName,
     updatePlayerAvatar,
     addGameToHistory,
+    claimWeeklyBonus,
+    claimDailyTask,
+    resetAllData,
   }
 }
