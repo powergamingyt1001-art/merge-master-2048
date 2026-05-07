@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Vercel deployment — no static export needed
+  // Static export for deployment anywhere (Vercel, Netlify, etc.)
+  output: "export",
   typescript: {
     ignoreBuildErrors: true,
   },
