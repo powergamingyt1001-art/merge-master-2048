@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users, TrendingUp, Percent } from 'lucide-react'
-import { Notification, PLAYER_AVATARS } from '@/hooks/useGame'
+import { Notification, PLAYER_AVATARS, getLevelInfo, getNextLevelPoints, getCurrentLevelPoints, MAX_LEVEL } from '@/hooks/useGame'
 
 interface ProfilePanelProps {
   isOpen: boolean
@@ -25,27 +25,7 @@ interface ProfilePanelProps {
   onResetAllData?: () => void
 }
 
-const LEVEL_INFO = [
-  { level: 1, title: 'Beginner', color: '#8f7a66', icon: '🌱' },
-  { level: 2, title: 'Player', color: '#F59563', icon: '⚡' },
-  { level: 3, title: 'Expert', color: '#00E676', icon: '🔥' },
-  { level: 4, title: 'Master', color: '#EDC22E', icon: '👑' },
-  { level: 5, title: 'Legend', color: '#FF00FF', icon: '💎' },
-]
-
-function getLevelInfo(level: number) {
-  return LEVEL_INFO[Math.min(level, 5) - 1] || LEVEL_INFO[0]
-}
-
-function getNextLevelPoints(level: number): number {
-  const thresholds = [0, 500, 2000, 5000, 10000]
-  return thresholds[Math.min(level, 4)] || 10000
-}
-
-function getCurrentLevelPoints(level: number): number {
-  const thresholds = [0, 0, 500, 2000, 5000, 10000]
-  return thresholds[Math.min(level, 5)] || 0
-}
+// Level info is now imported from useGame.ts (50 levels)
 
 export function ProfilePanel({
   isOpen, onClose, playerName, playerAvatar, playerLevel,
@@ -185,13 +165,13 @@ export function ProfilePanel({
                 <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
                   <div className="h-full rounded-full transition-all" style={{ width: `${progressPct}%`, background: `linear-gradient(90deg, ${levelInfo.color}, ${levelInfo.color}CC)` }} />
                 </div>
-                {playerLevel < 5 && (
+                {playerLevel < MAX_LEVEL && (
                   <p className="text-[8px] mt-1 text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
                     {(nextLevelPts - gamePoints).toLocaleString()} more points to Level {playerLevel + 1}
                   </p>
                 )}
-                {playerLevel >= 5 && (
-                  <p className="text-[8px] mt-1 text-center" style={{ color: '#FF00FF' }}>MAX LEVEL! 🎉</p>
+                {playerLevel >= MAX_LEVEL && (
+                  <p className="text-[8px] mt-1 text-center" style={{ color: '#F65E3B' }}>MAX LEVEL 50! 🎮🔥</p>
                 )}
               </div>
 

@@ -302,13 +302,175 @@ function generateFairBotScore(playerScore: number): number {
   return Math.round(Math.max(50, base + (Math.random() * variance * 2 - variance)))
 }
 
-// Calculate player level from game points
+// ============================================================
+// LEVEL SYSTEM - 50 Levels, starting from 50 points
+// Gradually increasing difficulty
+// Level 1 = 0 pts, Level 2 = 50 pts, ... Level 50 = 5,300,000 pts
+// ============================================================
+export const LEVEL_THRESHOLDS = [
+  0,        // L1
+  50,       // L2
+  100,      // L3
+  200,      // L4
+  350,      // L5
+  500,      // L6
+  750,      // L7
+  1000,     // L8
+  1500,     // L9
+  2000,     // L10
+  3000,     // L11
+  4000,     // L12
+  5500,     // L13
+  7000,     // L14
+  9000,     // L15
+  12000,    // L16
+  15000,    // L17
+  20000,    // L18
+  25000,    // L19
+  32000,    // L20
+  40000,    // L21
+  50000,    // L22
+  60000,    // L23
+  75000,    // L24
+  90000,    // L25
+  110000,   // L26
+  130000,   // L27
+  160000,   // L28
+  190000,   // L29
+  230000,   // L30
+  280000,   // L31
+  340000,   // L32
+  400000,   // L33
+  480000,   // L34
+  570000,   // L35
+  680000,   // L36
+  800000,   // L37
+  950000,   // L38
+  1100000,  // L39
+  1300000,  // L40
+  1500000,  // L41
+  1750000,  // L42
+  2000000,  // L43
+  2300000,  // L44
+  2600000,  // L45
+  3000000,  // L46
+  3500000,  // L47
+  4000000,  // L48
+  4600000,  // L49
+  5300000,  // L50 (MAX)
+]
+
+export const LEVEL_TITLES = [
+  'Beginner',       // 1
+  'Newbie',         // 2
+  'Starter',        // 3
+  'Learner',        // 4
+  'Rookie',         // 5
+  'Novice',         // 6
+  'Apprentice',     // 7
+  'Trainee',        // 8
+  'Player',         // 9
+  'Skilled',        // 10
+  'Adept',          // 11
+  'Competent',      // 12
+  'Proficient',     // 13
+  'Experienced',    // 14
+  'Advanced',       // 15
+  'Expert',         // 16
+  'Veteran',        // 17
+  'Elite',          // 18
+  'Champion',       // 19
+  'Master',         // 20
+  'Grand Master',   // 21
+  'Supreme',        // 22
+  'Heroic',         // 23
+  'Mythic',         // 24
+  'Immortal',       // 25
+  'Divine',         // 26
+  'Celestial',      // 27
+  'Transcendent',   // 28
+  'Ascendant',      // 29
+  'Omnipotent',     // 30
+  'Cosmic',         // 31
+  'Galactic',       // 32
+  'Universal',      // 33
+  'Dimensional',    // 34
+  'Infinite',       // 35
+  'Eternal',        // 36
+  'Timeless',       // 37
+  'Boundless',      // 38
+  'Limitless',      // 39
+  'Absolute',       // 40
+  'Paramount',      // 41
+  'Sovereign',      // 42
+  'Emperor',        // 43
+  'Overlord',       // 44
+  'Apex',           // 45
+  'Zenith',         // 46
+  'Pinnacle',       // 47
+  'Apex Lord',      // 48
+  'Ultimate',       // 49
+  'Merge God',      // 50
+]
+
+export const LEVEL_ICONS = [
+  '🌱', '🌿', '🍀', '⭐', '🌟',    // 1-5
+  '⚡', '🔥', '💫', '🎯', '🛡️',    // 6-10
+  '💎', '🏆', '👑', '⚜️', '🗡️',    // 11-15
+  '🦅', '🐉', '🔱', '⚔️', '🦁',    // 16-20
+  '👑', '🌟', '💫', '🔮', '🌈',    // 21-25
+  '⚡', '🔥', '🌟', '💫', '🔮',    // 26-30
+  '🪐', '🌍', '🌌', '✨', '🌈',    // 31-35
+  '⏳', '🔮', '🌀', '💫', '🌟',    // 36-40
+  '🔱', '👑', '🏰', '⚡', '🏔️',    // 41-45
+  '🌟', '💫', '🔮', '👑', '🎮',    // 46-50
+]
+
+export const LEVEL_COLORS = [
+  '#8f7a66', '#7cb342', '#66bb6a', '#26a69a', '#00bcd4',  // 1-5
+  '#42a5f5', '#5c6bc0', '#7e57c2', '#ab47bc', '#ec407a',  // 6-10
+  '#ef5350', '#ff7043', '#ffa726', '#ffca28', '#d4e157',  // 11-15
+  '#00E676', '#26c6da', '#42a5f5', '#7c4dff', '#e040fb',  // 16-20
+  '#EDC22E', '#FF7A00', '#F65E3B', '#00E676', '#FF00FF',  // 21-25
+  '#00FFFF', '#FFD700', '#FF69B4', '#7B68EE', '#00FA9A',  // 26-30
+  '#9370DB', '#FF6347', '#4169E1', '#32CD32', '#FF1493',  // 31-35
+  '#00CED1', '#FFD700', '#8A2BE2', '#00FF7F', '#DC143C',  // 36-40
+  '#FF8C00', '#7FFF00', '#4B0082', '#FF4500', '#1E90FF',  // 41-45
+  '#FF00FF', '#FFD700', '#00FF00', '#FF69B4', '#F65E3B',  // 46-50
+]
+
+export const MAX_LEVEL = 50
+
+// Calculate player level from game points (50 levels)
 function calculateLevel(gamePoints: number): number {
-  if (gamePoints >= 10000) return 5
-  if (gamePoints >= 5000) return 4
-  if (gamePoints >= 2000) return 3
-  if (gamePoints >= 500) return 2
+  for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (gamePoints >= LEVEL_THRESHOLDS[i]) return i + 1
+  }
   return 1
+}
+
+// Get level info helper
+export function getLevelInfo(level: number) {
+  const idx = Math.min(Math.max(level, 1), MAX_LEVEL) - 1
+  return {
+    level: idx + 1,
+    title: LEVEL_TITLES[idx],
+    icon: LEVEL_ICONS[idx],
+    color: LEVEL_COLORS[idx],
+    threshold: LEVEL_THRESHOLDS[idx],
+  }
+}
+
+// Get next level's required points
+export function getNextLevelPoints(level: number): number {
+  if (level >= MAX_LEVEL) return LEVEL_THRESHOLDS[MAX_LEVEL - 1]
+  return LEVEL_THRESHOLDS[level] // thresholds[level] is the threshold for level+1
+}
+
+// Get current level's starting points
+export function getCurrentLevelPoints(level: number): number {
+  const idx = Math.min(Math.max(level, 1), MAX_LEVEL) - 1
+  return LEVEL_THRESHOLDS[idx]
 }
 
 export function useGame() {

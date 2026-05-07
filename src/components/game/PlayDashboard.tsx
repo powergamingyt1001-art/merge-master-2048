@@ -10,7 +10,7 @@ import { Leaderboard } from './Leaderboard'
 import { Tournament } from './Tournament'
 import { InvitePanel } from './InvitePanel'
 import { ProfilePanel, NotificationsPanel } from './ProfilePanel'
-import { PowerUp, Notification, DailyTask } from '@/hooks/useGame'
+import { PowerUp, Notification, DailyTask, getLevelInfo } from '@/hooks/useGame'
 
 interface PlayDashboardProps {
   coins: number
@@ -178,14 +178,14 @@ export function PlayDashboard({
               style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <div className="w-8 h-8 rounded-full flex items-center justify-center"
                 style={{
-                  background: playerLevel >= 4 ? 'linear-gradient(135deg, #EDC22E, #FF7A00)' : playerLevel >= 2 ? 'linear-gradient(135deg, #00E676, #00C853)' : 'rgba(255,255,255,0.1)',
+                  background: playerLevel >= 16 ? `linear-gradient(135deg, ${getLevelInfo(playerLevel).color}, ${getLevelInfo(playerLevel).color}88)` : playerLevel >= 6 ? `linear-gradient(135deg, ${getLevelInfo(playerLevel).color}, ${getLevelInfo(playerLevel).color}44)` : 'rgba(255,255,255,0.1)',
                   border: '1.5px solid rgba(255,255,255,0.2)',
                 }}>
                 <span className="text-base">{playerAvatar}</span>
               </div>
               <div className="text-left">
                 <p className="text-[9px] font-bold leading-tight" style={{ color: '#FFFFFF' }}>{playerName}</p>
-                <p className="text-[7px] leading-tight" style={{ color: 'rgba(255,255,255,0.4)' }}>Lv.{playerLevel}</p>
+                <p className="text-[7px] leading-tight" style={{ color: getLevelInfo(playerLevel).color }}>Lv.{playerLevel} {getLevelInfo(playerLevel).icon}</p>
               </div>
             </button>
 
