@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Megaphone } from 'lucide-react'
-import { ADMOB_CONFIG } from '@/lib/admob'
+import { AD_CONFIG, pushAd } from '@/lib/admob'
 
 interface InterstitialAdProps {
   isOpen: boolean
@@ -19,16 +19,28 @@ export function InterstitialAd({ isOpen, onClose, isOnline, duration = 5, isAppO
   const [countdown, setCountdown] = useState(0)
   const [canClose, setCanClose] = useState(false)
   const [wasOpen, setWasOpen] = useState(false)
+  const [adLoaded, setAdLoaded] = useState(false)
 
   // Detect when ad opens and initialize
   if (isOpen && !wasOpen) {
     setWasOpen(true)
     setCountdown(duration)
     setCanClose(false)
+    setAdLoaded(false)
   }
   if (!isOpen && wasOpen) {
     setWasOpen(false)
   }
+
+  // Push AdSense ad when interstitial opens
+  useEffect(() => {
+    if (!isOpen || !isOnline) return
+    const timer = setTimeout(() => {
+      pushAd()
+      setAdLoaded(true)
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [isOpen, isOnline])
 
   // Countdown timer
   useEffect(() => {
@@ -60,8 +72,7 @@ export function InterstitialAd({ isOpen, onClose, isOnline, duration = 5, isAppO
     return null
   }
 
-  const adUnitId = isAppOpen ? ADMOB_CONFIG.appOpen.id : ADMOB_CONFIG.interstitial.id
-  const adLabel = isAppOpen ? 'App Open Ad' : 'Advertisement'
+  const adSlotId = isAppOpen ? AD_CONFIG.appOpen.id : AD_CONFIG.interstitial.id
 
   return (
     <AnimatePresence>
@@ -106,37 +117,27 @@ export function InterstitialAd({ isOpen, onClose, isOnline, duration = 5, isAppO
               </button>
             </div>
 
-            {/* Ad content - FULL SCREEN */}
-            <div className="flex-1 w-full max-w-sm flex flex-col items-center justify-center px-6">
-              {isAppOpen ? (
-                /* App Open Ad - more prominent */
-                <div className="w-full aspect-[3/4] max-h-[60vh] rounded-xl flex flex-col items-center justify-center gap-4"
-                  style={{
-                    backgroundColor: 'rgba(237,194,46,0.06)',
-                    border: '2px solid rgba(237,194,46,0.2)',
-                    boxShadow: '0 0 60px rgba(237,194,46,0.1)',
-                  }}>
-                  <motion.div
-                    animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
-                    transition={{ repeat: Infinity, duration: 2 }}
-                  >
-                    <Megaphone className="w-20 h-20" style={{ color: '#EDC22E' }} />
-                  </motion.div>
-                  <p className="text-xl font-bold" style={{ color: '#EDC22E' }}>App Open Ad</p>
-                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Your game will start shortly</p>
-                  <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                    Ad ID: {adUnitId}
-                  </p>
-                </div>
-              ) : (
-                /* Interstitial Ad - standard */
-                <div className="w-full aspect-[3/4] max-h-[60vh] rounded-xl flex flex-col items-center justify-center gap-3"
+            {/* AdSense Interstitial Ad */}
+            <div className="flex-1 w-full max-w-sm flex flex-col items-center justify-center px-4">
+              <div className="w-full rounded-xl overflow-hidden" style={{ minHeight: 250 }}>
+                <ins
+                  className="adsbygoogle"
+                  style={{ display: 'block' }}
+                  data-ad-client={AD_CONFIG.publisherId}
+                  data-ad-slot={adSlotId}
+                  data-ad-format="rectangle"
+                  data-full-width-responsive="true"
+                />
+              </div>
+              {/* Fallback if ad doesn't load */}
+              {!adLoaded && (
+                <div className="w-full aspect-[3/4] max-h-[40vh] rounded-xl flex flex-col items-center justify-center gap-3 mt-2"
                   style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <Megaphone className="w-16 h-16" style={{ color: '#EDC22E' }} />
-                  <p className="text-lg font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>{adLabel}</p>
-                  <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                    Ad ID: {adUnitId}
+                  <p className="text-lg font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                    {isAppOpen ? 'App Open Ad' : 'Advertisement'}
                   </p>
+                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Loading ad...</p>
                 </div>
               )}
             </div>

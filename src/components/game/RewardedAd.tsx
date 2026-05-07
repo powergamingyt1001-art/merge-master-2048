@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Heart, Gift } from 'lucide-react'
-import { ADMOB_CONFIG } from '@/lib/admob'
+import { AD_CONFIG, pushAd } from '@/lib/admob'
 
 interface RewardedAdProps {
   isOpen: boolean
@@ -44,6 +44,8 @@ export function RewardedAd({ isOpen, onClose, onReward, isOnline }: RewardedAdPr
   const handleStart = useCallback(() => {
     if (!isOnline) { onReward(); onClose(); return }
     setPhase('playing')
+    // Push AdSense rewarded ad
+    pushAd()
   }, [isOnline, onReward, onClose])
 
   const handleClaim = useCallback(() => {
@@ -107,22 +109,29 @@ export function RewardedAd({ isOpen, onClose, onReward, isOnline }: RewardedAdPr
                     style={{ background: 'linear-gradient(135deg, #F65E3B, #F67C5F)', color: '#FFFFFF', boxShadow: '0 4px 20px rgba(246,94,59,0.4)' }}>
                     📺 Watch Ad
                   </button>
-                  <p className="text-[8px] mt-2" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                    Ad ID: {ADMOB_CONFIG.rewarded.id}
-                  </p>
                 </div>
               ) : phase === 'playing' ? (
-                <div className="text-center py-8">
-                  <div className="relative w-full h-28 rounded-xl mb-4 overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Gift className="w-10 h-10" style={{ color: '#EDC22E' }} />
-                    </div>
-                    <div className="absolute bottom-0 left-0 right-0 h-1" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
-                      <motion.div className="h-full" style={{ background: 'linear-gradient(90deg, #F65E3B, #EDC22E)' }}
-                        initial={{ width: '0%' }} animate={{ width: `${((5 - countdown) / 5) * 100}%` }} transition={{ duration: 0.3 }} />
-                    </div>
+                <div className="text-center py-4">
+                  {/* AdSense Rewarded Video Ad */}
+                  <div className="w-full rounded-xl overflow-hidden mb-3" style={{ minHeight: 200 }}>
+                    <ins
+                      className="adsbygoogle"
+                      style={{ display: 'block' }}
+                      data-ad-client={AD_CONFIG.publisherId}
+                      data-ad-slot={AD_CONFIG.rewarded.id}
+                      data-ad-format="rectangle"
+                      data-full-width-responsive="true"
+                    />
                   </div>
-                  <p className="text-sm font-semibold" style={{ color: '#FFFFFF' }}>Reward in <span style={{ color: '#F65E3B' }}>{countdown}s</span></p>
+                  <div className="relative w-full h-6 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
+                    <motion.div className="h-full rounded-full" style={{ background: 'linear-gradient(90deg, #F65E3B, #EDC22E)' }}
+                      animate={{ width: `${((5 - countdown) / 5) * 100}%` }} transition={{ duration: 0.3 }} />
+                  </div>
+                  <p className="text-xs font-semibold mt-2" style={{ color: '#FFFFFF' }}>Reward in <span style={{ color: '#F65E3B' }}>{countdown}s</span></p>
+                  <div className="flex items-center justify-center gap-1 mt-1">
+                    <Gift className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                    <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Ad playing...</span>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-6">

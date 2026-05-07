@@ -1,21 +1,27 @@
-// AdMob Configuration - All ad unit IDs
-export const ADMOB_CONFIG = {
-  appId: 'ca-app-pub-4486474550864010~8947867010',
+// Google AdSense Configuration for Web
+// AdMob only works in native Android/iOS apps — NOT in web browsers
+// For web, we use Google AdSense / Google Publisher Tag (GPT)
+
+export const AD_CONFIG = {
+  // 🔴 IMPORTANT: Replace with YOUR AdSense publisher ID after approval
+  // Get it from: https://www.google.com/adsense/ → Account → Publisher ID
+  // Format: ca-pub-XXXXXXXXXXXXXXXX
+  publisherId: 'ca-pub-4486474550864010',
+
+  // Ad slot IDs — create these in AdSense dashboard
+  // Format: XXXXXXXXXX (10 digits)
   banner: {
-    id: 'ca-app-pub-4486474550864010/6765165617',
+    id: '6765165617',
     position: 'bottom' as const,
   },
   rewarded: {
-    id: 'ca-app-pub-4486474550864010/6068310395',
-    // Only 1 reward per ad watch
+    id: '6068310395',
   },
   interstitial: {
-    id: 'ca-app-pub-4486474550864010/3118624132',
-    // Show between game transitions
+    id: '3118624132',
   },
   appOpen: {
-    id: 'ca-app-pub-4486474550864010/9199757262',
-    // Show when app opens
+    id: '9199757262',
   },
 }
 
@@ -43,4 +49,29 @@ export function markInterstitialShown() {
 
 export function markAppOpenShown() {
   lastAppOpenTime = Date.now()
+}
+
+// Initialize Google AdSense script
+export function initAdSense() {
+  if (typeof window === 'undefined') return
+  if (document.getElementById('adsense-script')) return
+
+  const script = document.createElement('script')
+  script.id = 'adsense-script'
+  script.async = true
+  script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${AD_CONFIG.publisherId}`
+  script.crossOrigin = 'anonymous'
+  document.head.appendChild(script)
+}
+
+// Push an ad to AdSense
+export function pushAd() {
+  if (typeof window === 'undefined') return
+  try {
+    const w = window as Window & { adsbygoogle: unknown[] }
+    w.adsbygoogle = w.adsbygoogle || []
+    w.adsbygoogle.push({})
+  } catch {
+    // AdSense not loaded yet
+  }
 }
