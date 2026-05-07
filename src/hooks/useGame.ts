@@ -303,174 +303,210 @@ function generateFairBotScore(playerScore: number): number {
 }
 
 // ============================================================
-// LEVEL SYSTEM - 50 Levels, starting from 50 points
-// Gradually increasing difficulty
-// Level 1 = 0 pts, Level 2 = 50 pts, ... Level 50 = 5,300,000 pts
+// LEVEL SYSTEM - 1000 Levels, starting from 50 points
+// Gradually increasing exponential difficulty
+// Level 1 = 0 pts, Level 2 = 50 pts, Level 10 = 2,000 pts
+// Level 50 = 50,000 pts, Level 100 = 500,000 pts
+// Level 200 = 5,000,000 pts, Level 500 = 500,000,000 pts
+// Level 1000 = 100,000,000,000 pts
 // ============================================================
-export const LEVEL_THRESHOLDS = [
-  0,        // L1
-  50,       // L2
-  100,      // L3
-  200,      // L4
-  350,      // L5
-  500,      // L6
-  750,      // L7
-  1000,     // L8
-  1500,     // L9
-  2000,     // L10
-  3000,     // L11
-  4000,     // L12
-  5500,     // L13
-  7000,     // L14
-  9000,     // L15
-  12000,    // L16
-  15000,    // L17
-  20000,    // L18
-  25000,    // L19
-  32000,    // L20
-  40000,    // L21
-  50000,    // L22
-  60000,    // L23
-  75000,    // L24
-  90000,    // L25
-  110000,   // L26
-  130000,   // L27
-  160000,   // L28
-  190000,   // L29
-  230000,   // L30
-  280000,   // L31
-  340000,   // L32
-  400000,   // L33
-  480000,   // L34
-  570000,   // L35
-  680000,   // L36
-  800000,   // L37
-  950000,   // L38
-  1100000,  // L39
-  1300000,  // L40
-  1500000,  // L41
-  1750000,  // L42
-  2000000,  // L43
-  2300000,  // L44
-  2600000,  // L45
-  3000000,  // L46
-  3500000,  // L47
-  4000000,  // L48
-  4600000,  // L49
-  5300000,  // L50 (MAX)
+
+export const MAX_LEVEL = 1000
+
+// Original titles/icons/colors for levels 1-50 (backward compatible)
+const ORIGINAL_TITLES = [
+  'Beginner', 'Newbie', 'Starter', 'Learner', 'Rookie',
+  'Novice', 'Apprentice', 'Trainee', 'Player', 'Skilled',
+  'Adept', 'Competent', 'Proficient', 'Experienced', 'Advanced',
+  'Expert', 'Veteran', 'Elite', 'Champion', 'Master',
+  'Grand Master', 'Supreme', 'Heroic', 'Mythic', 'Immortal',
+  'Divine', 'Celestial', 'Transcendent', 'Ascendant', 'Omnipotent',
+  'Cosmic', 'Galactic', 'Universal', 'Dimensional', 'Infinite',
+  'Eternal', 'Timeless', 'Boundless', 'Limitless', 'Absolute',
+  'Paramount', 'Sovereign', 'Emperor', 'Overlord', 'Apex',
+  'Zenith', 'Pinnacle', 'Apex Lord', 'Ultimate', 'Merge God',
 ]
 
-export const LEVEL_TITLES = [
-  'Beginner',       // 1
-  'Newbie',         // 2
-  'Starter',        // 3
-  'Learner',        // 4
-  'Rookie',         // 5
-  'Novice',         // 6
-  'Apprentice',     // 7
-  'Trainee',        // 8
-  'Player',         // 9
-  'Skilled',        // 10
-  'Adept',          // 11
-  'Competent',      // 12
-  'Proficient',     // 13
-  'Experienced',    // 14
-  'Advanced',       // 15
-  'Expert',         // 16
-  'Veteran',        // 17
-  'Elite',          // 18
-  'Champion',       // 19
-  'Master',         // 20
-  'Grand Master',   // 21
-  'Supreme',        // 22
-  'Heroic',         // 23
-  'Mythic',         // 24
-  'Immortal',       // 25
-  'Divine',         // 26
-  'Celestial',      // 27
-  'Transcendent',   // 28
-  'Ascendant',      // 29
-  'Omnipotent',     // 30
-  'Cosmic',         // 31
-  'Galactic',       // 32
-  'Universal',      // 33
-  'Dimensional',    // 34
-  'Infinite',       // 35
-  'Eternal',        // 36
-  'Timeless',       // 37
-  'Boundless',      // 38
-  'Limitless',      // 39
-  'Absolute',       // 40
-  'Paramount',      // 41
-  'Sovereign',      // 42
-  'Emperor',        // 43
-  'Overlord',       // 44
-  'Apex',           // 45
-  'Zenith',         // 46
-  'Pinnacle',       // 47
-  'Apex Lord',      // 48
-  'Ultimate',       // 49
-  'Merge God',      // 50
+const ORIGINAL_ICONS = [
+  '🌱', '🌿', '🍀', '⭐', '🌟',
+  '⚡', '🔥', '💫', '🎯', '🛡️',
+  '💎', '🏆', '👑', '⚜️', '🗡️',
+  '🦅', '🐉', '🔱', '⚔️', '🦁',
+  '👑', '🌟', '💫', '🔮', '🌈',
+  '⚡', '🔥', '🌟', '💫', '🔮',
+  '🪐', '🌍', '🌌', '✨', '🌈',
+  '⏳', '🔮', '🌀', '💫', '🌟',
+  '🔱', '👑', '🏰', '⚡', '🏔️',
+  '🌟', '💫', '🔮', '👑', '🎮',
 ]
 
-export const LEVEL_ICONS = [
-  '🌱', '🌿', '🍀', '⭐', '🌟',    // 1-5
-  '⚡', '🔥', '💫', '🎯', '🛡️',    // 6-10
-  '💎', '🏆', '👑', '⚜️', '🗡️',    // 11-15
-  '🦅', '🐉', '🔱', '⚔️', '🦁',    // 16-20
-  '👑', '🌟', '💫', '🔮', '🌈',    // 21-25
-  '⚡', '🔥', '🌟', '💫', '🔮',    // 26-30
-  '🪐', '🌍', '🌌', '✨', '🌈',    // 31-35
-  '⏳', '🔮', '🌀', '💫', '🌟',    // 36-40
-  '🔱', '👑', '🏰', '⚡', '🏔️',    // 41-45
-  '🌟', '💫', '🔮', '👑', '🎮',    // 46-50
+const ORIGINAL_COLORS = [
+  '#8f7a66', '#7cb342', '#66bb6a', '#26a69a', '#00bcd4',
+  '#42a5f5', '#5c6bc0', '#7e57c2', '#ab47bc', '#ec407a',
+  '#ef5350', '#ff7043', '#ffa726', '#ffca28', '#d4e157',
+  '#00E676', '#26c6da', '#42a5f5', '#7c4dff', '#e040fb',
+  '#EDC22E', '#FF7A00', '#F65E3B', '#00E676', '#FF00FF',
+  '#00FFFF', '#FFD700', '#FF69B4', '#7B68EE', '#00FA9A',
+  '#9370DB', '#FF6347', '#4169E1', '#32CD32', '#FF1493',
+  '#00CED1', '#FFD700', '#8A2BE2', '#00FF7F', '#DC143C',
+  '#FF8C00', '#7FFF00', '#4B0082', '#FF4500', '#1E90FF',
+  '#FF00FF', '#FFD700', '#00FF00', '#FF69B4', '#F65E3B',
 ]
 
-export const LEVEL_COLORS = [
-  '#8f7a66', '#7cb342', '#66bb6a', '#26a69a', '#00bcd4',  // 1-5
-  '#42a5f5', '#5c6bc0', '#7e57c2', '#ab47bc', '#ec407a',  // 6-10
-  '#ef5350', '#ff7043', '#ffa726', '#ffca28', '#d4e157',  // 11-15
-  '#00E676', '#26c6da', '#42a5f5', '#7c4dff', '#e040fb',  // 16-20
-  '#EDC22E', '#FF7A00', '#F65E3B', '#00E676', '#FF00FF',  // 21-25
-  '#00FFFF', '#FFD700', '#FF69B4', '#7B68EE', '#00FA9A',  // 26-30
-  '#9370DB', '#FF6347', '#4169E1', '#32CD32', '#FF1493',  // 31-35
-  '#00CED1', '#FFD700', '#8A2BE2', '#00FF7F', '#DC143C',  // 36-40
-  '#FF8C00', '#7FFF00', '#4B0082', '#FF4500', '#1E90FF',  // 41-45
-  '#FF00FF', '#FFD700', '#00FF00', '#FF69B4', '#F65E3B',  // 46-50
-]
-
-export const MAX_LEVEL = 50
-
-// Calculate player level from game points (50 levels)
-function calculateLevel(gamePoints: number): number {
-  for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
-    if (gamePoints >= LEVEL_THRESHOLDS[i]) return i + 1
+// Convert number to Roman numeral (for tier suffixes in high-level titles)
+function toRoman(num: number): string {
+  const values = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
+  const numerals = ['M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I']
+  let result = ''
+  for (let i = 0; i < values.length; i++) {
+    while (num >= values[i]) {
+      result += numerals[i]
+      num -= values[i]
+    }
   }
-  return 1
+  return result
 }
 
-// Get level info helper
+// Convert HSL to hex color string
+function hslToHex(h: number, s: number, l: number): string {
+  s /= 100
+  l /= 100
+  const a = s * Math.min(l, 1 - l)
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12
+    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
+    return Math.round(255 * Math.max(0, Math.min(1, color))).toString(16).padStart(2, '0')
+  }
+  return `#${f(0)}${f(8)}${f(4)}`
+}
+
+// Compute the point threshold for a given level (1-1000)
+// Uses piecewise power-law interpolation between checkpoints:
+// L1=0, L2=50, L10=2000, L50=50000, L100=500000,
+// L200=5000000, L500=500000000, L1000=100000000000
+export function getLevelThreshold(level: number): number {
+  if (level <= 1) return 0
+  const l = level - 1 // l goes from 1 to 999
+
+  // Piecewise segments with continuous boundaries
+  if (l <= 1) return 50                                                             // L1→L2
+  if (l <= 9) return Math.floor(50 + 1950 * Math.pow((l - 1) / 8, 1.8))            // L2→L10
+  if (l <= 49) return Math.floor(2000 + 48000 * Math.pow((l - 9) / 40, 2.0))       // L10→L50
+  if (l <= 99) return Math.floor(50000 + 450000 * Math.pow((l - 49) / 50, 2.2))    // L50→L100
+  if (l <= 199) return Math.floor(500000 + 4500000 * Math.pow((l - 99) / 100, 2.5)) // L100→L200
+  if (l <= 499) return Math.floor(5000000 + 495000000 * Math.pow((l - 199) / 300, 2.8)) // L200→L500
+  return Math.floor(500000000 + 99500000000 * Math.pow((l - 499) / 500, 3.0))       // L500→L1000
+}
+
+// Generate title for a given level (1-1000)
+export function getLevelTitle(level: number): string {
+  const clampedLevel = Math.min(Math.max(level, 1), MAX_LEVEL)
+  if (clampedLevel <= 50) return ORIGINAL_TITLES[clampedLevel - 1]
+
+  // Levels 51-100: Metal/Gem rank + Class (5×10=50 combos)
+  if (clampedLevel <= 100) {
+    const prefixes = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond']
+    const suffixes = ['Warrior', 'Knight', 'Sage', 'Guardian', 'Paladin', 'Commander', 'Sentinel', 'Warden', 'Champion', 'Hero']
+    const idx = clampedLevel - 51
+    return `${prefixes[Math.floor(idx / 10) % prefixes.length]} ${suffixes[idx % suffixes.length]}`
+  }
+
+  // Levels 101-200: Elemental + Title (10×10=100 combos)
+  if (clampedLevel <= 200) {
+    const prefixes = ['Fire', 'Ice', 'Storm', 'Shadow', 'Light', 'Thunder', 'Frost', 'Void', 'Arcane', 'Sacred']
+    const suffixes = ['Lord', 'Sage', 'Master', 'King', 'Oracle', 'Archon', 'Titan', 'Deity', 'Phoenix', 'Dragon']
+    const idx = clampedLevel - 101
+    return `${prefixes[Math.floor(idx / 10) % prefixes.length]} ${suffixes[idx % suffixes.length]}`
+  }
+
+  // Levels 201-500: Cosmic prefix + Roman numeral tier (15×20=300 combos)
+  if (clampedLevel <= 500) {
+    const prefixes = ['Nebula', 'Stellar', 'Astral', 'Solar', 'Lunar', 'Comet', 'Nova', 'Quasar', 'Pulsar', 'Cosmos', 'Galactic', 'Orbital', 'Zenith', 'Eclipse', 'Aurora']
+    const idx = clampedLevel - 201
+    const prefixIdx = Math.floor(idx / 20) % prefixes.length
+    const tierNum = (idx % 20) + 1
+    return `${prefixes[prefixIdx]} ${toRoman(tierNum)}`
+  }
+
+  // Levels 501-1000: Mythic prefix + Roman numeral tier (20×25=500 combos)
+  const prefixes = ['Omega', 'Alpha', 'Ultra', 'Mega', 'Prime', 'Exalted', 'Sovereign', 'Transcendent', 'Eternal', 'Primordial', 'Celestial', 'Immortal', 'Divine', 'Infinite', 'Absolute', 'Cosmic', 'Apotheosis', 'Paradigm', 'Apex', 'Supreme']
+  const idx = clampedLevel - 501
+  const prefixIdx = Math.floor(idx / 25) % prefixes.length
+  const tierNum = (idx % 25) + 1
+  return `${prefixes[prefixIdx]} ${toRoman(tierNum)}`
+}
+
+// Generate icon for a given level (1-1000)
+export function getLevelIcon(level: number): string {
+  const clampedLevel = Math.min(Math.max(level, 1), MAX_LEVEL)
+  if (clampedLevel <= 50) return ORIGINAL_ICONS[clampedLevel - 1]
+
+  // Icon pools by level range
+  if (clampedLevel <= 100) {
+    const pool = ['⚔️', '🛡️', '🏹', '🗡️', '🏇', '🏰', '💎', '🎺', '📯', '⚔️']
+    return pool[(clampedLevel - 51) % pool.length]
+  }
+  if (clampedLevel <= 200) {
+    const pool = ['🔥', '❄️', '⚡', '🌑', '✨', '🌩️', '🏔️', '🌀', '🔮', '☀️']
+    return pool[(clampedLevel - 101) % pool.length]
+  }
+  if (clampedLevel <= 500) {
+    const pool = ['🌟', '💫', '⭐', '🌠', '🌙', '☄️', '💥', '🌌', '🪐', '🌍', '🔮', '✨', '🌈', '🌑', '🌅']
+    return pool[(clampedLevel - 201) % pool.length]
+  }
+  // 501-1000
+  const pool = ['👑', '🔱', '⚜️', '🐉', '🦅', '💎', '🏆', '🎯', '🌟', '💫', '⭐', '🌠', '🌙', '☄️', '💥', '🌌', '🪐', '🌍', '🔮', '✨']
+  return pool[(clampedLevel - 501) % pool.length]
+}
+
+// Generate color for a given level (1-1000)
+export function getLevelColor(level: number): string {
+  const clampedLevel = Math.min(Math.max(level, 1), MAX_LEVEL)
+  if (clampedLevel <= 50) return ORIGINAL_COLORS[clampedLevel - 1]
+
+  // HSL rotation for levels 51+ using golden angle for even distribution
+  const hue = ((clampedLevel - 51) * 137.508) % 360
+  const saturation = 70 + ((clampedLevel - 51) % 5) * 5 // 70-90%
+  const lightness = 50 + ((clampedLevel - 51) % 3) * 5  // 50-60%
+  return hslToHex(hue, saturation, lightness)
+}
+
+// Calculate player level from game points using binary search (O(log N))
+function calculateLevel(gamePoints: number): number {
+  if (gamePoints <= 0) return 1
+  let lo = 1, hi = MAX_LEVEL
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2)
+    if (getLevelThreshold(mid) <= gamePoints) {
+      lo = mid
+    } else {
+      hi = mid - 1
+    }
+  }
+  return lo
+}
+
+// Get level info helper (same return shape as before)
 export function getLevelInfo(level: number) {
-  const idx = Math.min(Math.max(level, 1), MAX_LEVEL) - 1
+  const clampedLevel = Math.min(Math.max(level, 1), MAX_LEVEL)
   return {
-    level: idx + 1,
-    title: LEVEL_TITLES[idx],
-    icon: LEVEL_ICONS[idx],
-    color: LEVEL_COLORS[idx],
-    threshold: LEVEL_THRESHOLDS[idx],
+    level: clampedLevel,
+    title: getLevelTitle(clampedLevel),
+    icon: getLevelIcon(clampedLevel),
+    color: getLevelColor(clampedLevel),
+    threshold: getLevelThreshold(clampedLevel),
   }
 }
 
 // Get next level's required points
 export function getNextLevelPoints(level: number): number {
-  if (level >= MAX_LEVEL) return LEVEL_THRESHOLDS[MAX_LEVEL - 1]
-  return LEVEL_THRESHOLDS[level] // thresholds[level] is the threshold for level+1
+  if (level >= MAX_LEVEL) return getLevelThreshold(MAX_LEVEL)
+  return getLevelThreshold(level + 1)
 }
 
 // Get current level's starting points
 export function getCurrentLevelPoints(level: number): number {
-  const idx = Math.min(Math.max(level, 1), MAX_LEVEL) - 1
-  return LEVEL_THRESHOLDS[idx]
+  return getLevelThreshold(Math.min(Math.max(level, 1), MAX_LEVEL))
 }
 
 export function useGame() {
@@ -799,8 +835,12 @@ export function useGame() {
         newLives = prev.lives - 1
         if (newLives <= 0) {
           newLives = 0
-          // In battle mode: pause timer instead of game over (user can watch ad to revive)
-          if (isBattleMode) {
+          // Tournament: NO ad lifeline - game over immediately when lives run out
+          // Bot/Coins battle modes: pause timer so user can watch ad to revive
+          // Classic mode: game over (can revive with ad from Game Over modal)
+          if (prev.gameMode === 'tournament') {
+            isGameOver = true
+          } else if (isBattleMode) {
             newTimerPaused = true
           } else {
             isGameOver = true
@@ -899,7 +939,9 @@ export function useGame() {
     setState(prev => {
       if (prev.lives <= 0) return prev
       const tiles = initTiles()
-      return { ...prev, tiles, score: 0, gameOver: false, won: false, keepPlaying: false, canUndo: false, undoCount: 0, activePowerUp: null, consecutiveMerges: 0, comboBonus: 0 }
+      // IMPORTANT: Keep score & gamePoints intact! Only reset tiles.
+      // The user loses a life for getting stuck, but their earned points are preserved.
+      return { ...prev, tiles, gameOver: false, won: false, keepPlaying: false, canUndo: false, undoCount: 0, activePowerUp: null, consecutiveMerges: 0, comboBonus: 0 }
     })
   }, [])
 
@@ -1270,12 +1312,21 @@ export function useGame() {
   }, [])
 
   const reviveWithAd = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      lives: Math.min(prev.lives + 1, prev.maxLives),
-      gameOver: false,
-      timerPaused: false, // Resume timer after ad revive
-    }))
+    setState(prev => {
+      // NO ad lifeline in tournament mode - game should have ended already
+      if (prev.gameMode === 'tournament') return prev
+      // Give fresh tiles so user can actually play (old tiles were stuck)
+      const tiles = initTiles()
+      return {
+        ...prev,
+        tiles,
+        lives: Math.min(prev.lives + 1, prev.maxLives),
+        gameOver: false,
+        timerPaused: false, // Resume timer after ad revive
+        countdownActive: true,
+        countdownSecondsLeft: 1, // 1-second hold before resuming gameplay
+      }
+    })
   }, [])
 
   const goBackToDashboard = useCallback(() => {

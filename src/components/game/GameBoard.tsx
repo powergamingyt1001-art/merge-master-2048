@@ -426,7 +426,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
 
       {/* Timer Paused Overlay - Watch ad to revive */}
       <AnimatePresence>
-        {timerPaused && isBattleMode && lives <= 0 && !botBattleResult && (
+        {timerPaused && isBattleMode && !isTournament && lives <= 0 && !botBattleResult && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -451,7 +451,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
               Timer paused at {battleTimer}s • Score: {score}
             </p>
             <button
-              onClick={() => { setGameOverDismissed(true); reviveWithAd() }}
+              onClick={() => { setGameOverDismissed(false); reviveWithAd() }}
               style={{
                 padding: '8px 24px',
                 borderRadius: 8,
@@ -555,7 +555,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
               className="absolute inset-0 flex flex-col items-center justify-center rounded-xl overlay-content" style={{ backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 100 }}>
               <Heart className="w-8 h-8 mb-2" style={{ color: '#F65E3B' }} />
               <p className="text-lg font-bold mb-1" style={{ color: '#FFFFFF' }}>Stuck!</p>
-              <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>-1 ❤️ • {lives - 1} lives left</p>
+              <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>-1 ❤️ • {lives} lives left</p>
               <button onClick={handleStuckContinue} onTouchStart={(e) => e.stopPropagation()} className="px-5 py-2 rounded-lg font-bold text-xs"
                 style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>Continue</button>
             </motion.div>
@@ -682,7 +682,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
               <h2 className="text-2xl font-extrabold mb-1" style={{ color: '#FFFFFF' }}>Game Over!</h2>
               <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>Score: {score} • Best: {bestScore}</p>
               <div className="space-y-2">
-                <button onClick={() => { setGameOverDismissed(true); reviveWithAd() }}
+                <button onClick={() => { setGameOverDismissed(false); reviveWithAd() }}
                   className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
                   style={{ background: 'linear-gradient(135deg, #F65E3B, #F67C5F)', color: '#FFFFFF' }}>
                   <Heart className="w-4 h-4" /> Get Free Life

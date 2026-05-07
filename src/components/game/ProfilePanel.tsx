@@ -25,7 +25,7 @@ interface ProfilePanelProps {
   onResetAllData?: () => void
 }
 
-// Level info is now imported from useGame.ts (50 levels)
+// Level info is now imported from useGame.ts (1000 levels)
 
 export function ProfilePanel({
   isOpen, onClose, playerName, playerAvatar, playerLevel,
@@ -171,7 +171,7 @@ export function ProfilePanel({
                   </p>
                 )}
                 {playerLevel >= MAX_LEVEL && (
-                  <p className="text-[8px] mt-1 text-center" style={{ color: '#F65E3B' }}>MAX LEVEL 50! 🎮🔥</p>
+                  <p className="text-[8px] mt-1 text-center" style={{ color: '#F65E3B' }}>MAX LEVEL! 🎮🔥</p>
                 )}
               </div>
 
