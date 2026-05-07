@@ -178,13 +178,18 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
 
   // Touch handlers
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    // Don't capture touch on buttons/interactive elements inside overlays
+    if ((e.target as HTMLElement).closest('button, [role="button"], .overlay-content')) return
     e.preventDefault()
     touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
   }, [])
-  const handleTouchMove = useCallback((e: React.TouchEvent) => { e.preventDefault() }, [])
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    e.preventDefault()
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!touchStart.current) return
+    e.preventDefault()
+  }, [])
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!touchStart.current) return
+    e.preventDefault()
     const dx = e.changedTouches[0].clientX - touchStart.current.x
     const dy = e.changedTouches[0].clientY - touchStart.current.y
     if (Math.max(Math.abs(dx), Math.abs(dy)) < 30) return
@@ -536,11 +541,11 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
         <AnimatePresence>
           {isStuck && lives > 0 && !gameOver && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="absolute inset-0 flex flex-col items-center justify-center rounded-xl" style={{ backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 100 }}>
+              className="absolute inset-0 flex flex-col items-center justify-center rounded-xl overlay-content" style={{ backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 100 }}>
               <Heart className="w-8 h-8 mb-2" style={{ color: '#F65E3B' }} />
               <p className="text-lg font-bold mb-1" style={{ color: '#FFFFFF' }}>Stuck!</p>
               <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>-1 ❤️ • {lives - 1} lives left</p>
-              <button onClick={handleStuckContinue} className="px-5 py-2 rounded-lg font-bold text-xs"
+              <button onClick={handleStuckContinue} onTouchStart={(e) => e.stopPropagation()} className="px-5 py-2 rounded-lg font-bold text-xs"
                 style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>Continue</button>
             </motion.div>
           )}
@@ -550,15 +555,15 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
         <AnimatePresence>
           {won && !keepPlaying && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="absolute inset-0 flex flex-col items-center justify-center rounded-xl" style={{ backgroundColor: 'rgba(237,194,46,0.5)', zIndex: 100 }}>
+              className="absolute inset-0 flex flex-col items-center justify-center rounded-xl overlay-content" style={{ backgroundColor: 'rgba(237,194,46,0.5)', zIndex: 100 }}>
               <motion.div initial={{ scale: 0, rotate: -180 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 200 }}>
                 <Trophy className="w-12 h-12 sm:w-14 sm:h-14 mb-2" style={{ color: '#FFFFFF' }} />
               </motion.div>
               <p className="text-2xl sm:text-3xl font-extrabold mb-2" style={{ color: '#FFFFFF' }}>You Win! 🎉</p>
               <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.8)' }}>Score: {score}</p>
               <div className="flex gap-3">
-                <button onClick={continueGame} className="px-4 py-2 rounded-lg font-bold text-xs" style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)' }}>Keep Going</button>
-                <button onClick={() => { newGame(); onBackToDashboard(); }} className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1" style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
+                <button onClick={continueGame} onTouchStart={(e) => e.stopPropagation()} className="px-4 py-2 rounded-lg font-bold text-xs" style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)' }}>Keep Going</button>
+                <button onClick={() => { newGame(); onBackToDashboard(); }} onTouchStart={(e) => e.stopPropagation()} className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1" style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
                   <RotateCcw className="w-3 h-3" /> Dashboard
                 </button>
               </div>
@@ -570,7 +575,7 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
         <AnimatePresence>
           {isBattleMode && botBattleResult && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="absolute inset-0 flex flex-col items-center justify-center rounded-xl" style={{ backgroundColor: botBattleResult === 'win' ? 'rgba(0,200,83,0.6)' : 'rgba(246,94,59,0.6)', zIndex: 100 }}>
+              className="absolute inset-0 flex flex-col items-center justify-center rounded-xl overlay-content" style={{ backgroundColor: botBattleResult === 'win' ? 'rgba(0,200,83,0.6)' : 'rgba(246,94,59,0.6)', zIndex: 100 }}>
               <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200 }}>
                 <span className="text-5xl mb-2 block">{botBattleResult === 'win' ? '🏆' : '😔'}</span>
               </motion.div>
@@ -601,12 +606,33 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
                 </div>
               )}
               <div className="flex gap-3">
-                <button onClick={handleBattleEnd} className="px-4 py-2 rounded-lg font-bold text-xs" style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)' }}>Dashboard</button>
-                <button onClick={() => {
-                  if (isCoinGame) { game.startCoinGame(coinEntryFee) }
-                  else if (isTournament) { game.startTournamentGame() }
-                  else { game.startBotBattle(battleTimeLimit) }
-                }} className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1" style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
+                <button
+                  onClick={handleBattleEnd}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  className="px-4 py-2 rounded-lg font-bold text-xs" style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)' }}>Dashboard</button>
+                <button
+                  onClick={() => {
+                    // First finalize the current game
+                    addGameToHistory(gameMode, score, botBattleResult as 'win' | 'lose' | 'classic', coinEntryFee, battleTimeLimit)
+                    if (isCoinGame && botBattleResult === 'win' && coinEntryFee > 0) {
+                      addCoins(coinEntryFee * 2)
+                    }
+                    if (isTournament) {
+                      calculateTournamentPoints(score)
+                    }
+                    // Start a new game of the same type
+                    if (isCoinGame) {
+                      if (game.coins < coinEntryFee) {
+                        addNotification('Not Enough Coins', `You need ${coinEntryFee} coins. You have ${game.coins}.`, 'system', '💰')
+                        return
+                      }
+                      game.startCoinGame(coinEntryFee)
+                    }
+                    else if (isTournament) { game.startTournamentGame() }
+                    else { game.startBotBattle(battleTimeLimit) }
+                  }}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1" style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
                   Play Again
                 </button>
               </div>

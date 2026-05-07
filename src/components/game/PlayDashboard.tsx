@@ -424,26 +424,19 @@ export function PlayDashboard({
             </button>
           </motion.div>
 
-          {/* Tournament + Game Points */}
+          {/* Tournament */}
           <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}
-            className="w-full grid grid-cols-2 gap-2">
+            className="w-full">
             <button onClick={() => isOnline && setShowTournament(true)}
-              className="flex items-center gap-2 p-3 rounded-xl transition-transform hover:scale-[1.02] active:scale-95"
+              className="w-full flex items-center gap-2 p-3 rounded-xl transition-transform hover:scale-[1.02] active:scale-95"
               style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)', opacity: isOnline ? 1 : 0.5 }}>
               <Trophy className="w-5 h-5" style={{ color: '#EDC22E' }} />
-              <div className="text-left">
+              <div className="text-left flex-1">
                 <p className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>Tournament</p>
                 <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{isOnline ? (tournamentJoined ? `${tournamentPoints} pts` : 'Weekly Prizes!') : 'Need Internet'}</p>
               </div>
+              <ChevronRight className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.2)' }} />
             </button>
-            <div className="flex items-center gap-2 p-3 rounded-xl"
-              style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <Crown className="w-5 h-5" style={{ color: '#EDC22E' }} />
-              <div className="text-left">
-                <p className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.7)' }}>Game Points</p>
-                <p className="text-xs font-extrabold" style={{ color: '#EDC22E' }}>{gamePoints}</p>
-              </div>
-            </div>
           </motion.div>
 
           {/* PLAY TOURNAMENT button - shows on dashboard when joined */}
