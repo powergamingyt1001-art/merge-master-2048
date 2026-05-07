@@ -76,7 +76,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     canUndo, undoCount, undoTotal,
     lives, maxLives, hammerCount, magnetCount, blastCount, activePowerUp,
     gameMode, botOpponent, botBattleResult,
-    battleTimer, battleTimeLimit, consecutiveMerges, comboBonus,
+    battleTimer, battleTimeLimit, consecutiveMerges, comboBonus, comboMultiplier,
     coinEntryFee, coinGameWon,
     tournamentPoints, tournamentCarryOver,
     countdownActive, countdownSecondsLeft, timerPaused,
@@ -311,12 +311,17 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
                       animate={{ opacity: 0, y: -15 }}
                       exit={{ opacity: 0 }}
                       transition={{ duration: 0.5 }}
-                      style={{ fontSize: 12, color: '#EDC22E', marginLeft: 4, fontWeight: 700 }}
+                      style={{ fontSize: 12, color: comboMultiplier >= 2 ? '#FF7A00' : '#EDC22E', marginLeft: 4, fontWeight: 700 }}
                     >
                       +{scoreGain}
                     </motion.span>
                   )}
                 </AnimatePresence>
+                {isBattleMode && comboMultiplier >= 2 && (
+                  <span style={{ fontSize: 10, color: '#00E676', marginLeft: 4, fontWeight: 800 }}>
+                    {comboMultiplier}x
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -423,6 +428,59 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
           />
         ))}
       </div>
+
+      {/* ============================================================ */}
+      {/* COMBO INDICATOR - Shows current combo multiplier             */}
+      {/* Progressive: 2x → 3x → 4x → 5x based on consecutive merges */}
+      {/* Only visible in Battle/Coins/Tournament modes                */}
+      {/* ============================================================ */}
+      <AnimatePresence>
+        {isBattleMode && comboMultiplier >= 2 && !botBattleResult && (
+          <motion.div
+            key={`combo-${comboMultiplier}`}
+            initial={{ scale: 0.5, opacity: 0, y: -10 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.8, opacity: 0, y: -5 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full"
+            style={{
+              background: comboMultiplier >= 5
+                ? 'linear-gradient(135deg, #FF3D00, #FF6D00, #FFD600)'
+                : comboMultiplier >= 4
+                  ? 'linear-gradient(135deg, #FF6D00, #FF9100)'
+                  : comboMultiplier >= 3
+                    ? 'linear-gradient(135deg, #EDC22E, #FF7A00)'
+                    : 'linear-gradient(135deg, #00E676, #00C853)',
+              boxShadow: comboMultiplier >= 4
+                ? `0 0 20px rgba(255,109,0,0.5), 0 0 40px rgba(255,109,0,0.2)`
+                : comboMultiplier >= 3
+                  ? `0 0 15px rgba(237,194,46,0.4), 0 0 30px rgba(237,194,46,0.15)`
+                  : `0 0 10px rgba(0,230,118,0.3)`,
+              border: `1.5px solid ${comboMultiplier >= 4 ? 'rgba(255,255,255,0.4)' : comboMultiplier >= 3 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.2)'}`,
+            }}
+          >
+            <Zap className="w-3.5 h-3.5" style={{ color: '#FFFFFF' }} fill="white" />
+            <span style={{
+              fontSize: 14,
+              fontWeight: 900,
+              color: '#FFFFFF',
+              textShadow: '0 1px 3px rgba(0,0,0,0.3)',
+              fontFamily: 'monospace',
+            }}>
+              {comboMultiplier}x COMBO
+            </span>
+            {comboMultiplier >= 3 && (
+              <span style={{
+                fontSize: 8,
+                fontWeight: 700,
+                color: 'rgba(255,255,255,0.8)',
+              }}>
+                🔥
+              </span>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Timer Paused Overlay - Watch ad to revive */}
       <AnimatePresence>
@@ -608,6 +666,12 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
                 <p className="text-[10px] font-bold mb-3" style={{ color: botBattleResult === 'win' ? '#FFD700' : 'rgba(255,255,255,0.6)' }}>
                   {botBattleResult === 'win' ? `+${coinEntryFee * 2} coins! 🎉` : `-${coinEntryFee} coins`}
                 </p>
+              )}
+              {comboBonus > 0 && (
+                <div className="mb-3 px-3 py-1.5 rounded-lg text-center" style={{ backgroundColor: 'rgba(255,122,0,0.15)', border: '1px solid rgba(255,122,0,0.3)' }}>
+                  <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.6)' }}>🔥 Combo Bonus</p>
+                  <p className="text-sm font-extrabold" style={{ color: '#FF7A00' }}>+{comboBonus} pts</p>
+                </div>
               )}
               {isTournament && (
                 <div className="mb-3 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>

@@ -75,3 +75,46 @@ Stage Summary:
 - Starts at 50 points (Level 2), gradually increases to 5,300,000 (Level 50)
 - Profile panel and dashboard now display level with proper color/icon/title
 - All changes compile and run successfully
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Fix combo system — enable in Battle/Coins/Tournament modes with progressive multiplier (1x→2x→3x→4x→5x)
+
+Work Log:
+- Analyzed user request: combo not working in Battle, Coins, and Tournament modes (only worked in bot mode)
+- Added `comboMultiplier` field to GameState interface (1=none, 2=2x, 3=3x, 4=4x, 5=5x cap)
+- Changed `isComboMode` from `prev.gameMode === 'bot'` to include bot, coins, and tournament (exclude only classic)
+- Redesigned combo logic: tracks consecutive MOVES with merges (not total merge count)
+  - If move produces merge → increment consecutiveMerges
+  - If move produces NO merge → reset consecutiveMerges to 0
+  - Combo multiplier = min(consecutiveMerges, 5)
+  - Extra score = scoreGain * (comboMultiplier - 1) for multiplier >= 2
+- Added `comboMultiplier: 1` to all state reset locations (defaults, goBackToDashboard, resetAllData, reviveWithAd, restartAfterStuck, etc.)
+- Added combo indicator UI to GameBoard.tsx:
+  - Animated badge between hearts and game board
+  - Color-coded: 2x=green, 3x=gold/orange, 4x+=red/fire
+  - Spring animation when combo level changes
+  - Shows "🔥" fire emoji at 3x+
+- Updated score gain popup color: orange when combo active, yellow normally
+- Added combo multiplier badge next to score (e.g., "3x")
+- Added combo bonus display in battle result overlay (shows total combo bonus earned)
+- Verified all existing fixes still in place:
+  - weeklyBonusClaimed crash: FIXED (default value in props)
+  - Weekly bonus = 400 coins: VERIFIED
+  - 5-4-3-2-1 countdown removed: VERIFIED
+  - Game Points section removed: VERIFIED
+  - Game restart bug (lifelines): VERIFIED — game pauses when lives=0, doesn't restart
+  - Tournament no ad lifeline: VERIFIED — game over immediately when lives=0
+  - Fair 50/50 bot score: VERIFIED
+  - Dashboard/Play Again buttons: VERIFIED working
+- Lint passes clean, dev server compiles successfully
+
+Stage Summary:
+- Combo system now works in Battle, Coins, AND Tournament modes (not classic)
+- Progressive combo: 2nd consecutive merge move = 2x, 3rd = 3x, 4th = 4x, 5th+ = 5x (cap)
+- Combo resets when a move produces no merge
+- Visual combo indicator with color-coded animated badge
+- Score display shows combo multiplier and orange score gain when combo active
+- Battle result shows total combo bonus earned
+- All previous fixes remain intact and working

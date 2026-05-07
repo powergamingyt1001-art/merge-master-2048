@@ -100,6 +100,7 @@ export interface GameState {
   // Combo system
   consecutiveMerges: number
   comboBonus: number
+  comboMultiplier: number // Current combo multiplier (1=none, 2=2x, 3=3x, etc.)
   // Invite system
   inviteCode: string
   invitedBy: string | null
@@ -550,6 +551,7 @@ export function useGame() {
       countdownSecondsLeft: 0,
       consecutiveMerges: 0,
       comboBonus: 0,
+      comboMultiplier: 1,
       inviteCode: '',
       invitedBy: null,
       invitedUsers: [],
@@ -795,32 +797,36 @@ export function useGame() {
       prevState.current = prev
       const tilesWithNew = addRandomTile(newTiles)
 
-      // Combo system: ONLY in Mods (bot) mode, NOT in tournament/coins/classic
-      // 2 merges → 2x combo, 3+ merges → 3x combo on POINTS
+      // Combo system: Works in Battle, Coins, AND Tournament modes (NOT classic)
+      // Progressive combo: consecutive moves with merges build multiplier
+      // 1st merge move = 1x (base), 2nd consecutive = 2x, 3rd = 3x, 4th = 4x, 5+ = 5x
+      // Combo resets when a move produces NO merge
       let newConsecutiveMerges = prev.consecutiveMerges
       let newComboBonus = prev.comboBonus
       let comboExtra = 0
-      let comboMultiplier = 0 // 0 = no combo, 2 = 2x, 3 = 3x
-      const isComboMode = prev.gameMode === 'bot'
-      if (isComboMode && mergeCount > 0) {
-        newConsecutiveMerges += mergeCount
-        if (newConsecutiveMerges >= 3) {
-          comboMultiplier = 3
-          comboExtra = scoreGain * 2 // 3x means 2x extra
-          newComboBonus += comboExtra
+      let comboMultiplier = 1 // 1 = no combo, 2 = 2x, 3 = 3x, etc.
+      const isComboMode = prev.gameMode === 'bot' || prev.gameMode === 'coins' || prev.gameMode === 'tournament'
+      if (isComboMode) {
+        if (mergeCount > 0) {
+          // This move produced a merge → increment consecutive counter
+          newConsecutiveMerges += 1
+          // Calculate multiplier based on consecutive merges
+          comboMultiplier = Math.min(newConsecutiveMerges, 5) // Cap at 5x
+          if (comboMultiplier >= 2) {
+            // Extra score = scoreGain * (multiplier - 1) because base scoreGain already counts as 1x
+            comboExtra = scoreGain * (comboMultiplier - 1)
+            newComboBonus += comboExtra
+          }
+        } else {
+          // This move produced NO merge → combo breaks, reset
           newConsecutiveMerges = 0
-        } else if (newConsecutiveMerges >= 2) {
-          comboMultiplier = 2
-          comboExtra = scoreGain // 2x means 1x extra
-          newComboBonus += comboExtra
-          // Don't reset - keep building toward 3x
+          comboMultiplier = 1
         }
-      } else if (!isComboMode) {
-        // No combo in tournament/coins/classic
+      } else {
+        // Classic mode: no combo
         newConsecutiveMerges = 0
         newComboBonus = 0
-      } else {
-        newConsecutiveMerges = 0
+        comboMultiplier = 1
       }
 
       const newScore = prev.score + scoreGain + comboExtra
@@ -917,6 +923,7 @@ export function useGame() {
         modBestScore,
         consecutiveMerges: newConsecutiveMerges,
         comboBonus: newComboBonus,
+        comboMultiplier: comboMultiplier,
         gamePoints: newGamePoints,
         coinGameWon,
         playerLevel: calculateLevel(newGamePoints),
@@ -941,7 +948,7 @@ export function useGame() {
       const tiles = initTiles()
       // IMPORTANT: Keep score & gamePoints intact! Only reset tiles.
       // The user loses a life for getting stuck, but their earned points are preserved.
-      return { ...prev, tiles, gameOver: false, won: false, keepPlaying: false, canUndo: false, undoCount: 0, activePowerUp: null, consecutiveMerges: 0, comboBonus: 0 }
+      return { ...prev, tiles, gameOver: false, won: false, keepPlaying: false, canUndo: false, undoCount: 0, activePowerUp: null, consecutiveMerges: 0, comboBonus: 0, comboMultiplier: 1 }
     })
   }, [])
 
@@ -1016,6 +1023,7 @@ export function useGame() {
       countdownSecondsLeft: 0,
       consecutiveMerges: 0,
       comboBonus: 0,
+      comboMultiplier: 1,
       coinEntryFee: 0,
       coinGameWon: null,
     }))
@@ -1325,6 +1333,9 @@ export function useGame() {
         timerPaused: false, // Resume timer after ad revive
         countdownActive: true,
         countdownSecondsLeft: 1, // 1-second hold before resuming gameplay
+        consecutiveMerges: 0,
+        comboBonus: 0,
+        comboMultiplier: 1,
       }
     })
   }, [])
@@ -1350,6 +1361,7 @@ export function useGame() {
       countdownSecondsLeft: 0,
       consecutiveMerges: 0,
       comboBonus: 0,
+      comboMultiplier: 1,
       coinEntryFee: 0,
       coinGameWon: null,
     }))
@@ -1495,6 +1507,7 @@ export function useGame() {
       countdownSecondsLeft: 0,
       consecutiveMerges: 0,
       comboBonus: 0,
+      comboMultiplier: 1,
       inviteCode: generateInviteCode(), // New fresh invite code
       invitedBy: null,
       invitedUsers: [],
