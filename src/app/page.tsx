@@ -97,6 +97,18 @@ export default function Home() {
     setPhase('dashboard')
   }, [game])
 
+  // Play Again: finalize current game, show ad, then start new game of same type
+  const handlePlayAgain = useCallback((mode: 'bot' | 'coins' | 'tournament', timeLimit: number, entryFee: number) => {
+    // Reset game state first (goBackToDashboard resets game state without changing phase)
+    game.goBackToDashboard()
+    // Now start a new game through the ad system
+    startGameWithAd(() => {
+      if (mode === 'bot') { game.startBotBattle(timeLimit) }
+      else if (mode === 'coins') { game.startCoinGame(entryFee) }
+      else if (mode === 'tournament') { game.startTournamentGame() }
+    })
+  }, [game, startGameWithAd])
+
   return (
     <GameProvider game={game}>
       <main className="min-h-screen" style={{ touchAction: 'none' }}>
@@ -158,7 +170,7 @@ export default function Home() {
               onClaimWeeklyBonus={game.claimWeeklyBonus}
             />
           )}
-          {phase === 'game' && <GameBoard key="game" onBackToDashboard={handleBackToDashboard} />}
+          {phase === 'game' && <GameBoard key="game" onBackToDashboard={handleBackToDashboard} onPlayAgain={handlePlayAgain} />}
           {phase === 'ad' && (
             <InterstitialAd
               key="ad"

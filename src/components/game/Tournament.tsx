@@ -7,7 +7,6 @@ import { X, Crown, Medal, Star, Trophy, Clock, Info, Coins, Users, Lock, Zap, Pl
 interface TournamentProps {
   isOpen: boolean
   onClose: () => void
-  gamePoints: number
   coins: number
   tournamentJoined: boolean
   tournamentPoints: number
@@ -96,7 +95,7 @@ function getLatePoolRemaining(): number {
 }
 
 export function Tournament({
-  isOpen, onClose, gamePoints, coins,
+  isOpen, onClose, coins,
   tournamentJoined, tournamentPoints, tournamentCarryOver, tournamentGamesPlayed,
   onJoinTournament, onStartTournamentGame,
 }: TournamentProps) {
@@ -274,6 +273,7 @@ export function Tournament({
                         `Prize pool: 7K coins weekly`,
                         'Rankings reset every Monday',
                         'Daily limit: 20 games',
+                        'Fair play: 50/50 chance, highest score wins!',
                       ].map((item, i) => (
                         <li key={i} className="text-[9px] flex items-start gap-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
                           <span style={{ color: '#EDC22E' }}>•</span> {item}
@@ -283,10 +283,6 @@ export function Tournament({
                   </div>
                   <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Your Game Points:</span>
-                      <span className="text-xs font-bold" style={{ color: '#EDC22E' }}>{gamePoints}</span>
-                    </div>
-                    <div className="flex items-center justify-between mt-1">
                       <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Your Coins:</span>
                       <span className="text-xs font-bold" style={{ color: '#EDC22E' }}>{coins}</span>
                     </div>

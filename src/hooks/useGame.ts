@@ -286,13 +286,20 @@ function loadSavedData() {
   return null
 }
 
-// Generate realistic bot score - 50/50 win chance
-function generateBotScore(playerBestScore: number): BotOpponent {
+// Generate bot name/avatar for display (score generated at game end for fairness)
+function generateBotOpponent(): BotOpponent {
   const bot = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]
-  const base = Math.max(playerBestScore, 200)
-  const variance = base * 0.5
-  const finalScore = Math.round(Math.max(50, base + (Math.random() * variance * 2 - variance)))
-  return { ...bot, finalScore }
+  return { ...bot, finalScore: 0 } // Score set to 0; will be generated at game end
+}
+
+// Generate fair bot score at game end - 50/50 win chance
+// Score is based on player's ACTUAL score, not best score
+// This ensures truly fair gameplay where both have equal chances
+function generateFairBotScore(playerScore: number): number {
+  const base = Math.max(playerScore, 100)
+  // ±30% variance around player's score for close, exciting games
+  const variance = base * 0.3
+  return Math.round(Math.max(50, base + (Math.random() * variance * 2 - variance)))
 }
 
 // Calculate player level from game points
@@ -639,15 +646,20 @@ export function useGame() {
         }
       }
 
-      // Bot battle check
+      // Bot battle result variables
       let botBattleResult = prev.botBattleResult
       let modBestScore = prev.modBestScore
       let coinGameWon = prev.coinGameWon
       let totalBattlesPlayed = prev.totalBattlesPlayed
       let totalBattlesWon = prev.totalBattlesWon
+      let botOpponent = prev.botOpponent // Will be updated with final score at game end
+
+      // Bot battle check - generate fair bot score at game end
       if (prev.gameMode === 'bot' && prev.botOpponent && !botBattleResult) {
         if (isGameOver) {
-          botBattleResult = newScore > prev.botOpponent.finalScore ? 'win' : 'lose'
+          const botFinalScore = generateFairBotScore(newScore)
+          botBattleResult = newScore > botFinalScore ? 'win' : 'lose'
+          botOpponent = { ...prev.botOpponent, finalScore: botFinalScore }
           totalBattlesPlayed++
           if (botBattleResult === 'win') {
             modBestScore = Math.max(modBestScore, newScore)
@@ -656,11 +668,12 @@ export function useGame() {
         }
       }
 
-      // Coin game mode check
+      // Coin game mode check - generate fair bot score at game end
       if (prev.gameMode === 'coins' && isGameOver) {
-        const opponent = generateBotScore(prev.modBestScore)
-        coinGameWon = newScore > opponent.finalScore ? true : false
+        const botFinalScore = generateFairBotScore(newScore)
+        coinGameWon = newScore > botFinalScore ? true : false
         botBattleResult = coinGameWon ? 'win' : 'lose'
+        botOpponent = prev.botOpponent ? { ...prev.botOpponent, finalScore: botFinalScore } : null
         totalBattlesPlayed++
         if (coinGameWon) {
           modBestScore = Math.max(modBestScore, newScore)
@@ -668,10 +681,11 @@ export function useGame() {
         }
       }
 
-      // Tournament mode check
+      // Tournament mode check - generate fair bot score at game end
       if (prev.gameMode === 'tournament' && isGameOver) {
-        const opponent = generateBotScore(prev.modBestScore)
-        botBattleResult = newScore > opponent.finalScore ? 'win' : 'lose'
+        const botFinalScore = generateFairBotScore(newScore)
+        botBattleResult = newScore > botFinalScore ? 'win' : 'lose'
+        botOpponent = prev.botOpponent ? { ...prev.botOpponent, finalScore: botFinalScore } : null
         totalBattlesPlayed++
         if (botBattleResult === 'win') {
           modBestScore = Math.max(modBestScore, newScore)
@@ -696,6 +710,7 @@ export function useGame() {
         undoCount: 0,
         lives: newLives,
         timerPaused: newTimerPaused,
+        botOpponent,
         botBattleResult,
         modBestScore,
         consecutiveMerges: newConsecutiveMerges,
@@ -810,7 +825,7 @@ export function useGame() {
       const gamesToday = prev.lastPlayDate === today ? prev.gamesPlayedToday : 0
       if (gamesToday >= prev.maxGamesPerDay) return prev
 
-      const opponent = generateBotScore(prev.modBestScore)
+      const opponent = generateBotOpponent()
       return {
         ...prev,
         tiles,
@@ -849,7 +864,7 @@ export function useGame() {
       if (gamesToday >= prev.maxGamesPerDay) return prev
       if (prev.coins < entryFee) return prev
 
-      const opponent = generateBotScore(prev.modBestScore)
+      const opponent = generateBotOpponent()
       return {
         ...prev,
         tiles,
@@ -891,7 +906,7 @@ export function useGame() {
       const gamesToday = prev.lastPlayDate === today ? prev.gamesPlayedToday : 0
       if (gamesToday >= prev.maxGamesPerDay) return prev
 
-      const opponent = generateBotScore(prev.modBestScore)
+      const opponent = generateBotOpponent()
       return {
         ...prev,
         tiles,
@@ -956,8 +971,10 @@ export function useGame() {
       if (prev.botBattleResult || prev.battleTimer <= 0 || prev.timerPaused) return prev
       const newTimer = prev.battleTimer - 1
       if (newTimer <= 0) {
-        // Time's up - compare scores
-        const result = prev.score > (prev.botOpponent?.finalScore ?? 0) ? 'win' : 'lose'
+        // Time's up - generate FAIR bot score based on player's actual score
+        // This ensures 50/50 win chance - both have equal opportunity
+        const botFinalScore = generateFairBotScore(prev.score)
+        const result = prev.score > botFinalScore ? 'win' : 'lose'
         const newModBest = result === 'win' ? Math.max(prev.modBestScore, prev.score) : prev.modBestScore
         const coinGameWon = result === 'win' ? true : false
 
@@ -977,6 +994,7 @@ export function useGame() {
           ...prev,
           battleTimer: 0,
           botBattleResult: result,
+          botOpponent: prev.botOpponent ? { ...prev.botOpponent, finalScore: botFinalScore } : null,
           gameOver: true,
           modBestScore: newModBest,
           coinGameWon,

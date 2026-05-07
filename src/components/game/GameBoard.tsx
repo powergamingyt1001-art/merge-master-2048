@@ -60,9 +60,10 @@ function useResponsiveSize() {
 // ============================================================
 interface GameBoardProps {
   onBackToDashboard: () => void
+  onPlayAgain: (mode: 'bot' | 'coins' | 'tournament', timeLimit: number, entryFee: number) => void
 }
 
-export function GameBoard({ onBackToDashboard }: GameBoardProps) {
+export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   // ============================================================
   // 🔴 CRITICAL FIX: Use GameContext instead of useGame()
   // Previously GameBoard called useGame() which created a NEW
@@ -201,7 +202,8 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
   const handleStuckContinue = useCallback(() => { restartAfterStuck() }, [restartAfterStuck])
   const handleBack = useCallback(() => { onBackToDashboard() }, [onBackToDashboard])
 
-  const handleBattleEnd = useCallback(() => {
+  // Finalize current game (save history, coins, tournament points)
+  const finalizeGame = useCallback(() => {
     const result = botBattleResult || 'classic'
     addGameToHistory(gameMode, score, result as 'win' | 'lose' | 'classic', coinEntryFee, battleTimeLimit)
     if (isCoinGame && botBattleResult === 'win' && coinEntryFee > 0) {
@@ -219,9 +221,18 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
         addNotification('Tournament Game Over', `Score: ${score} - Keep playing!`, 'battle', '⚔️')
       }
     }
-    newGame()
+  }, [isCoinGame, isTournament, botBattleResult, coinEntryFee, score, addCoins, addNotification, addGameToHistory, gameMode, battleTimeLimit, calculateTournamentPoints])
+
+  const handleBattleEnd = useCallback(() => {
+    finalizeGame()
     onBackToDashboard()
-  }, [isCoinGame, isTournament, botBattleResult, coinEntryFee, score, addCoins, addNotification, newGame, onBackToDashboard, addGameToHistory, gameMode, battleTimeLimit, calculateTournamentPoints])
+  }, [finalizeGame, onBackToDashboard])
+
+  const handlePlayAgain = useCallback(() => {
+    finalizeGame()
+    // Go through ad system when playing again
+    onPlayAgain(gameMode as 'bot' | 'coins' | 'tournament', battleTimeLimit, coinEntryFee)
+  }, [finalizeGame, onPlayAgain, gameMode, battleTimeLimit, coinEntryFee])
 
   // ============================================================
   // TIMER SYSTEM - EXACTLY like user's HTML reference
@@ -563,7 +574,7 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
               <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.8)' }}>Score: {score}</p>
               <div className="flex gap-3">
                 <button onClick={continueGame} onTouchStart={(e) => e.stopPropagation()} className="px-4 py-2 rounded-lg font-bold text-xs" style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)' }}>Keep Going</button>
-                <button onClick={() => { newGame(); onBackToDashboard(); }} onTouchStart={(e) => e.stopPropagation()} className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1" style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
+                <button onClick={() => { onBackToDashboard(); }} onTouchStart={(e) => e.stopPropagation()} className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1" style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
                   <RotateCcw className="w-3 h-3" /> Dashboard
                 </button>
               </div>
@@ -611,26 +622,7 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
                   onTouchStart={(e) => e.stopPropagation()}
                   className="px-4 py-2 rounded-lg font-bold text-xs" style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)' }}>Dashboard</button>
                 <button
-                  onClick={() => {
-                    // First finalize the current game
-                    addGameToHistory(gameMode, score, botBattleResult as 'win' | 'lose' | 'classic', coinEntryFee, battleTimeLimit)
-                    if (isCoinGame && botBattleResult === 'win' && coinEntryFee > 0) {
-                      addCoins(coinEntryFee * 2)
-                    }
-                    if (isTournament) {
-                      calculateTournamentPoints(score)
-                    }
-                    // Start a new game of the same type
-                    if (isCoinGame) {
-                      if (game.coins < coinEntryFee) {
-                        addNotification('Not Enough Coins', `You need ${coinEntryFee} coins. You have ${game.coins}.`, 'system', '💰')
-                        return
-                      }
-                      game.startCoinGame(coinEntryFee)
-                    }
-                    else if (isTournament) { game.startTournamentGame() }
-                    else { game.startBotBattle(battleTimeLimit) }
-                  }}
+                  onClick={handlePlayAgain}
                   onTouchStart={(e) => e.stopPropagation()}
                   className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1" style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
                   Play Again
@@ -698,7 +690,6 @@ export function GameBoard({ onBackToDashboard }: GameBoardProps) {
                 <button onClick={() => {
                   addGameToHistory('classic', score, 'classic', 0, 0)
                   setGameOverDismissed(false)
-                  newGame()
                   onBackToDashboard()
                 }}
                   className="w-full py-2.5 rounded-xl font-semibold text-xs"

@@ -295,7 +295,7 @@ export function PlayDashboard({
                     ))}
                   </div>
                   <p className="text-[8px] text-center" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                    {isGameLimitReached ? '⚠️ Daily game limit reached' : isOnline ? '1v1 Battle — Highest score wins! 50/50 chance 🏆' : '⚠️ Internet required for Battle Mode'}
+                    {isGameLimitReached ? '⚠️ Daily game limit reached' : isOnline ? '1v1 Battle — Fair play, highest score wins! 🏆' : '⚠️ Internet required for Battle Mode'}
                   </p>
                 </motion.div>
               )}
@@ -496,7 +496,7 @@ export function PlayDashboard({
       <Leaderboard isOpen={showLeaderboard} onClose={() => setShowLeaderboard(false)}
         gamePoints={gamePoints} bestScore={bestScore} coins={coins} />
       <Tournament isOpen={showTournament} onClose={() => setShowTournament(false)}
-        gamePoints={gamePoints} coins={coins}
+        coins={coins}
         tournamentJoined={tournamentJoined}
         tournamentPoints={tournamentPoints}
         tournamentCarryOver={tournamentCarryOver}
