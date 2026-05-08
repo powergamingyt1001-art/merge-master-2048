@@ -12,6 +12,7 @@ import { InvitePanel } from './InvitePanel'
 import { ProfilePanel, NotificationsPanel } from './ProfilePanel'
 import { BannerAd } from './BannerAd'
 import { MultiplexAd } from './MultiplexAd'
+import { PrivacyPolicy, AboutPage, ContactPage } from './FooterPages'
 import { PowerUp, Notification, DailyTask, getLevelInfo } from '@/hooks/useGame'
 
 interface PlayDashboardProps {
@@ -103,6 +104,9 @@ export function PlayDashboard({
   const [showInvite, setShowInvite] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
+  const [showPrivacy, setShowPrivacy] = useState(false)
+  const [showAbout, setShowAbout] = useState(false)
+  const [showContact, setShowContact] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
 
   const unreadNotifications = notifications.filter(n => !n.read).length
@@ -415,11 +419,11 @@ export function PlayDashboard({
           {/* Footer links - compact at bottom of content */}
           <div className="w-full flex items-center justify-center gap-2 pt-1"
             style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-            <a href="/privacy-policy.html" target="_blank" className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Privacy</a>
+            <button onClick={() => setShowPrivacy(true)} className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Privacy</button>
             <span style={{ color: 'rgba(255,255,255,0.1)' }}>·</span>
-            <a href="/about.html" target="_blank" className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>About</a>
+            <button onClick={() => setShowAbout(true)} className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>About</button>
             <span style={{ color: 'rgba(255,255,255,0.1)' }}>·</span>
-            <a href="mailto:powergamingyt1001@gmail.com" className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Contact</a>
+            <button onClick={() => setShowContact(true)} className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Contact</button>
           </div>
 
         </div>
@@ -460,6 +464,9 @@ export function PlayDashboard({
         onResetAllData={onResetAllData} />
       <NotificationsPanel isOpen={showNotifications} onClose={() => setShowNotifications(false)}
         notifications={notifications} onMarkRead={onMarkNotificationRead} onMarkAllRead={onMarkAllNotificationsRead} />
+      <PrivacyPolicy isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
+      <AboutPage isOpen={showAbout} onClose={() => setShowAbout(false)} />
+      <ContactPage isOpen={showContact} onClose={() => setShowContact(false)} />
     </div>
   )
 }
