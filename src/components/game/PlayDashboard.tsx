@@ -11,6 +11,7 @@ import { Tournament } from './Tournament'
 import { InvitePanel } from './InvitePanel'
 import { ProfilePanel, NotificationsPanel } from './ProfilePanel'
 import { BannerAd } from './BannerAd'
+import { MultiplexAd } from './MultiplexAd'
 import { PowerUp, Notification, DailyTask, getLevelInfo } from '@/hooks/useGame'
 
 interface PlayDashboardProps {
@@ -458,6 +459,9 @@ export function PlayDashboard({
               </button>
             </motion.div>
           )}
+
+          {/* Multiplex/Autorelaxed Ad - Shows multiple relevant ads */}
+          <MultiplexAd isOnline={isOnline} />
 
           {/* Mod Best Score */}
           {modBestScore > 0 && (

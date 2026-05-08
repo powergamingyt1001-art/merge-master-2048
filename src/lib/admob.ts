@@ -3,25 +3,30 @@
 // For web, we use Google AdSense / Google Publisher Tag (GPT)
 
 export const AD_CONFIG = {
-  // 🔴 IMPORTANT: Replace with YOUR AdSense publisher ID after approval
-  // Get it from: https://www.google.com/adsense/ → Account → Publisher ID
-  // Format: ca-pub-XXXXXXXXXXXXXXXX
+  // ✅ Google AdSense Approved — Publisher ID
   publisherId: 'ca-pub-4486474550864010',
 
-  // Ad slot IDs — create these in AdSense dashboard
-  // Format: XXXXXXXXXX (10 digits)
+  // Ad slot IDs — Approved by Google AdSense
+  // Display Ad (Home) — format: auto, full-width responsive
   banner: {
-    id: '6765165617',
+    id: '6859053436',
     position: 'bottom' as const,
   },
+  // Multi/Autorelaxed Ad — shows multiple relevant ads
+  multiplex: {
+    id: '9209884606',
+  },
+  // Rewarded ad slot (create in AdSense if needed)
   rewarded: {
-    id: '6068310395',
+    id: '6859053436', // Reusing display ad slot for now
   },
+  // Interstitial ad slot
   interstitial: {
-    id: '3118624132',
+    id: '6859053436', // Reusing display ad slot for now
   },
+  // App Open ad slot
   appOpen: {
-    id: '9199757262',
+    id: '6859053436', // Reusing display ad slot for now
   },
 }
 
