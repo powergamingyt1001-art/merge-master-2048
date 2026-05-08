@@ -490,6 +490,14 @@ export function PlayDashboard({
 
       {/* Banner Ad - Bottom of dashboard */}
       <div className="flex-shrink-0 mt-auto">
+        {/* Footer links - Required for AdSense approval */}
+        <div className="w-full flex items-center justify-center gap-4 py-2 px-4" style={{ backgroundColor: 'rgba(255,255,255,0.02)' }}>
+          <a href="/privacy-policy.html" target="_blank" className="text-[9px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Privacy Policy</a>
+          <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+          <a href="/about.html" target="_blank" className="text-[9px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>About</a>
+          <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+          <a href="mailto:powergamingyt1001@gmail.com" className="text-[9px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Contact</a>
+        </div>
         <BannerAd position="bottom" isOnline={isOnline} />
       </div>
 
