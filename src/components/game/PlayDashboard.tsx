@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Swords, Clock, Trophy, Coins, X, ChevronRight, Crown, UserPlus, Megaphone, User, Bell, Zap, Lock } from 'lucide-react'
+import { Play, Swords, Clock, Trophy, Coins, Crown, Bell, Lock } from 'lucide-react'
 import { SpinWheel, SpinPrize } from './SpinWheel'
 import { LoginStreak } from './LoginStreak'
 import { WelcomeGift } from './WelcomeGift'
@@ -170,7 +170,7 @@ export function PlayDashboard({
 
       {/* Scrollable content - fills remaining space */}
       <div className="relative z-10 flex-1 overflow-y-auto">
-        <div className="flex flex-col items-center max-w-sm w-full mx-auto px-3 pt-3 pb-2 gap-1.5">
+        <div className="flex flex-col items-center max-w-sm w-full mx-auto px-2 pt-2 pb-1 gap-1">
 
           {/* Top bar: Profile + Title + Bell */}
           <div className="w-full flex items-center justify-between">
@@ -412,18 +412,21 @@ export function PlayDashboard({
           {/* Multiplex/Autorelaxed Ad */}
           <MultiplexAd isOnline={isOnline} />
 
+          {/* Footer links - compact at bottom of content */}
+          <div className="w-full flex items-center justify-center gap-2 pt-1"
+            style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+            <a href="/privacy-policy.html" target="_blank" className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Privacy</a>
+            <span style={{ color: 'rgba(255,255,255,0.1)' }}>·</span>
+            <a href="/about.html" target="_blank" className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>About</a>
+            <span style={{ color: 'rgba(255,255,255,0.1)' }}>·</span>
+            <a href="mailto:powergamingyt1001@gmail.com" className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Contact</a>
+          </div>
+
         </div>
       </div>
 
-      {/* Bottom: Footer + Banner Ad - always at bottom */}
+      {/* Bottom Banner Ad - pinned to bottom */}
       <div className="flex-shrink-0 relative z-10">
-        <div className="w-full flex items-center justify-center gap-3 py-1.5 px-4" style={{ backgroundColor: 'rgba(255,255,255,0.02)', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-          <a href="/privacy-policy.html" target="_blank" className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.3)' }}>Privacy</a>
-          <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.1)' }}>|</span>
-          <a href="/about.html" target="_blank" className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.3)' }}>About</a>
-          <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.1)' }}>|</span>
-          <a href="mailto:powergamingyt1001@gmail.com" className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.3)' }}>Contact</a>
-        </div>
         <BannerAd position="bottom" isOnline={isOnline} />
       </div>
 

@@ -30,7 +30,7 @@ export function MultiplexAd({ isOnline }: MultiplexAdProps) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.3, duration: 0.4 }}
-      className="w-full rounded-xl overflow-hidden"
+      className="w-full rounded-lg overflow-hidden"
       style={{
         backgroundColor: 'rgba(255,255,255,0.03)',
         border: '1px solid rgba(255,255,255,0.06)',

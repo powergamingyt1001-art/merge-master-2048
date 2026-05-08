@@ -34,7 +34,7 @@ export function BannerAd({ position, isOnline }: BannerAdProps) {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0 }}
         transition={{ delay: 0.5, duration: 0.3 }}
-        className="w-full flex items-center justify-center py-1 px-2"
+        className="w-full flex items-center justify-center py-0.5 px-1"
         style={{
           background: 'linear-gradient(90deg, #1a0533, #0d1b3e, #1a0533)',
           borderTop: position === 'bottom' ? '1px solid rgba(255,255,255,0.06)' : 'none',
