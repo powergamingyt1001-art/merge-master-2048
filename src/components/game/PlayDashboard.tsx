@@ -162,346 +162,269 @@ export function PlayDashboard({
   }, [isGameLimitReached, coins, onStartCoinGame, onAddNotification, maxGamesPerDay])
 
   return (
-    <div className="min-h-screen flex flex-col"
+    <div className="fixed inset-0 flex flex-col overflow-hidden"
       style={{ background: 'linear-gradient(135deg, #1a0533 0%, #0d1b3e 50%, #1a0533 100%)' }}>
       {/* Glows */}
       <div className="absolute top-1/4 left-1/3 w-48 h-48 rounded-full opacity-20 pointer-events-none" style={{ background: 'radial-gradient(circle, #EDC22E, transparent)', filter: 'blur(60px)' }} />
       <div className="absolute bottom-1/4 right-1/3 w-56 h-56 rounded-full opacity-15 pointer-events-none" style={{ background: 'radial-gradient(circle, #FF7A00, transparent)', filter: 'blur(70px)' }} />
 
-      {/* Scrollable content */}
-      <div className="relative z-10 flex-1">
-        <div className="flex flex-col items-center max-w-sm w-full mx-auto px-4 py-4 gap-3">
+      {/* Scrollable content - fills remaining space */}
+      <div className="relative z-10 flex-1 overflow-y-auto">
+        <div className="flex flex-col items-center max-w-sm w-full mx-auto px-3 pt-3 pb-2 gap-1.5">
 
           {/* Top bar: Profile + Title + Bell */}
-          <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="w-full flex items-center justify-between">
-            {/* Profile Icon */}
+          <div className="w-full flex items-center justify-between">
             <button onClick={() => setShowProfile(true)}
-              className="flex items-center gap-1.5 px-2 py-1.5 rounded-xl transition-transform hover:scale-105 active:scale-95"
+              className="flex items-center gap-1 px-1.5 py-1 rounded-lg transition-transform active:scale-95"
               style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <div className="w-8 h-8 rounded-full flex items-center justify-center"
+              <div className="w-7 h-7 rounded-full flex items-center justify-center"
                 style={{
                   background: playerLevel >= 16 ? `linear-gradient(135deg, ${getLevelInfo(playerLevel).color}, ${getLevelInfo(playerLevel).color}88)` : playerLevel >= 6 ? `linear-gradient(135deg, ${getLevelInfo(playerLevel).color}, ${getLevelInfo(playerLevel).color}44)` : 'rgba(255,255,255,0.1)',
-                  border: '1.5px solid rgba(255,255,255,0.2)',
+                  border: '1px solid rgba(255,255,255,0.2)',
                 }}>
-                <span className="text-base">{playerAvatar}</span>
+                <span className="text-sm">{playerAvatar}</span>
               </div>
               <div className="text-left">
-                <p className="text-[9px] font-bold leading-tight" style={{ color: '#FFFFFF' }}>{playerName}</p>
-                <p className="text-[7px] leading-tight" style={{ color: getLevelInfo(playerLevel).color }}>Lv.{playerLevel} {getLevelInfo(playerLevel).icon}</p>
+                <p className="text-[8px] font-bold leading-tight" style={{ color: '#FFFFFF' }}>{playerName}</p>
+                <p className="text-[6px] leading-tight" style={{ color: getLevelInfo(playerLevel).color }}>Lv.{playerLevel} {getLevelInfo(playerLevel).icon}</p>
               </div>
             </button>
 
-            {/* Title */}
             <div className="text-center">
-              <h1 className="text-lg sm:text-xl font-extrabold tracking-tight">
-                <span style={{ color: '#FFD700', textShadow: '0 0 20px rgba(255,215,0,0.5)' }}>MERGE</span>{' '}
+              <h1 className="text-base font-extrabold tracking-tight leading-none">
+                <span style={{ color: '#FFD700', textShadow: '0 0 15px rgba(255,215,0,0.4)' }}>MERGE</span>{' '}
                 <span style={{ color: '#FFFFFF' }}>MASTER</span>
               </h1>
-              <div className="px-2 py-0.5 rounded-full inline-block" style={{ backgroundColor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <span className="text-[7px] font-bold tracking-widest" style={{ color: '#EDC22E' }}>2048 CHALLENGE</span>
-              </div>
+              <span className="text-[6px] font-bold tracking-widest" style={{ color: '#EDC22E' }}>2048 CHALLENGE</span>
             </div>
 
-            {/* Bell + Coins */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               <button onClick={() => setShowNotifications(true)}
-                className="relative w-8 h-8 rounded-xl flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+                className="relative w-7 h-7 rounded-lg flex items-center justify-center transition-transform active:scale-95"
                 style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <Bell className="w-4 h-4" style={{ color: unreadNotifications > 0 ? '#EDC22E' : 'rgba(255,255,255,0.4)' }} />
+                <Bell className="w-3.5 h-3.5" style={{ color: unreadNotifications > 0 ? '#EDC22E' : 'rgba(255,255,255,0.4)' }} />
                 {unreadNotifications > 0 && (
-                  <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold"
+                  <div className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[6px] font-bold"
                     style={{ backgroundColor: '#F65E3B', color: '#FFFFFF' }}>
                     {unreadNotifications > 9 ? '9+' : unreadNotifications}
                   </div>
                 )}
               </button>
-              <div className="flex items-center gap-1 px-2 py-1.5 rounded-xl"
+              <div className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg"
                 style={{ backgroundColor: 'rgba(237,194,46,0.12)', border: '1px solid rgba(237,194,46,0.25)' }}>
-                <Coins className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
-                <span className="text-xs font-extrabold" style={{ color: '#EDC22E' }}>{coins}</span>
+                <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                <span className="text-[10px] font-extrabold" style={{ color: '#EDC22E' }}>{coins}</span>
               </div>
             </div>
-          </motion.div>
+          </div>
 
           {/* Inventory bar + Games Left */}
-          <motion.div initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }}
-            className="w-full flex items-center justify-between px-2 py-1.5 rounded-xl"
+          <div className="w-full flex items-center justify-between px-2 py-1 rounded-lg"
             style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <InventoryItem emoji="🔨" count={hammerCount} color="#F59563" />
               <InventoryItem emoji="🧲" count={magnetCount} color="#00E676" />
               <InventoryItem emoji="💣" count={blastCount} color="#FF7A00" />
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg" style={{ backgroundColor: 'rgba(0,230,118,0.08)' }}>
-                <span className="text-xs">🎫</span>
-                <span className="text-[9px] font-bold" style={{ color: '#00E676' }}>{spinTickets}</span>
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-0.5 px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(0,230,118,0.08)' }}>
+                <span className="text-[10px]">🎫</span>
+                <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>{spinTickets}</span>
               </div>
-              <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-lg" style={{ backgroundColor: isGameLimitReached ? 'rgba(246,94,59,0.12)' : 'rgba(255,255,255,0.06)' }}>
-                <span className="text-xs">{isGameLimitReached ? '🚫' : '🎮'}</span>
-                <span className="text-[9px] font-bold" style={{ color: isGameLimitReached ? '#F65E3B' : 'rgba(255,255,255,0.5)' }}>{gamesLeft}</span>
+              <div className="flex items-center gap-0.5 px-1 py-0.5 rounded" style={{ backgroundColor: isGameLimitReached ? 'rgba(246,94,59,0.12)' : 'rgba(255,255,255,0.06)' }}>
+                <span className="text-[10px]">{isGameLimitReached ? '🚫' : '🎮'}</span>
+                <span className="text-[8px] font-bold" style={{ color: isGameLimitReached ? '#F65E3B' : 'rgba(255,255,255,0.5)' }}>{gamesLeft}</span>
               </div>
             </div>
-          </motion.div>
+          </div>
 
-          {/* Central PLAY Button */}
-          <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}>
+          {/* Central PLAY Button - smaller and compact */}
+          <div className="flex items-center gap-3 w-full justify-center">
             <button onClick={handlePlayClassic}
-              className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full flex flex-col items-center justify-center gap-0.5 transition-transform hover:scale-105 active:scale-95"
-              style={{ background: isGameLimitReached ? 'linear-gradient(135deg, #555, #333)' : 'linear-gradient(135deg, #EDC22E 0%, #FF7A00 100%)', boxShadow: isGameLimitReached ? 'none' : '0 6px 30px rgba(237,194,46,0.5), 0 0 60px rgba(237,194,46,0.2), inset 0 -4px 12px rgba(0,0,0,0.2)' }}>
+              className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full flex flex-col items-center justify-center transition-transform active:scale-95"
+              style={{ background: isGameLimitReached ? 'linear-gradient(135deg, #555, #333)' : 'linear-gradient(135deg, #EDC22E 0%, #FF7A00 100%)', boxShadow: isGameLimitReached ? 'none' : '0 4px 20px rgba(237,194,46,0.5), 0 0 40px rgba(237,194,46,0.15), inset 0 -3px 8px rgba(0,0,0,0.2)' }}>
               {isGameLimitReached ? (
                 <>
-                  <Lock className="w-8 h-8" style={{ color: 'rgba(255,255,255,0.5)' }} />
-                  <span className="text-sm font-extrabold" style={{ color: 'rgba(255,255,255,0.5)' }}>LIMIT</span>
-                  <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Tomorrow</span>
+                  <Lock className="w-6 h-6" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                  <span className="text-[10px] font-extrabold" style={{ color: 'rgba(255,255,255,0.5)' }}>LIMIT</span>
                 </>
               ) : (
                 <>
-                  <Play className="w-10 h-10 sm:w-12 sm:h-12" style={{ color: '#FFFFFF', marginLeft: 4 }} fill="white" />
-                  <span className="text-base sm:text-lg font-extrabold" style={{ color: '#FFFFFF', textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>PLAY</span>
-                  <span className="text-[7px] font-semibold tracking-wider" style={{ color: 'rgba(255,255,255,0.8)' }}>CLASSIC</span>
+                  <Play className="w-7 h-7 sm:w-8 sm:h-8" style={{ color: '#FFFFFF', marginLeft: 2 }} fill="white" />
+                  <span className="text-xs sm:text-sm font-extrabold" style={{ color: '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.3)' }}>PLAY</span>
+                  <span className="text-[6px] font-semibold tracking-wider" style={{ color: 'rgba(255,255,255,0.7)' }}>CLASSIC</span>
                 </>
               )}
             </button>
-          </motion.div>
 
-          {/* Battle Mode */}
-          <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }} className="w-full">
-            <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5">
-                  <Swords className="w-3.5 h-3.5" style={{ color: '#F65E3B' }} />
-                  <span className="text-xs font-bold" style={{ color: '#FFFFFF' }}>Battle Mode</span>
-                </div>
-                <button onClick={() => setShowBattleModes(!showBattleModes)}
-                  className="text-[8px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
-                  style={{ backgroundColor: 'rgba(255,122,0,0.2)', color: '#FF7A00' }}>
-                  {showBattleModes ? 'HIDE' : 'SHOW'} <ChevronRight className="w-2.5 h-2.5" style={{ transform: showBattleModes ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
-                </button>
-              </div>
-              {showBattleModes && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} transition={{ duration: 0.3 }}>
-                  <div className="grid grid-cols-4 gap-2 mb-2">
+            {/* Quick mode buttons around PLAY */}
+            <div className="flex flex-col gap-1.5">
+              <button onClick={() => setShowBattleModes(!showBattleModes)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg transition-transform active:scale-95"
+                style={{ backgroundColor: 'rgba(246,94,59,0.12)', border: '1px solid rgba(246,94,59,0.25)' }}>
+                <Swords className="w-3 h-3" style={{ color: '#F65E3B' }} />
+                <span className="text-[9px] font-bold" style={{ color: '#F65E3B' }}>Battle</span>
+              </button>
+              <button onClick={() => setShowCoinGames(!showCoinGames)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg transition-transform active:scale-95"
+                style={{ backgroundColor: 'rgba(237,194,46,0.12)', border: '1px solid rgba(237,194,46,0.25)' }}>
+                <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                <span className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Coins</span>
+              </button>
+              <button onClick={() => isOnline && setShowTournament(true)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg transition-transform active:scale-95"
+                style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)', opacity: isOnline ? 1 : 0.5 }}>
+                <Trophy className="w-3 h-3" style={{ color: '#00E676' }} />
+                <span className="text-[9px] font-bold" style={{ color: '#00E676' }}>Tour</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Battle Mode - Expandable */}
+          <AnimatePresence>
+            {showBattleModes && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="w-full overflow-hidden">
+                <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div className="grid grid-cols-4 gap-1.5">
                     {[
-                      { time: '1 min', seconds: 60, icon: <Clock className="w-3 h-3" /> },
-                      { time: '2 min', seconds: 120, icon: <Clock className="w-3 h-3" /> },
-                      { time: '4 min', seconds: 240, icon: <Clock className="w-3 h-3" /> },
-                      { time: '10 min', seconds: 600, icon: <Trophy className="w-3 h-3" /> },
+                      { time: '1m', seconds: 60, icon: <Clock className="w-2.5 h-2.5" /> },
+                      { time: '2m', seconds: 120, icon: <Clock className="w-2.5 h-2.5" /> },
+                      { time: '4m', seconds: 240, icon: <Clock className="w-2.5 h-2.5" /> },
+                      { time: '10m', seconds: 600, icon: <Trophy className="w-2.5 h-2.5" /> },
                     ].map((mode, i) => (
                       <button key={i} onClick={() => isOnline && !isGameLimitReached && onStartBotBattle(mode.seconds)}
-                        className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform hover:scale-105 active:scale-95"
+                        className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg transition-transform active:scale-95"
                         style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', opacity: isOnline && !isGameLimitReached ? 1 : 0.4 }}>
                         <div style={{ color: '#F65E3B' }}>{mode.icon}</div>
-                        <span className="text-[8px] font-semibold" style={{ color: 'rgba(255,255,255,0.7)' }}>{mode.time}</span>
+                        <span className="text-[7px] font-semibold" style={{ color: 'rgba(255,255,255,0.7)' }}>{mode.time}</span>
                       </button>
                     ))}
                   </div>
-                  <p className="text-[8px] text-center" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                    {isGameLimitReached ? '⚠️ Daily game limit reached' : isOnline ? '1v1 Battle — Fair play, highest score wins! 🏆' : '⚠️ Internet required for Battle Mode'}
+                  <p className="text-[7px] text-center mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    1v1 Battle — Highest score wins! 🏆
                   </p>
-                </motion.div>
-              )}
-              {!showBattleModes && (
-                <p className="text-[8px] text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                  1v1 Battle — Highest score wins! 🏆
-                </p>
-              )}
-            </div>
-          </motion.div>
-
-          {/* Coin Games */}
-          <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.35 }} className="w-full">
-            <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(237,194,46,0.04)', border: '1px solid rgba(237,194,46,0.08)' }}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5">
-                  <Coins className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
-                  <span className="text-xs font-bold" style={{ color: '#FFFFFF' }}>Coin Games</span>
-                  <span className="text-[7px] px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(237,194,46,0.15)', color: '#EDC22E' }}>2x WIN</span>
                 </div>
-                <button onClick={() => setShowCoinGames(!showCoinGames)}
-                  className="text-[8px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
-                  style={{ backgroundColor: 'rgba(237,194,46,0.15)', color: '#EDC22E' }}>
-                  {showCoinGames ? 'HIDE' : 'SHOW'} <ChevronRight className="w-2.5 h-2.5" style={{ transform: showCoinGames ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.2s' }} />
-                </button>
-              </div>
-              {showCoinGames && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} transition={{ duration: 0.3 }}>
-                  <div className="space-y-1.5">
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Coin Games - Expandable */}
+          <AnimatePresence>
+            {showCoinGames && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="w-full overflow-hidden">
+                <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.04)', border: '1px solid rgba(237,194,46,0.08)' }}>
+                  <div className="grid grid-cols-5 gap-1">
                     {COIN_GAME_MODES.map((mode) => {
                       const canPlay = coins >= mode.fee && isOnline && !isGameLimitReached
                       return (
                         <button key={mode.fee} onClick={() => handleCoinGame(mode.fee)}
-                          className="w-full flex items-center justify-between p-2.5 rounded-xl transition-transform hover:scale-[1.01] active:scale-95"
+                          className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg transition-transform active:scale-95"
                           style={{
-                            backgroundColor: canPlay ? `${mode.color}08` : 'rgba(255,255,255,0.02)',
-                            border: `1px solid ${canPlay ? `${mode.color}20` : 'rgba(255,255,255,0.04)'}`,
+                            backgroundColor: canPlay ? `${mode.color}10` : 'rgba(255,255,255,0.02)',
+                            border: `1px solid ${canPlay ? `${mode.color}25` : 'rgba(255,255,255,0.04)'}`,
                             opacity: canPlay ? 1 : 0.4,
                           }}>
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-                              style={{ backgroundColor: `${mode.color}15`, border: `1px solid ${mode.color}25` }}>
-                              <span className="text-xs font-extrabold" style={{ color: mode.color }}>{mode.fee}</span>
-                            </div>
-                            <div className="text-left">
-                              <p className="text-[10px] font-bold" style={{ color: canPlay ? mode.color : 'rgba(255,255,255,0.4)' }}>
-                                Entry: {mode.fee} coins
-                              </p>
-                              <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                                Win: {mode.win} coins
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Zap className="w-3 h-3" style={{ color: mode.color }} />
-                            <span className="text-[9px] font-bold" style={{ color: mode.color }}>PLAY</span>
-                          </div>
+                          <span className="text-[8px] font-extrabold" style={{ color: mode.color }}>{mode.fee}</span>
+                          <span className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>→{mode.win}</span>
                         </button>
                       )
                     })}
                   </div>
-                  <p className="text-[8px] text-center mt-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                    {isGameLimitReached ? '⚠️ Daily game limit reached' : isOnline ? '1v1 • 2 min • Win 2x your entry! 🪙' : '⚠️ Internet required for Coin Games'}
+                  <p className="text-[7px] text-center mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    1v1 • 2 min • Win 2x your entry! 🪙
                   </p>
-                </motion.div>
-              )}
-              {!showCoinGames && (
-                <p className="text-[8px] text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                  Play with coins • Win 2x! 🪙
-                </p>
-              )}
-            </div>
-          </motion.div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          {/* Quick Actions: Streak + Spin + Weekly + Leaderboard */}
-          <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }}
-            className="w-full grid grid-cols-4 gap-2">
+          {/* PLAY TOURNAMENT button */}
+          {tournamentJoined && isOnline && (
+            <button onClick={() => onStartTournamentGame()}
+              className="w-full py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+              style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF', boxShadow: '0 4px 15px rgba(0,230,118,0.3)' }}>
+              <Play className="w-3.5 h-3.5" fill="white" />
+              PLAY TOURNAMENT
+              <span className="text-[8px] font-normal px-1 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>90s</span>
+            </button>
+          )}
+
+          {/* Quick Actions: Streak + Spin + Weekly + Leaderboard - compact */}
+          <div className="w-full grid grid-cols-4 gap-1.5">
             <button onClick={() => setShowStreak(true)}
-              className="flex flex-col items-center gap-1 p-2.5 rounded-xl transition-transform hover:scale-[1.02] active:scale-95"
-              style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '1px solid rgba(237,194,46,0.2)' }}>
-              <span className="text-lg">📅</span>
-              <p className="text-[8px] font-bold" style={{ color: '#EDC22E' }}>Daily</p>
-              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Day {Math.min(streakDay + 1, 7)}/7</p>
+              className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
+              style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
+              <span className="text-base">📅</span>
+              <p className="text-[7px] font-bold" style={{ color: '#EDC22E' }}>Daily</p>
+              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Day {Math.min(streakDay + 1, 7)}/7</p>
             </button>
             <button onClick={() => setShowSpin(true)}
-              className="flex flex-col items-center gap-1 p-2.5 rounded-xl transition-transform hover:scale-[1.02] active:scale-95"
-              style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
-              <span className="text-lg">🎰</span>
-              <p className="text-[8px] font-bold" style={{ color: '#00E676' }}>Spin</p>
-              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{spinTickets} tickets</p>
+              className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
+              style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.12)' }}>
+              <span className="text-base">🎰</span>
+              <p className="text-[7px] font-bold" style={{ color: '#00E676' }}>Spin</p>
+              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{spinTickets}🎫</p>
             </button>
             <button onClick={() => !weeklyBonusClaimed && onClaimWeeklyBonus?.()}
-              className="flex flex-col items-center gap-1 p-2.5 rounded-xl transition-transform hover:scale-[1.02] active:scale-95"
+              className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
               style={{
-                backgroundColor: weeklyBonusClaimed ? 'rgba(255,255,255,0.03)' : 'rgba(237,194,46,0.12)',
-                border: weeklyBonusClaimed ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(237,194,46,0.3)',
+                backgroundColor: weeklyBonusClaimed ? 'rgba(255,255,255,0.02)' : 'rgba(237,194,46,0.1)',
+                border: weeklyBonusClaimed ? '1px solid rgba(255,255,255,0.04)' : '1px solid rgba(237,194,46,0.2)',
                 opacity: weeklyBonusClaimed ? 0.5 : 1,
               }}>
-              <span className="text-lg">🎁</span>
-              <p className="text-[8px] font-bold" style={{ color: weeklyBonusClaimed ? 'rgba(255,255,255,0.3)' : '#EDC22E' }}>Weekly</p>
-              <p className="text-[7px]" style={{ color: weeklyBonusClaimed ? 'rgba(255,255,255,0.2)' : '#00E676' }}>{weeklyBonusClaimed ? 'Claimed' : '400 💰'}</p>
+              <span className="text-base">🎁</span>
+              <p className="text-[7px] font-bold" style={{ color: weeklyBonusClaimed ? 'rgba(255,255,255,0.3)' : '#EDC22E' }}>Weekly</p>
+              <p className="text-[6px]" style={{ color: weeklyBonusClaimed ? 'rgba(255,255,255,0.2)' : '#00E676' }}>{weeklyBonusClaimed ? '✓' : '400💰'}</p>
             </button>
             <button onClick={() => setShowLeaderboard(true)}
-              className="flex flex-col items-center gap-1 p-2.5 rounded-xl transition-transform hover:scale-[1.02] active:scale-95"
-              style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)' }}>
-              <span className="text-lg">🏆</span>
-              <p className="text-[8px] font-bold" style={{ color: '#F65E3B' }}>Rank</p>
-              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Leaderboard</p>
+              className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
+              style={{ backgroundColor: 'rgba(246,94,59,0.06)', border: '1px solid rgba(246,94,59,0.12)' }}>
+              <span className="text-base">🏆</span>
+              <p className="text-[7px] font-bold" style={{ color: '#F65E3B' }}>Rank</p>
+              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Board</p>
             </button>
-          </motion.div>
-
-          {/* Invite Quick Action */}
-          <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.45 }}
-            className="w-full">
-            <button onClick={() => setShowInvite(true)}
-              className="w-full flex items-center justify-between p-2.5 rounded-xl transition-transform hover:scale-[1.01] active:scale-95"
-              style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.12)' }}>
-              <div className="flex items-center gap-2">
-                <span className="text-lg">🤝</span>
-                <div className="text-left">
-                  <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>Invite Friends</p>
-                  <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Earn 5% commission</p>
-                </div>
-              </div>
-              <ChevronRight className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.3)' }} />
-            </button>
-          </motion.div>
-
-          {/* Tournament */}
-          <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}
-            className="w-full">
-            <button onClick={() => isOnline && setShowTournament(true)}
-              className="w-full flex items-center gap-2 p-3 rounded-xl transition-transform hover:scale-[1.02] active:scale-95"
-              style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)', opacity: isOnline ? 1 : 0.5 }}>
-              <Trophy className="w-5 h-5" style={{ color: '#EDC22E' }} />
-              <div className="text-left flex-1">
-                <p className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>Tournament</p>
-                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{isOnline ? (tournamentJoined ? `${tournamentPoints} pts` : 'Weekly Prizes!') : 'Need Internet'}</p>
-              </div>
-              <ChevronRight className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.2)' }} />
-            </button>
-          </motion.div>
-
-          {/* PLAY TOURNAMENT button - shows on dashboard when joined */}
-          {tournamentJoined && isOnline && (
-            <motion.div initial={{ y: 20, opacity: 0, scale: 0.9 }} animate={{ y: 0, opacity: 1, scale: 1 }} transition={{ delay: 0.55, type: 'spring', stiffness: 200 }}>
-              <button
-                onClick={() => { onStartTournamentGame() }}
-                className="w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] active:scale-95"
-                style={{
-                  background: 'linear-gradient(135deg, #00E676, #00C853)',
-                  color: '#FFFFFF',
-                  boxShadow: '0 6px 30px rgba(0,230,118,0.4), 0 0 60px rgba(0,230,118,0.15)',
-                }}
-              >
-                <Play className="w-5 h-5" fill="white" />
-                <span>PLAY TOURNAMENT</span>
-                <span className="text-[10px] font-normal px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>90s</span>
-              </button>
-            </motion.div>
-          )}
-
-          {/* Multiplex/Autorelaxed Ad - Shows multiple relevant ads */}
-          <MultiplexAd isOnline={isOnline} />
-
-          {/* Mod Best Score */}
-          {modBestScore > 0 && (
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.6 }}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl"
-              style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <Crown className="w-4 h-4" style={{ color: '#EDC22E' }} />
-              <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Mod Best Score:</span>
-              <span className="text-xs font-bold" style={{ color: '#EDC22E' }}>{modBestScore}</span>
-            </motion.div>
-          )}
-
-          {/* Invite quick info */}
-          {invitedUsers.length > 0 && (
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.7 }}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl"
-              style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.1)' }}>
-              <div className="flex items-center gap-2">
-                <UserPlus className="w-3.5 h-3.5" style={{ color: '#00E676' }} />
-                <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{invitedUsers.length} invited</span>
-              </div>
-              {commissionBalance > 0 && (
-                <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>{commissionBalance} 💰 pending</span>
-              )}
-            </motion.div>
-          )}
-
-          {/* Footer links - Required for AdSense approval */}
-          <div className="w-full flex items-center justify-center gap-4 py-2 px-4 mt-2" style={{ backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: 8 }}>
-            <a href="/privacy-policy.html" target="_blank" className="text-[9px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Privacy Policy</a>
-            <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
-            <a href="/about.html" target="_blank" className="text-[9px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>About</a>
-            <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
-            <a href="mailto:powergamingyt1001@gmail.com" className="text-[9px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Contact</a>
           </div>
 
-          {/* Banner Ad - Bottom of dashboard */}
-          <BannerAd position="bottom" isOnline={isOnline} />
+          {/* Invite + Mod Best Score - combined row */}
+          <div className="w-full flex gap-1.5">
+            <button onClick={() => setShowInvite(true)}
+              className="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-transform active:scale-95"
+              style={{ backgroundColor: 'rgba(0,230,118,0.05)', border: '1px solid rgba(0,230,118,0.1)' }}>
+              <span className="text-sm">🤝</span>
+              <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>Invite</span>
+              <span className="text-[6px]" style={{ color: 'rgba(255,255,255,0.3)' }}>5%</span>
+            </button>
+            {modBestScore > 0 && (
+              <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg"
+                style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <Crown className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                <span className="text-[8px] font-bold" style={{ color: '#EDC22E' }}>{modBestScore}</span>
+              </div>
+            )}
+            {invitedUsers.length > 0 && commissionBalance > 0 && (
+              <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg"
+                style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                <span className="text-[8px] font-bold" style={{ color: '#EDC22E' }}>{commissionBalance}💰</span>
+              </div>
+            )}
+          </div>
+
+          {/* Multiplex/Autorelaxed Ad */}
+          <MultiplexAd isOnline={isOnline} />
 
         </div>
+      </div>
+
+      {/* Bottom: Footer + Banner Ad - always at bottom */}
+      <div className="flex-shrink-0 relative z-10">
+        <div className="w-full flex items-center justify-center gap-3 py-1.5 px-4" style={{ backgroundColor: 'rgba(255,255,255,0.02)', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+          <a href="/privacy-policy.html" target="_blank" className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.3)' }}>Privacy</a>
+          <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.1)' }}>|</span>
+          <a href="/about.html" target="_blank" className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.3)' }}>About</a>
+          <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.1)' }}>|</span>
+          <a href="mailto:powergamingyt1001@gmail.com" className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.3)' }}>Contact</a>
+        </div>
+        <BannerAd position="bottom" isOnline={isOnline} />
       </div>
 
       {/* Modals */}
