@@ -10,6 +10,7 @@ import { Leaderboard } from './Leaderboard'
 import { Tournament } from './Tournament'
 import { InvitePanel } from './InvitePanel'
 import { ProfilePanel, NotificationsPanel } from './ProfilePanel'
+import { BannerAd } from './BannerAd'
 import { PowerUp, Notification, DailyTask, getLevelInfo } from '@/hooks/useGame'
 
 interface PlayDashboardProps {
@@ -485,6 +486,11 @@ export function PlayDashboard({
           )}
 
         </div>
+      </div>
+
+      {/* Banner Ad - Bottom of dashboard */}
+      <div className="flex-shrink-0 mt-auto">
+        <BannerAd position="bottom" isOnline={isOnline} />
       </div>
 
       {/* Modals */}

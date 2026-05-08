@@ -36,8 +36,17 @@ export default function Home() {
   }, [])
 
   const handleLoadingComplete = useCallback(() => {
-    setPhase('dashboard')
-  }, [])
+    // Show App Open Ad after loading screen, then go to dashboard
+    if (isOnline) {
+      setIsAppOpenAd(true)
+      setAdDuration(6)
+      setShowInterstitial(true)
+      pendingGameActionRef.current = null // No game action - just go to dashboard
+      setPhase('ad')
+    } else {
+      setPhase('dashboard')
+    }
+  }, [isOnline])
 
   // Common game start handler: shows ad before starting game
   const startGameWithAd = useCallback((startAction: () => void) => {

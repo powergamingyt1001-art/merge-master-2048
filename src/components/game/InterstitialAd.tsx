@@ -2,16 +2,16 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Megaphone } from 'lucide-react'
+import { Megaphone, Gamepad2 } from 'lucide-react'
 import { AD_CONFIG, pushAd } from '@/lib/admob'
 
 interface InterstitialAdProps {
   isOpen: boolean
   onClose: () => void
   isOnline: boolean
-  /** Duration in seconds. App open = 8s, interstitial = 5s */
+  /** Duration in seconds. App open = 6s, interstitial = 5s */
   duration?: number
-  /** Whether this is an app open ad (full screen, 8s) or interstitial (5s) */
+  /** Whether this is an app open ad (full screen, after loading) or interstitial (before game) */
   isAppOpen?: boolean
 }
 
@@ -88,14 +88,23 @@ export function InterstitialAd({ isOpen, onClose, isOnline, duration = 5, isAppO
             initial={{ scale: 0.8, y: 30 }}
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.8 }}
-            className="w-full h-full flex flex-col items-center justify-center"
+            className="w-full h-full flex flex-col"
             style={{ background: isAppOpen
               ? 'linear-gradient(135deg, #1a0533 0%, #0d1b3e 50%, #1a0533 100%)'
               : 'linear-gradient(135deg, #1a0533, #0d1b3e)'
             }}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between p-3 w-full max-w-sm">
+            {/* App Open Ad - Special Header with game branding */}
+            {isAppOpen && (
+              <div className="flex items-center justify-center gap-2 pt-4 pb-2">
+                <Gamepad2 className="w-5 h-5" style={{ color: '#EDC22E' }} />
+                <span className="text-sm font-extrabold" style={{ color: '#EDC22E', textShadow: '0 0 20px rgba(237,194,46,0.5)' }}>MERGE MASTER 2048</span>
+                <Gamepad2 className="w-5 h-5" style={{ color: '#EDC22E' }} />
+              </div>
+            )}
+
+            {/* Header - Close/Countdown button */}
+            <div className="flex items-center justify-between px-3 py-2 w-full max-w-sm mx-auto">
               <div className="flex items-center gap-1.5">
                 <Megaphone className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
                 <span className="text-[9px] font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>Sponsored</span>
@@ -103,22 +112,24 @@ export function InterstitialAd({ isOpen, onClose, isOnline, duration = 5, isAppO
               <button
                 onClick={handleClose}
                 disabled={!canClose}
-                className="w-8 h-8 rounded-full flex items-center justify-center transition-all"
+                className="h-7 px-3 rounded-full flex items-center justify-center gap-1.5 transition-all"
                 style={{
                   backgroundColor: canClose ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
                   cursor: canClose ? 'pointer' : 'not-allowed',
                 }}
               >
                 {canClose ? (
-                  <span className="text-sm font-bold" style={{ color: 'rgba(255,255,255,0.9)' }}>✕</span>
+                  <>
+                    <span className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.9)' }}>✕ Close</span>
+                  </>
                 ) : (
-                  <span className="text-sm font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>{countdown}</span>
+                  <span className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>{countdown}s</span>
                 )}
               </button>
             </div>
 
-            {/* AdSense Interstitial Ad */}
-            <div className="flex-1 w-full max-w-sm flex flex-col items-center justify-center px-4">
+            {/* AdSense Ad Unit */}
+            <div className="flex-1 w-full max-w-sm mx-auto flex flex-col items-center justify-center px-4">
               <div className="w-full rounded-xl overflow-hidden" style={{ minHeight: 250 }}>
                 <ins
                   className="adsbygoogle"
@@ -129,21 +140,21 @@ export function InterstitialAd({ isOpen, onClose, isOnline, duration = 5, isAppO
                   data-full-width-responsive="true"
                 />
               </div>
-              {/* Fallback if ad doesn't load */}
+              {/* Fallback placeholder if ad doesn't load */}
               {!adLoaded && (
-                <div className="w-full aspect-[3/4] max-h-[40vh] rounded-xl flex flex-col items-center justify-center gap-3 mt-2"
+                <div className="w-full aspect-[3/4] max-h-[35vh] rounded-xl flex flex-col items-center justify-center gap-3 mt-2"
                   style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <Megaphone className="w-16 h-16" style={{ color: '#EDC22E' }} />
                   <p className="text-lg font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                    {isAppOpen ? 'App Open Ad' : 'Advertisement'}
+                    {isAppOpen ? '🎮 Welcome!' : 'Advertisement'}
                   </p>
                   <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Loading ad...</p>
                 </div>
               )}
             </div>
 
-            {/* Progress bar - bottom */}
-            <div className="w-full max-w-sm px-6 pb-6">
+            {/* Bottom - Progress bar + Continue button */}
+            <div className="w-full max-w-sm mx-auto px-6 pb-6">
               {!canClose && countdown > 0 && (
                 <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
                   <motion.div
@@ -162,14 +173,25 @@ export function InterstitialAd({ isOpen, onClose, isOnline, duration = 5, isAppO
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   onClick={handleClose}
-                  className="w-full py-3 rounded-xl font-bold text-sm"
+                  className="w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
                   style={{
-                    background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
+                    background: isAppOpen
+                      ? 'linear-gradient(135deg, #00E676, #00C853)'
+                      : 'linear-gradient(135deg, #EDC22E, #FF7A00)',
                     color: '#FFFFFF',
-                    boxShadow: '0 4px 20px rgba(237,194,46,0.4)',
+                    boxShadow: isAppOpen
+                      ? '0 4px 20px rgba(0,230,118,0.4), 0 0 40px rgba(0,230,118,0.15)'
+                      : '0 4px 20px rgba(237,194,46,0.4)',
                   }}
                 >
-                  {isAppOpen ? '🚀 Start Game' : '▶ Continue'}
+                  {isAppOpen ? (
+                    <>
+                      <Gamepad2 className="w-4 h-4" />
+                      🚀 Enter Game
+                    </>
+                  ) : (
+                    '▶ Continue'
+                  )}
                 </motion.button>
               )}
             </div>
