@@ -162,14 +162,14 @@ export function PlayDashboard({
   }, [isGameLimitReached, coins, onStartCoinGame, onAddNotification, maxGamesPerDay])
 
   return (
-    <div className="fixed inset-0 flex flex-col overflow-hidden"
+    <div className="min-h-screen flex flex-col"
       style={{ background: 'linear-gradient(135deg, #1a0533 0%, #0d1b3e 50%, #1a0533 100%)' }}>
       {/* Glows */}
       <div className="absolute top-1/4 left-1/3 w-48 h-48 rounded-full opacity-20 pointer-events-none" style={{ background: 'radial-gradient(circle, #EDC22E, transparent)', filter: 'blur(60px)' }} />
       <div className="absolute bottom-1/4 right-1/3 w-56 h-56 rounded-full opacity-15 pointer-events-none" style={{ background: 'radial-gradient(circle, #FF7A00, transparent)', filter: 'blur(70px)' }} />
 
       {/* Scrollable content */}
-      <div className="relative z-10 flex-1 overflow-y-auto">
+      <div className="relative z-10 flex-1">
         <div className="flex flex-col items-center max-w-sm w-full mx-auto px-4 py-4 gap-3">
 
           {/* Top bar: Profile + Title + Bell */}
@@ -489,20 +489,19 @@ export function PlayDashboard({
             </motion.div>
           )}
 
-        </div>
-      </div>
+          {/* Footer links - Required for AdSense approval */}
+          <div className="w-full flex items-center justify-center gap-4 py-2 px-4 mt-2" style={{ backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: 8 }}>
+            <a href="/privacy-policy.html" target="_blank" className="text-[9px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Privacy Policy</a>
+            <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+            <a href="/about.html" target="_blank" className="text-[9px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>About</a>
+            <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+            <a href="mailto:powergamingyt1001@gmail.com" className="text-[9px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Contact</a>
+          </div>
 
-      {/* Banner Ad - Bottom of dashboard */}
-      <div className="flex-shrink-0 mt-auto">
-        {/* Footer links - Required for AdSense approval */}
-        <div className="w-full flex items-center justify-center gap-4 py-2 px-4" style={{ backgroundColor: 'rgba(255,255,255,0.02)' }}>
-          <a href="/privacy-policy.html" target="_blank" className="text-[9px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Privacy Policy</a>
-          <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
-          <a href="/about.html" target="_blank" className="text-[9px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>About</a>
-          <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
-          <a href="mailto:powergamingyt1001@gmail.com" className="text-[9px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Contact</a>
+          {/* Banner Ad - Bottom of dashboard */}
+          <BannerAd position="bottom" isOnline={isOnline} />
+
         </div>
-        <BannerAd position="bottom" isOnline={isOnline} />
       </div>
 
       {/* Modals */}
