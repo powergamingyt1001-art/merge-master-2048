@@ -6,6 +6,7 @@ import { LoadingScreen } from '@/components/game/LoadingScreen'
 import { PlayDashboard } from '@/components/game/PlayDashboard'
 import { GameBoard } from '@/components/game/GameBoard'
 import { InterstitialAd } from '@/components/game/InterstitialAd'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useGame } from '@/hooks/useGame'
 import { GameProvider } from '@/context/GameContext'
 
@@ -119,8 +120,9 @@ export default function Home() {
   }, [game, startGameWithAd])
 
   return (
-    <GameProvider game={game}>
-      <main className="min-h-screen" style={{ touchAction: 'none' }}>
+    <ErrorBoundary>
+      <GameProvider game={game}>
+        <main className="min-h-screen">
         <AnimatePresence mode="wait">
           {phase === 'loading' && <LoadingScreen key="loading" onFinish={handleLoadingComplete} />}
           {phase === 'dashboard' && (
@@ -193,5 +195,6 @@ export default function Home() {
         </AnimatePresence>
       </main>
     </GameProvider>
+    </ErrorBoundary>
   )
 }

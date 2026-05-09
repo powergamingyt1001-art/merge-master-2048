@@ -1,8 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { AD_CONFIG, pushAd } from '@/lib/admob'
 
 interface BannerAdProps {
   position: 'top' | 'bottom'
@@ -10,20 +8,6 @@ interface BannerAdProps {
 }
 
 export function BannerAd({ position, isOnline }: BannerAdProps) {
-  const adRef = useRef<HTMLDivElement>(null)
-  const adPushed = useRef(false)
-
-  useEffect(() => {
-    if (!isOnline) return
-    // Push ad once after mount
-    if (!adPushed.current) {
-      adPushed.current = true
-      // Small delay to ensure the ins element is in DOM
-      const timer = setTimeout(() => pushAd(), 300)
-      return () => clearTimeout(timer)
-    }
-  }, [isOnline])
-
   // Don't show ad when offline
   if (!isOnline) return null
 
@@ -41,16 +25,11 @@ export function BannerAd({ position, isOnline }: BannerAdProps) {
           borderBottom: position === 'top' ? '1px solid rgba(255,255,255,0.06)' : 'none',
         }}
       >
-        {/* Google AdSense Banner Ad */}
-        <div ref={adRef} className="w-full max-w-md overflow-hidden">
-          <ins
-            className="adsbygoogle"
-            style={{ display: 'block', minHeight: 50 }}
-            data-ad-client={AD_CONFIG.publisherId}
-            data-ad-slot={AD_CONFIG.banner.id}
-            data-ad-format="auto"
-            data-full-width-responsive="true"
-          />
+        {/* Adsterra Banner Ad Container */}
+        <div className="w-full max-w-md overflow-hidden" style={{ minHeight: 50 }}>
+          <div id={`adsterra-banner-${position}`} className="w-full">
+            {/* Adsterra will inject the ad here via script */}
+          </div>
         </div>
       </motion.div>
     </AnimatePresence>

@@ -31,8 +31,7 @@ export function LoadingScreen({ onFinish }: LoadingScreenProps) {
   }, [onFinish])
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-end overflow-hidden"
-      style={{ touchAction: 'none' }}>
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-end overflow-hidden">
 
       {/* Full-screen intro image */}
       <div className="absolute inset-0">
