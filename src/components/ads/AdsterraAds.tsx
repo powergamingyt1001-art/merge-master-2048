@@ -5,8 +5,8 @@ import { useEffect, useRef } from 'react'
 // ============================================================
 // ADSTERRA AD COMPONENTS
 // All ad scripts provided by user for Adsterra integration
-// IMPORTANT: Popunder and Social Bar are loaded with delay
-// to prevent page redirect on initial load
+// IMPORTANT: Each banner uses isolated scope to prevent
+// atOptions conflicts between multiple banners on same page
 // ============================================================
 
 // --- Popunder Ad (Global - loaded once, with delay) ---
@@ -21,7 +21,7 @@ export function AdsterraPopunder() {
       script.src = 'https://pl29392034.profitablecpmratenetwork.com/40/9d/aa/409daa8e988b716a6a40b571e679667a.js'
       script.async = true
       document.body.appendChild(script)
-    }, 5000) // 5 second delay after page load
+    }, 8000) // 8 second delay after page load - prevents new tab redirect
     return () => clearTimeout(timer)
   }, [])
   return null
@@ -39,7 +39,7 @@ export function AdsterraSocialBar() {
       script.src = 'https://pl29392035.profitablecpmratenetwork.com/b7/40/ba/b740ba65f24e56491e9bd88c482e6b7f.js'
       script.async = true
       document.body.appendChild(script)
-    }, 3000) // 3 second delay after page load
+    }, 5000) // 5 second delay after page load
     return () => clearTimeout(timer)
   }, [])
   return null
@@ -70,6 +70,45 @@ export function AdsterraNativeBanner() {
   return <div ref={containerRef} className="w-full" />
 }
 
+// ============================================================
+// HELPER: Create isolated banner ad using iframe approach
+// Each banner gets its own scope so atOptions don't conflict
+// ============================================================
+function createIsolatedBanner(
+  container: HTMLDivElement,
+  key: string,
+  width: number,
+  height: number
+) {
+  container.innerHTML = ''
+
+  // Create an iframe for isolation
+  const iframe = document.createElement('iframe')
+  iframe.style.cssText = `width:${width}px;height:${height}px;border:none;overflow:hidden;max-width:100%;`
+  iframe.setAttribute('scrolling', 'no')
+  iframe.setAttribute('frameBorder', '0')
+  container.appendChild(iframe)
+
+  // Write the ad code inside the iframe
+  const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
+  if (iframeDoc) {
+    iframeDoc.open()
+    iframeDoc.write(`
+      <!DOCTYPE html>
+      <html>
+      <head><style>body{margin:0;padding:0;overflow:hidden;}</style></head>
+      <body>
+        <script>
+          atOptions = {'key' : '${key}','format' : 'iframe','height' : ${height},'width' : ${width},'params' : {}};
+        </script>
+        <script src="https://www.highperformanceformat.com/${key}/invoke.js" async></script>
+      </body>
+      </html>
+    `)
+    iframeDoc.close()
+  }
+}
+
 // --- Banner 728x90 ---
 export function AdsterraBanner728x90() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -78,20 +117,18 @@ export function AdsterraBanner728x90() {
   useEffect(() => {
     if (!containerRef.current || loadedRef.current) return
     loadedRef.current = true
-    const container = containerRef.current
-    container.innerHTML = ''
-
-    const optionsScript = document.createElement('script')
-    optionsScript.textContent = `atOptions = {'key' : '23e07d223b190b8e97e26dad42844982','format' : 'iframe','height' : 90,'width' : 728,'params' : {}};`
-    container.appendChild(optionsScript)
-
-    const invokeScript = document.createElement('script')
-    invokeScript.src = 'https://www.highperformanceformat.com/23e07d223b190b8e97e26dad42844982/invoke.js'
-    invokeScript.async = true
-    container.appendChild(invokeScript)
+    // Small delay to ensure DOM is ready
+    const timer = setTimeout(() => {
+      if (containerRef.current) {
+        createIsolatedBanner(containerRef.current, '23e07d223b190b8e97e26dad42844982', 728, 90)
+      }
+    }, 1000)
+    return () => clearTimeout(timer)
   }, [])
 
-  return <div ref={containerRef} className="w-full flex justify-center" />
+  return (
+    <div ref={containerRef} className="w-full flex justify-center" style={{ minHeight: 90 }} />
+  )
 }
 
 // --- Banner 300x250 ---
@@ -102,20 +139,17 @@ export function AdsterraBanner300x250() {
   useEffect(() => {
     if (!containerRef.current || loadedRef.current) return
     loadedRef.current = true
-    const container = containerRef.current
-    container.innerHTML = ''
-
-    const optionsScript = document.createElement('script')
-    optionsScript.textContent = `atOptions = {'key' : '28ee70730f6d9a4745a4e8b56c3693bd','format' : 'iframe','height' : 250,'width' : 300,'params' : {}};`
-    container.appendChild(optionsScript)
-
-    const invokeScript = document.createElement('script')
-    invokeScript.src = 'https://www.highperformanceformat.com/28ee70730f6d9a4745a4e8b56c3693bd/invoke.js'
-    invokeScript.async = true
-    container.appendChild(invokeScript)
+    const timer = setTimeout(() => {
+      if (containerRef.current) {
+        createIsolatedBanner(containerRef.current, '28ee70730f6d9a4745a4e8b56c3693bd', 300, 250)
+      }
+    }, 1500)
+    return () => clearTimeout(timer)
   }, [])
 
-  return <div ref={containerRef} className="w-full flex justify-center" />
+  return (
+    <div ref={containerRef} className="w-full flex justify-center" style={{ minHeight: 250 }} />
+  )
 }
 
 // --- Banner 160x600 ---
@@ -126,20 +160,17 @@ export function AdsterraBanner160x600() {
   useEffect(() => {
     if (!containerRef.current || loadedRef.current) return
     loadedRef.current = true
-    const container = containerRef.current
-    container.innerHTML = ''
-
-    const optionsScript = document.createElement('script')
-    optionsScript.textContent = `atOptions = {'key' : '59714a04048f48cc53c84df9a14ac7b5','format' : 'iframe','height' : 600,'width' : 160,'params' : {}};`
-    container.appendChild(optionsScript)
-
-    const invokeScript = document.createElement('script')
-    invokeScript.src = 'https://www.highperformanceformat.com/59714a04048f48cc53c84df9a14ac7b5/invoke.js'
-    invokeScript.async = true
-    container.appendChild(invokeScript)
+    const timer = setTimeout(() => {
+      if (containerRef.current) {
+        createIsolatedBanner(containerRef.current, '59714a04048f48cc53c84df9a14ac7b5', 160, 600)
+      }
+    }, 2000)
+    return () => clearTimeout(timer)
   }, [])
 
-  return <div ref={containerRef} className="w-full flex justify-center" />
+  return (
+    <div ref={containerRef} className="w-full flex justify-center" style={{ minHeight: 300 }} />
+  )
 }
 
 // --- Banner 160x300 ---
@@ -150,20 +181,17 @@ export function AdsterraBanner160x300() {
   useEffect(() => {
     if (!containerRef.current || loadedRef.current) return
     loadedRef.current = true
-    const container = containerRef.current
-    container.innerHTML = ''
-
-    const optionsScript = document.createElement('script')
-    optionsScript.textContent = `atOptions = {'key' : '72d64d305ad7f6b3a407a693880f5328','format' : 'iframe','height' : 300,'width' : 160,'params' : {}};`
-    container.appendChild(optionsScript)
-
-    const invokeScript = document.createElement('script')
-    invokeScript.src = 'https://www.highperformanceformat.com/72d64d305ad7f6b3a407a693880f5328/invoke.js'
-    invokeScript.async = true
-    container.appendChild(invokeScript)
+    const timer = setTimeout(() => {
+      if (containerRef.current) {
+        createIsolatedBanner(containerRef.current, '72d64d305ad7f6b3a407a693880f5328', 160, 300)
+      }
+    }, 2500)
+    return () => clearTimeout(timer)
   }, [])
 
-  return <div ref={containerRef} className="w-full flex justify-center" />
+  return (
+    <div ref={containerRef} className="w-full flex justify-center" style={{ minHeight: 160 }} />
+  )
 }
 
 // --- Banner 468x60 ---
@@ -174,20 +202,17 @@ export function AdsterraBanner468x60() {
   useEffect(() => {
     if (!containerRef.current || loadedRef.current) return
     loadedRef.current = true
-    const container = containerRef.current
-    container.innerHTML = ''
-
-    const optionsScript = document.createElement('script')
-    optionsScript.textContent = `atOptions = {'key' : '775b637466f146ce8138a6adaa661063','format' : 'iframe','height' : 60,'width' : 468,'params' : {}};`
-    container.appendChild(optionsScript)
-
-    const invokeScript = document.createElement('script')
-    invokeScript.src = 'https://www.highperformanceformat.com/775b637466f146ce8138a6adaa661063/invoke.js'
-    invokeScript.async = true
-    container.appendChild(invokeScript)
+    const timer = setTimeout(() => {
+      if (containerRef.current) {
+        createIsolatedBanner(containerRef.current, '775b637466f146ce8138a6adaa661063', 468, 60)
+      }
+    }, 3000)
+    return () => clearTimeout(timer)
   }, [])
 
-  return <div ref={containerRef} className="w-full flex justify-center" />
+  return (
+    <div ref={containerRef} className="w-full flex justify-center" style={{ minHeight: 60 }} />
+  )
 }
 
 // --- Banner 320x50 ---
@@ -198,18 +223,15 @@ export function AdsterraBanner320x50() {
   useEffect(() => {
     if (!containerRef.current || loadedRef.current) return
     loadedRef.current = true
-    const container = containerRef.current
-    container.innerHTML = ''
-
-    const optionsScript = document.createElement('script')
-    optionsScript.textContent = `atOptions = {'key' : '14dda57ff56632821027d924e1ff5e1c','format' : 'iframe','height' : 50,'width' : 320,'params' : {}};`
-    container.appendChild(optionsScript)
-
-    const invokeScript = document.createElement('script')
-    invokeScript.src = 'https://www.highperformanceformat.com/14dda57ff56632821027d924e1ff5e1c/invoke.js'
-    invokeScript.async = true
-    container.appendChild(invokeScript)
+    const timer = setTimeout(() => {
+      if (containerRef.current) {
+        createIsolatedBanner(containerRef.current, '14dda57ff56632821027d924e1ff5e1c', 320, 50)
+      }
+    }, 500)
+    return () => clearTimeout(timer)
   }, [])
 
-  return <div ref={containerRef} className="w-full flex justify-center" />
+  return (
+    <div ref={containerRef} className="w-full flex justify-center" style={{ minHeight: 50 }} />
+  )
 }

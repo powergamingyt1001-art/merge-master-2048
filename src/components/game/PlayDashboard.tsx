@@ -177,11 +177,6 @@ export function PlayDashboard({
       <div className="absolute top-1/4 left-1/3 w-48 h-48 rounded-full opacity-20 pointer-events-none" style={{ background: 'radial-gradient(circle, #EDC22E, transparent)', filter: 'blur(60px)' }} />
       <div className="absolute bottom-1/4 right-1/3 w-56 h-56 rounded-full opacity-15 pointer-events-none" style={{ background: 'radial-gradient(circle, #FF7A00, transparent)', filter: 'blur(70px)' }} />
 
-      {/* Top Ad Banner - 320x50 */}
-      <div className="flex-shrink-0 relative z-10 w-full">
-        <AdsterraBanner320x50 />
-      </div>
-
       {/* Scrollable content */}
       <div className="relative z-10 flex-1 overflow-y-auto">
         <div className="flex flex-col items-center max-w-sm w-full mx-auto px-3 pt-2 pb-2 gap-2">
@@ -438,8 +433,8 @@ export function PlayDashboard({
             <AdsterraBanner468x60 />
           </div>
 
-          {/* Tall Banner Ads - side by side for desktop, stacked for mobile */}
-          <div className="w-full flex gap-2 justify-center">
+          {/* Tall Banner Ads - visible on md+ screens only */}
+          <div className="hidden md:flex w-full gap-2 justify-center">
             <div className="flex-shrink-0">
               <AdsterraBanner160x300 />
             </div>
@@ -449,7 +444,7 @@ export function PlayDashboard({
           </div>
 
           {/* Footer links */}
-          <div className="w-full flex items-center justify-center gap-2 pt-1"
+          <div className="w-full flex items-center justify-center gap-2 pt-1 pb-2"
             style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
             <button onClick={() => setShowPrivacy(true)} className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Privacy</button>
             <span style={{ color: 'rgba(255,255,255,0.1)' }}>·</span>
@@ -461,9 +456,14 @@ export function PlayDashboard({
         </div>
       </div>
 
-      {/* Bottom Ad Banner - 728x90 - pinned to bottom */}
+      {/* Bottom Ad Banner - mobile: 320x50, desktop: 728x90 */}
       <div className="flex-shrink-0 relative z-10 w-full">
-        <AdsterraBanner728x90 />
+        <div className="md:hidden">
+          <AdsterraBanner320x50 />
+        </div>
+        <div className="hidden md:block">
+          <AdsterraBanner728x90 />
+        </div>
       </div>
 
       {/* Modals */}
