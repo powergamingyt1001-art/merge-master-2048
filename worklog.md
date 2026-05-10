@@ -75,3 +75,36 @@ Stage Summary:
 - Combo: Fixed position, no bounce, smooth color transitions
 - All ads only shown when user is online (offline = no ads)
 - Code pushed to GitHub, Vercel deploying
+---
+Task ID: 1-8
+Agent: main
+Task: Complete ad system overhaul - remove popup ads, add overlay system, fix combo, add daily tasks
+
+Work Log:
+- Removed AdsterraPopunder and AdsterraSocialBar from page.tsx (caused redirects and dirty ads)
+- Created AdOverlay component with countdown timer (5 seconds) + 2 banner ads
+- Created SpinWheelAd for "Watch Ad for Free Spin" with direct link opening
+- Added BackgroundImpressionTimer for periodic hidden iframe impressions (every 30s)
+- Integrated AdOverlay into page.tsx for all game start actions (Play, Battle, Tournament, Coins)
+- Online users see ad overlay before game starts; offline users skip directly
+- Fixed combo display: always reserves 32px fixed space so tiles dont shake/move
+- Added daily tasks system: Visit Website (50 coins), Play 3 Games (30 coins), Score 500+ (40 coins), Spin Wheel (20 coins)
+- Added "Visit Website" task with direct link (Adsterra) for revenue
+- Updated useSpinTicket to track spin daily task progress
+- Updated addGameToHistory to track play and score daily task progress
+- Added completeVisitWebsiteTask function to useGame hook
+- Fixed SpinWheel: "Watch Ad for Free Spin" now opens direct link ad + countdown overlay
+- Added AdsterraBanner320x50 ad inside SpinWheel modal
+- Updated "Get Free Life" buttons to open direct link before reviving
+- Removed 160x600 and 160x300 banner components (not used on mobile)
+- Made Native Banner ad compact with maxHeight:100
+- Pushed to GitHub/Vercel
+
+Stage Summary:
+- All popup/popunder/social bar ads removed (they were redirecting users and showing dirty content)
+- Ad overlay system created with countdown + banner ads + direct link
+- Combo display fixed with reserved space
+- Daily tasks added with "Visit Website" revenue task
+- Background impression timer added
+- Deployed to: https://merge-master-2048-oaou.vercel.app
+
