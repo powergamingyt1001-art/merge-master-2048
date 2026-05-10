@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -61,6 +62,18 @@ export default function RootLayout({
       >
         {children}
         <Toaster />
+
+        {/* Adsterra Popunder Ad - Global */}
+        <Script
+          src="https://pl29392034.profitablecpmratenetwork.com/40/9d/aa/409daa8e988b716a6a40b571e679667a.js"
+          strategy="afterInteractive"
+        />
+
+        {/* Adsterra Social Bar Ad - Global */}
+        <Script
+          src="https://pl29392035.profitablecpmratenetwork.com/b7/40/ba/b740ba65f24e56491e9bd88c482e6b7f.js"
+          strategy="afterInteractive"
+        />
 
         {/* PWA Service Worker Registration */}
         <script

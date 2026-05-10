@@ -65,9 +65,9 @@ export function PrivacyPolicy({ isOpen, onClose }: { isOpen: boolean; onClose: (
       </Section>
 
       <Section title="Advertisements">
-        <Text>We use Google AdSense to display advertisements. Google may use cookies to serve ads based on your visits.</Text>
-        <Bullet>You can opt out at <Link href="https://www.google.com/settings/ads">Google Ads Settings</Link></Bullet>
-        <Bullet>Opt out of vendor cookies at <Link href="https://optout.networkadvertising.org/">NAI opt-out page</Link></Bullet>
+        <Text>We use Adsterra to display advertisements. Adsterra may use cookies to serve ads based on your visits.</Text>
+        <Bullet>You can opt out of personalized ads at <Link href="https://optout.networkadvertising.org/">NAI opt-out page</Link></Bullet>
+        <Bullet>Opt out of vendor cookies at <Link href="https://optout.aboutads.info/">Digital Advertising Alliance opt-out</Link></Bullet>
       </Section>
 
       <Section title="Local Storage">

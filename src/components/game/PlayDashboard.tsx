@@ -10,9 +10,16 @@ import { Leaderboard } from './Leaderboard'
 import { Tournament } from './Tournament'
 import { InvitePanel } from './InvitePanel'
 import { ProfilePanel, NotificationsPanel } from './ProfilePanel'
-import { BannerAd } from './BannerAd'
-import { MultiplexAd } from './MultiplexAd'
 import { PrivacyPolicy, AboutPage, ContactPage } from './FooterPages'
+import {
+  AdsterraNativeBanner,
+  AdsterraBanner728x90,
+  AdsterraBanner300x250,
+  AdsterraBanner468x60,
+  AdsterraBanner320x50,
+  AdsterraBanner160x300,
+  AdsterraBanner160x600,
+} from '@/components/ads/AdsterraAds'
 import { PowerUp, Notification, DailyTask, getLevelInfo } from '@/hooks/useGame'
 
 interface PlayDashboardProps {
@@ -143,8 +150,6 @@ export function PlayDashboard({
     onAddNotification('Spin Prize!', `You won ${prize.emoji} ${prize.label}!`, 'reward', '🎰')
   }, [onAddPowerUp, onAddUndos, onAddSpinTickets, onAddCoins, onAddNotification])
 
-
-
   const handlePlayClassic = useCallback(() => {
     if (isGameLimitReached) {
       onAddNotification('Daily Limit', `You've played ${maxGamesPerDay} games today. Come back tomorrow!`, 'system', '⏰')
@@ -168,13 +173,18 @@ export function PlayDashboard({
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden"
       style={{ background: 'linear-gradient(135deg, #1a0533 0%, #0d1b3e 50%, #1a0533 100%)' }}>
-      {/* Glows */}
+      {/* Background glows */}
       <div className="absolute top-1/4 left-1/3 w-48 h-48 rounded-full opacity-20 pointer-events-none" style={{ background: 'radial-gradient(circle, #EDC22E, transparent)', filter: 'blur(60px)' }} />
       <div className="absolute bottom-1/4 right-1/3 w-56 h-56 rounded-full opacity-15 pointer-events-none" style={{ background: 'radial-gradient(circle, #FF7A00, transparent)', filter: 'blur(70px)' }} />
 
-      {/* Scrollable content - fills remaining space */}
+      {/* Top Ad Banner - 320x50 */}
+      <div className="flex-shrink-0 relative z-10 w-full">
+        <AdsterraBanner320x50 />
+      </div>
+
+      {/* Scrollable content */}
       <div className="relative z-10 flex-1 overflow-y-auto">
-        <div className="flex flex-col items-center max-w-sm w-full mx-auto px-2 pt-2 pb-1 gap-1">
+        <div className="flex flex-col items-center max-w-sm w-full mx-auto px-3 pt-2 pb-2 gap-2">
 
           {/* Top bar: Profile + Title + Bell */}
           <div className="w-full flex items-center justify-between">
@@ -242,7 +252,7 @@ export function PlayDashboard({
             </div>
           </div>
 
-          {/* Central PLAY Button - smaller and compact */}
+          {/* Central PLAY Button */}
           <div className="flex items-center gap-3 w-full justify-center">
             <button onClick={handlePlayClassic}
               className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full flex flex-col items-center justify-center transition-transform active:scale-95"
@@ -261,7 +271,7 @@ export function PlayDashboard({
               )}
             </button>
 
-            {/* Quick mode buttons around PLAY */}
+            {/* Quick mode buttons */}
             <div className="flex flex-col gap-1.5">
               <button onClick={() => setShowBattleModes(!showBattleModes)}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg transition-transform active:scale-95"
@@ -353,7 +363,12 @@ export function PlayDashboard({
             </button>
           )}
 
-          {/* Quick Actions: Streak + Spin + Weekly + Leaderboard - compact */}
+          {/* Native Banner Ad */}
+          <div className="w-full">
+            <AdsterraNativeBanner />
+          </div>
+
+          {/* Quick Actions: Streak + Spin + Weekly + Leaderboard */}
           <div className="w-full grid grid-cols-4 gap-1.5">
             <button onClick={() => setShowStreak(true)}
               className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
@@ -389,7 +404,12 @@ export function PlayDashboard({
             </button>
           </div>
 
-          {/* Invite + Mod Best Score - combined row */}
+          {/* 300x250 Banner Ad */}
+          <div className="w-full">
+            <AdsterraBanner300x250 />
+          </div>
+
+          {/* Invite row */}
           <div className="w-full flex gap-1.5">
             <button onClick={() => setShowInvite(true)}
               className="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-transform active:scale-95"
@@ -413,10 +433,22 @@ export function PlayDashboard({
             )}
           </div>
 
-          {/* Multiplex/Autorelaxed Ad */}
-          <MultiplexAd isOnline={isOnline} />
+          {/* 468x60 Banner Ad */}
+          <div className="w-full">
+            <AdsterraBanner468x60 />
+          </div>
 
-          {/* Footer links - compact at bottom of content */}
+          {/* Tall Banner Ads - side by side for desktop, stacked for mobile */}
+          <div className="w-full flex gap-2 justify-center">
+            <div className="flex-shrink-0">
+              <AdsterraBanner160x300 />
+            </div>
+            <div className="flex-shrink-0">
+              <AdsterraBanner160x600 />
+            </div>
+          </div>
+
+          {/* Footer links */}
           <div className="w-full flex items-center justify-center gap-2 pt-1"
             style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
             <button onClick={() => setShowPrivacy(true)} className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Privacy</button>
@@ -429,9 +461,9 @@ export function PlayDashboard({
         </div>
       </div>
 
-      {/* Bottom Banner Ad - pinned to bottom */}
-      <div className="flex-shrink-0 relative z-10">
-        <BannerAd position="bottom" isOnline={isOnline} />
+      {/* Bottom Ad Banner - 728x90 - pinned to bottom */}
+      <div className="flex-shrink-0 relative z-10 w-full">
+        <AdsterraBanner728x90 />
       </div>
 
       {/* Modals */}
