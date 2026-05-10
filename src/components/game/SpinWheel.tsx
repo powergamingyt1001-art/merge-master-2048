@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Play } from 'lucide-react'
+import { X, Play, Tv } from 'lucide-react'
 
 interface SpinWheelProps {
   isOpen: boolean
@@ -46,10 +46,11 @@ function pickPrize(): { index: number; prize: SpinPrize } {
   return { index: 0, prize: { ...PRIZE_POOL[0].prize } }
 }
 
-export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPrize, onWatchAdForSpin: _onWatchAdForSpin, isOnline: _isOnline }: SpinWheelProps) {
+export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPrize, onWatchAdForSpin, isOnline }: SpinWheelProps) {
   const [spinning, setSpinning] = useState(false)
   const [result, setResult] = useState<{ index: number; prize: SpinPrize } | null>(null)
   const [rotation, setRotation] = useState(0)
+  const [watchingAd, setWatchingAd] = useState(false)
   const spinCountRef = useRef(0)
 
   const handleSpin = useCallback(() => {
@@ -79,6 +80,16 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
     onWinPrize(result.prize)
     setResult(null)
   }, [result, onWinPrize])
+
+  const handleWatchAd = useCallback(() => {
+    if (!isOnline || watchingAd) return
+    setWatchingAd(true)
+    // Simulate watching an ad for 3 seconds, then give free spin
+    setTimeout(() => {
+      onWatchAdForSpin()
+      setWatchingAd(false)
+    }, 3000)
+  }, [isOnline, watchingAd, onWatchAdForSpin])
 
   return (
     <AnimatePresence>
@@ -201,10 +212,36 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
                 </button>
               )}
 
-              {/* No tickets info */}
-              {spinTickets <= 0 && !result && (
+              {/* Watch Ad for Free Spin - when no tickets and online */}
+              {spinTickets <= 0 && !result && !spinning && isOnline && (
+                <button
+                  onClick={handleWatchAd}
+                  disabled={watchingAd}
+                  className="w-full py-2.5 mt-2 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95 disabled:opacity-50"
+                  style={{ 
+                    background: watchingAd 
+                      ? 'rgba(255,255,255,0.08)' 
+                      : 'linear-gradient(135deg, #F65E3B, #FF7A00)', 
+                    color: '#FFFFFF',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                  }}
+                >
+                  <Tv className="w-4 h-4" />
+                  {watchingAd ? '⏳ Loading Ad...' : '📺 Watch Ad for Free Spin'}
+                </button>
+              )}
+
+              {/* No tickets and offline message */}
+              {spinTickets <= 0 && !result && !isOnline && (
                 <p className="text-center text-[10px] mt-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                  No spin tickets! Play games, claim daily rewards, or get them from the shop.
+                  🔴 You're offline. Connect to internet to watch ads for free spins!
+                </p>
+              )}
+
+              {/* Info text */}
+              {spinTickets <= 0 && !result && isOnline && !watchingAd && (
+                <p className="text-center text-[10px] mt-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  Watch an ad to get 1 free spin ticket! 🎫
                 </p>
               )}
             </div>

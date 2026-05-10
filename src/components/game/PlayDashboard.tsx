@@ -17,8 +17,6 @@ import {
   AdsterraBanner300x250,
   AdsterraBanner468x60,
   AdsterraBanner320x50,
-  AdsterraBanner160x300,
-  AdsterraBanner160x600,
 } from '@/components/ads/AdsterraAds'
 import { PowerUp, Notification, DailyTask, getLevelInfo } from '@/hooks/useGame'
 
@@ -176,6 +174,11 @@ export function PlayDashboard({
       {/* Background glows */}
       <div className="absolute top-1/4 left-1/3 w-48 h-48 rounded-full opacity-20 pointer-events-none" style={{ background: 'radial-gradient(circle, #EDC22E, transparent)', filter: 'blur(60px)' }} />
       <div className="absolute bottom-1/4 right-1/3 w-56 h-56 rounded-full opacity-15 pointer-events-none" style={{ background: 'radial-gradient(circle, #FF7A00, transparent)', filter: 'blur(70px)' }} />
+
+      {/* ====== HEADER AD - 320x50 pinned at top ====== */}
+      <div className="flex-shrink-0 relative z-10 w-full">
+        <AdsterraBanner320x50 />
+      </div>
 
       {/* Scrollable content */}
       <div className="relative z-10 flex-1 overflow-y-auto">
@@ -358,7 +361,7 @@ export function PlayDashboard({
             </button>
           )}
 
-          {/* Native Banner Ad */}
+          {/* Native Banner Ad - compact */}
           <div className="w-full">
             <AdsterraNativeBanner />
           </div>
@@ -433,16 +436,6 @@ export function PlayDashboard({
             <AdsterraBanner468x60 />
           </div>
 
-          {/* Tall Banner Ads - visible on md+ screens only */}
-          <div className="hidden md:flex w-full gap-2 justify-center">
-            <div className="flex-shrink-0">
-              <AdsterraBanner160x300 />
-            </div>
-            <div className="flex-shrink-0">
-              <AdsterraBanner160x600 />
-            </div>
-          </div>
-
           {/* Footer links */}
           <div className="w-full flex items-center justify-center gap-2 pt-1 pb-2"
             style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
@@ -456,7 +449,7 @@ export function PlayDashboard({
         </div>
       </div>
 
-      {/* Bottom Ad Banner - mobile: 320x50, desktop: 728x90 */}
+      {/* ====== FOOTER AD - mobile: 320x50, desktop: 728x90 ====== */}
       <div className="flex-shrink-0 relative z-10 w-full">
         <div className="md:hidden">
           <AdsterraBanner320x50 />
@@ -468,7 +461,7 @@ export function PlayDashboard({
 
       {/* Modals */}
       <SpinWheel isOpen={showSpin} onClose={() => setShowSpin(false)} spinTickets={spinTickets}
-        onUseTicket={onUseSpinTicket} onWinPrize={handleSpinPrize} onWatchAdForSpin={() => {}} isOnline={isOnline} />
+        onUseTicket={onUseSpinTicket} onWinPrize={handleSpinPrize} onWatchAdForSpin={() => { onAddSpinTickets(1) }} isOnline={isOnline} />
       <LoginStreak isOpen={showStreak} onClose={() => setShowStreak(false)} streakDay={streakDay}
         streakClaimed={streakClaimed} onClaim={onClaimStreakDay} />
       <WelcomeGift isOpen={showWelcome} onClose={() => setShowWelcome(false)} onClaim={() => { onClaimWelcome(); setShowWelcome(false) }} />

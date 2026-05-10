@@ -16,6 +16,7 @@ import {
   Trophy, RotateCcw, Undo2, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
   Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle, Swords, Coins,
 } from 'lucide-react'
+import { AdsterraBanner320x50, AdsterraBanner468x60 } from '@/components/ads/AdsterraAds'
 
 // ============================================================
 // HELPER: Check if tiles can still move
@@ -430,19 +431,17 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
       </div>
 
       {/* ============================================================ */}
-      {/* COMBO INDICATOR - Shows current combo multiplier             */}
-      {/* Progressive: 2x → 3x → 4x → 5x based on consecutive merges */}
+      {/* COMBO INDICATOR - FIXED POSITION, updates in place           */}
+      {/* 2x → 3x → 4x → 5x stays at same spot, no bounce/movement   */}
       {/* Only visible in Battle/Coins/Tournament modes                */}
       {/* ============================================================ */}
-      <AnimatePresence>
-        {isBattleMode && comboMultiplier >= 2 && !botBattleResult && (
-          <motion.div
-            key={`combo-${comboMultiplier}`}
-            initial={{ scale: 0.5, opacity: 0, y: -10 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.8, opacity: 0, y: -5 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full"
+      {isBattleMode && comboMultiplier >= 2 && !botBattleResult && (
+        <div
+          className="flex-shrink-0 flex items-center justify-center"
+          style={{ height: 32 }}
+        >
+          <div
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full"
             style={{
               background: comboMultiplier >= 5
                 ? 'linear-gradient(135deg, #FF3D00, #FF6D00, #FFD600)'
@@ -457,6 +456,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
                   ? `0 0 15px rgba(237,194,46,0.4), 0 0 30px rgba(237,194,46,0.15)`
                   : `0 0 10px rgba(0,230,118,0.3)`,
               border: `1.5px solid ${comboMultiplier >= 4 ? 'rgba(255,255,255,0.4)' : comboMultiplier >= 3 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.2)'}`,
+              transition: 'background 0.3s, box-shadow 0.3s, border-color 0.3s',
             }}
           >
             <Zap className="w-3.5 h-3.5" style={{ color: '#FFFFFF' }} fill="white" />
@@ -478,9 +478,13 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
                 🔥
               </span>
             )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </div>
+      )}
+      {/* Placeholder when no combo to keep layout stable */}
+      {isBattleMode && (comboMultiplier < 2 || botBattleResult) && (
+        <div className="flex-shrink-0" style={{ height: 0 }} />
+      )}
 
       {/* Timer Paused Overlay - Watch ad to revive */}
       <AnimatePresence>
@@ -730,6 +734,18 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
           </button>
         ))}
       </div>
+
+      {/* ====== BOTTOM AD DURING GAMEPLAY - shown when online ====== */}
+      {isOnline && !gameOver && !botBattleResult && (
+        <div className="flex-shrink-0 w-full" style={{ marginTop: 4 }}>
+          <div className="md:hidden">
+            <AdsterraBanner320x50 />
+          </div>
+          <div className="hidden md:block">
+            <AdsterraBanner468x60 />
+          </div>
+        </div>
+      )}
 
 
 
