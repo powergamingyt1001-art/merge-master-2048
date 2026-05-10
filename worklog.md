@@ -50,3 +50,28 @@ Stage Summary:
 - Bottom ad is responsive (320x50 mobile, 728x90 desktop)
 - Code pushed to GitHub, Vercel deployment triggered
 - Dev server running on port 3000 via Python static server
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Add ads everywhere (header, footer, gameplay, spin), fix combo indicator position
+
+Work Log:
+- Analyzed user screenshots using VLM - identified ads showing but layout issues
+- Added header 320x50 ad banner to PlayDashboard (pinned at top above scrollable content)
+- Added footer 320x50 (mobile) / 728x90 (desktop) ad to PlayDashboard
+- Added bottom ad during gameplay in GameBoard - only shown when user is ONLINE and game is active
+- Added "Watch Ad for Free Spin" button to SpinWheel - shows when no tickets and user is online
+- Offline users see message to connect for free spins
+- Fixed combo indicator: removed AnimatePresence bounce animation, now stays in FIXED position
+- Combo (2x→3x→4x→5x) updates in-place with smooth color/style transitions, no jumping
+- Removed tall banner ads (160x300, 160x600) from mobile view completely
+- Pushed to GitHub, Vercel auto-deploy triggered
+
+Stage Summary:
+- Dashboard: Header ad (320x50) + Footer ad (320x50/728x90) + Native Banner + 300x250 + 468x60
+- Game: Bottom ad (320x50/468x60) shown only when online and game active
+- Spin: "Watch Ad for Free Spin" button when no tickets + online
+- Combo: Fixed position, no bounce, smooth color transitions
+- All ads only shown when user is online (offline = no ads)
+- Code pushed to GitHub, Vercel deploying
