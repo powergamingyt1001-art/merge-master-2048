@@ -5,32 +5,42 @@ import { useEffect, useRef } from 'react'
 // ============================================================
 // ADSTERRA AD COMPONENTS
 // All ad scripts provided by user for Adsterra integration
+// IMPORTANT: Popunder and Social Bar are loaded with delay
+// to prevent page redirect on initial load
 // ============================================================
 
-// --- Popunder Ad (Global - loaded once) ---
+// --- Popunder Ad (Global - loaded once, with delay) ---
 export function AdsterraPopunder() {
   useEffect(() => {
     const existing = document.getElementById('adsterra-popunder')
     if (existing) return
-    const script = document.createElement('script')
-    script.id = 'adsterra-popunder'
-    script.src = 'https://pl29392034.profitablecpmratenetwork.com/40/9d/aa/409daa8e988b716a6a40b571e679667a.js'
-    script.async = true
-    document.body.appendChild(script)
+    // Delay loading to prevent redirect on page open
+    const timer = setTimeout(() => {
+      const script = document.createElement('script')
+      script.id = 'adsterra-popunder'
+      script.src = 'https://pl29392034.profitablecpmratenetwork.com/40/9d/aa/409daa8e988b716a6a40b571e679667a.js'
+      script.async = true
+      document.body.appendChild(script)
+    }, 5000) // 5 second delay after page load
+    return () => clearTimeout(timer)
   }, [])
   return null
 }
 
-// --- Social Bar Ad (Global - loaded once) ---
+// --- Social Bar Ad (Global - loaded once, with delay) ---
 export function AdsterraSocialBar() {
   useEffect(() => {
     const existing = document.getElementById('adsterra-socialbar')
     if (existing) return
-    const script = document.createElement('script')
-    script.id = 'adsterra-socialbar'
-    script.src = 'https://pl29392035.profitablecpmratenetwork.com/b7/40/ba/b740ba65f24e56491e9bd88c482e6b7f.js'
-    script.async = true
-    document.body.appendChild(script)
+    // Delay loading to prevent issues on initial load
+    const timer = setTimeout(() => {
+      const script = document.createElement('script')
+      script.id = 'adsterra-socialbar'
+      script.src = 'https://pl29392035.profitablecpmratenetwork.com/b7/40/ba/b740ba65f24e56491e9bd88c482e6b7f.js'
+      script.async = true
+      document.body.appendChild(script)
+    }, 3000) // 3 second delay after page load
+    return () => clearTimeout(timer)
   }, [])
   return null
 }
@@ -38,9 +48,11 @@ export function AdsterraSocialBar() {
 // --- Native Banner Ad ---
 export function AdsterraNativeBanner() {
   const containerRef = useRef<HTMLDivElement>(null)
+  const loadedRef = useRef(false)
 
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!containerRef.current || loadedRef.current) return
+    loadedRef.current = true
     const container = containerRef.current
     container.innerHTML = ''
 
@@ -61,9 +73,11 @@ export function AdsterraNativeBanner() {
 // --- Banner 728x90 ---
 export function AdsterraBanner728x90() {
   const containerRef = useRef<HTMLDivElement>(null)
+  const loadedRef = useRef(false)
 
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!containerRef.current || loadedRef.current) return
+    loadedRef.current = true
     const container = containerRef.current
     container.innerHTML = ''
 
@@ -83,9 +97,11 @@ export function AdsterraBanner728x90() {
 // --- Banner 300x250 ---
 export function AdsterraBanner300x250() {
   const containerRef = useRef<HTMLDivElement>(null)
+  const loadedRef = useRef(false)
 
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!containerRef.current || loadedRef.current) return
+    loadedRef.current = true
     const container = containerRef.current
     container.innerHTML = ''
 
@@ -105,9 +121,11 @@ export function AdsterraBanner300x250() {
 // --- Banner 160x600 ---
 export function AdsterraBanner160x600() {
   const containerRef = useRef<HTMLDivElement>(null)
+  const loadedRef = useRef(false)
 
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!containerRef.current || loadedRef.current) return
+    loadedRef.current = true
     const container = containerRef.current
     container.innerHTML = ''
 
@@ -127,9 +145,11 @@ export function AdsterraBanner160x600() {
 // --- Banner 160x300 ---
 export function AdsterraBanner160x300() {
   const containerRef = useRef<HTMLDivElement>(null)
+  const loadedRef = useRef(false)
 
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!containerRef.current || loadedRef.current) return
+    loadedRef.current = true
     const container = containerRef.current
     container.innerHTML = ''
 
@@ -149,9 +169,11 @@ export function AdsterraBanner160x300() {
 // --- Banner 468x60 ---
 export function AdsterraBanner468x60() {
   const containerRef = useRef<HTMLDivElement>(null)
+  const loadedRef = useRef(false)
 
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!containerRef.current || loadedRef.current) return
+    loadedRef.current = true
     const container = containerRef.current
     container.innerHTML = ''
 
@@ -171,9 +193,11 @@ export function AdsterraBanner468x60() {
 // --- Banner 320x50 ---
 export function AdsterraBanner320x50() {
   const containerRef = useRef<HTMLDivElement>(null)
+  const loadedRef = useRef(false)
 
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!containerRef.current || loadedRef.current) return
+    loadedRef.current = true
     const container = containerRef.current
     container.innerHTML = ''
 
