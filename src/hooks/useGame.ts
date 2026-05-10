@@ -510,6 +510,17 @@ export function getCurrentLevelPoints(level: number): number {
   return getLevelThreshold(Math.min(Math.max(level, 1), MAX_LEVEL))
 }
 
+// Generate daily tasks for today
+function generateDailyTasks(): DailyTask[] {
+  const today = getTodayStr()
+  return [
+    { id: `visit-${today}`, description: 'Visit Sponsor Website', emoji: '🌐', target: 1, progress: 0, reward: 50, claimed: false },
+    { id: `play3-${today}`, description: 'Play 3 Games', emoji: '🎮', target: 3, progress: 0, reward: 30, claimed: false },
+    { id: `score500-${today}`, description: 'Score 500+ in a game', emoji: '🏆', target: 1, progress: 0, reward: 40, claimed: false },
+    { id: `spin-${today}`, description: 'Spin the Wheel', emoji: '🎰', target: 1, progress: 0, reward: 20, claimed: false },
+  ]
+}
+
 export function useGame() {
   const [state, setState] = useState<GameState>(() => {
     const saved = loadSavedData()
@@ -575,7 +586,7 @@ export function useGame() {
       tournamentGamesPlayed: 0,
       gameHistory: [],
       weeklyBonusClaimed: false,
-      dailyTasks: [],
+      dailyTasks: generateDailyTasks(),
     }
 
     if (!saved) {
@@ -675,7 +686,15 @@ export function useGame() {
       tournamentGamesPlayed,
       gameHistory: saved.gameHistory || [],
       weeklyBonusClaimed,
-      dailyTasks: saved.dailyTasks || [],
+      // Regenerate daily tasks if it's a new day or tasks are empty/stale
+      dailyTasks: (() => {
+        const savedTasks = saved.dailyTasks || []
+        if (savedTasks.length === 0) return generateDailyTasks()
+        // Check if tasks are from today
+        const hasTodayTasks = savedTasks.some(t => t.id.includes(today))
+        if (!hasTodayTasks) return generateDailyTasks()
+        return savedTasks
+      })(),
     }
   })
 
@@ -778,10 +797,24 @@ export function useGame() {
       entryFee,
       timeLimit,
     }
-    setState(prev => ({
-      ...prev,
-      gameHistory: [entry, ...prev.gameHistory].slice(0, 30),
-    }))
+    setState(prev => {
+      // Update daily task progress for games played and score
+      const today = getTodayStr()
+      const tasks = prev.dailyTasks.map(t => {
+        if (t.id === `play3-${today}` && !t.claimed) {
+          return { ...t, progress: Math.min(t.progress + 1, t.target) }
+        }
+        if (t.id === `score500-${today}` && !t.claimed && score >= 500) {
+          return { ...t, progress: Math.min(t.progress + 1, t.target) }
+        }
+        return t
+      })
+      return {
+        ...prev,
+        gameHistory: [entry, ...prev.gameHistory].slice(0, 30),
+        dailyTasks: tasks,
+      }
+    })
   }, [])
 
   const handleMove = useCallback((direction: Direction) => {
@@ -1239,7 +1272,15 @@ export function useGame() {
   const useSpinTicket = useCallback(() => {
     setState(prev => {
       if (prev.spinTickets <= 0) return prev
-      return { ...prev, spinTickets: prev.spinTickets - 1 }
+      // Update spin daily task progress
+      const today = getTodayStr()
+      const tasks = prev.dailyTasks.map(t => {
+        if (t.id === `spin-${today}` && !t.claimed) {
+          return { ...t, progress: Math.min(t.progress + 1, t.target) }
+        }
+        return t
+      })
+      return { ...prev, spinTickets: prev.spinTickets - 1, dailyTasks: tasks }
     })
   }, [])
 
@@ -1531,7 +1572,7 @@ export function useGame() {
       tournamentGamesPlayed: 0,
       gameHistory: [],
       weeklyBonusClaimed: false,
-      dailyTasks: [],
+      dailyTasks: generateDailyTasks(),
     })
   }, [])
 
@@ -1574,5 +1615,17 @@ export function useGame() {
     claimWeeklyBonus,
     claimDailyTask,
     resetAllData,
+    completeVisitWebsiteTask: useCallback(() => {
+      setState(prev => {
+        const today = getTodayStr()
+        const tasks = prev.dailyTasks.map(t => {
+          if (t.id === `visit-${today}` && !t.claimed) {
+            return { ...t, progress: Math.min(t.progress + 1, t.target) }
+          }
+          return t
+        })
+        return { ...prev, dailyTasks: tasks }
+      })
+    }, []),
   }
 }

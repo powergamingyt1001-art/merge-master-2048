@@ -7,43 +7,8 @@ import { useEffect, useRef } from 'react'
 // All ad scripts provided by user for Adsterra integration
 // IMPORTANT: Each banner uses isolated scope to prevent
 // atOptions conflicts between multiple banners on same page
+// Popunder and Social Bar REMOVED - they redirect users away
 // ============================================================
-
-// --- Popunder Ad (Global - loaded once, with delay) ---
-export function AdsterraPopunder() {
-  useEffect(() => {
-    const existing = document.getElementById('adsterra-popunder')
-    if (existing) return
-    // Delay loading to prevent redirect on page open
-    const timer = setTimeout(() => {
-      const script = document.createElement('script')
-      script.id = 'adsterra-popunder'
-      script.src = 'https://pl29392034.profitablecpmratenetwork.com/40/9d/aa/409daa8e988b716a6a40b571e679667a.js'
-      script.async = true
-      document.body.appendChild(script)
-    }, 8000) // 8 second delay after page load - prevents new tab redirect
-    return () => clearTimeout(timer)
-  }, [])
-  return null
-}
-
-// --- Social Bar Ad (Global - loaded once, with delay) ---
-export function AdsterraSocialBar() {
-  useEffect(() => {
-    const existing = document.getElementById('adsterra-socialbar')
-    if (existing) return
-    // Delay loading to prevent issues on initial load
-    const timer = setTimeout(() => {
-      const script = document.createElement('script')
-      script.id = 'adsterra-socialbar'
-      script.src = 'https://pl29392035.profitablecpmratenetwork.com/b7/40/ba/b740ba65f24e56491e9bd88c482e6b7f.js'
-      script.async = true
-      document.body.appendChild(script)
-    }, 5000) // 5 second delay after page load
-    return () => clearTimeout(timer)
-  }, [])
-  return null
-}
 
 // --- Native Banner Ad ---
 export function AdsterraNativeBanner() {
@@ -67,7 +32,7 @@ export function AdsterraNativeBanner() {
     container.appendChild(script)
   }, [])
 
-  return <div ref={containerRef} className="w-full" />
+  return <div ref={containerRef} className="w-full" style={{ maxHeight: 100, overflow: 'hidden' }} />
 }
 
 // ============================================================
@@ -117,7 +82,6 @@ export function AdsterraBanner728x90() {
   useEffect(() => {
     if (!containerRef.current || loadedRef.current) return
     loadedRef.current = true
-    // Small delay to ensure DOM is ready
     const timer = setTimeout(() => {
       if (containerRef.current) {
         createIsolatedBanner(containerRef.current, '23e07d223b190b8e97e26dad42844982', 728, 90)
@@ -149,48 +113,6 @@ export function AdsterraBanner300x250() {
 
   return (
     <div ref={containerRef} className="w-full flex justify-center" style={{ minHeight: 250 }} />
-  )
-}
-
-// --- Banner 160x600 ---
-export function AdsterraBanner160x600() {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const loadedRef = useRef(false)
-
-  useEffect(() => {
-    if (!containerRef.current || loadedRef.current) return
-    loadedRef.current = true
-    const timer = setTimeout(() => {
-      if (containerRef.current) {
-        createIsolatedBanner(containerRef.current, '59714a04048f48cc53c84df9a14ac7b5', 160, 600)
-      }
-    }, 2000)
-    return () => clearTimeout(timer)
-  }, [])
-
-  return (
-    <div ref={containerRef} className="w-full flex justify-center" style={{ minHeight: 300 }} />
-  )
-}
-
-// --- Banner 160x300 ---
-export function AdsterraBanner160x300() {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const loadedRef = useRef(false)
-
-  useEffect(() => {
-    if (!containerRef.current || loadedRef.current) return
-    loadedRef.current = true
-    const timer = setTimeout(() => {
-      if (containerRef.current) {
-        createIsolatedBanner(containerRef.current, '72d64d305ad7f6b3a407a693880f5328', 160, 300)
-      }
-    }, 2500)
-    return () => clearTimeout(timer)
-  }, [])
-
-  return (
-    <div ref={containerRef} className="w-full flex justify-center" style={{ minHeight: 160 }} />
   )
 }
 

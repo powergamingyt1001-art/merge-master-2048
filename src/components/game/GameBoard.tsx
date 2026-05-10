@@ -17,6 +17,7 @@ import {
   Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle, Swords, Coins,
 } from 'lucide-react'
 import { AdsterraBanner320x50, AdsterraBanner468x60 } from '@/components/ads/AdsterraAds'
+import { ADSTERRA_DIRECT_LINK } from '@/components/ads/AdOverlay'
 
 // ============================================================
 // HELPER: Check if tiles can still move
@@ -202,6 +203,15 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   const handlePowerUp = useCallback((pu: PowerUp) => { activatePowerUp(pu) }, [activatePowerUp])
   const handleStuckContinue = useCallback(() => { restartAfterStuck() }, [restartAfterStuck])
   const handleBack = useCallback(() => { onBackToDashboard() }, [onBackToDashboard])
+
+  // Open direct link for ad revenue before revive
+  const openAdAndRevive = useCallback(() => {
+    if (isOnline) {
+      try { window.open(ADSTERRA_DIRECT_LINK, '_blank') } catch { /* popup blocked */ }
+    }
+    setGameOverDismissed(false)
+    reviveWithAd()
+  }, [isOnline, reviveWithAd])
 
   // Finalize current game (save history, coins, tournament points)
   const finalizeGame = useCallback(() => {
@@ -431,59 +441,58 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
       </div>
 
       {/* ============================================================ */}
-      {/* COMBO INDICATOR - FIXED POSITION, updates in place           */}
-      {/* 2x → 3x → 4x → 5x stays at same spot, no bounce/movement   */}
-      {/* Only visible in Battle/Coins/Tournament modes                */}
+      {/* COMBO INDICATOR - ALWAYS RESERVES FIXED SPACE (32px)         */}
+      {/* The combo badge stays in ONE place. When combo is active,    */}
+      {/* the badge shows. When no combo, empty space is reserved.     */}
+      {/* This prevents tiles from shaking/moving when combo appears.  */}
       {/* ============================================================ */}
-      {isBattleMode && comboMultiplier >= 2 && !botBattleResult && (
+      {isBattleMode && !botBattleResult && (
         <div
           className="flex-shrink-0 flex items-center justify-center"
           style={{ height: 32 }}
         >
-          <div
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full"
-            style={{
-              background: comboMultiplier >= 5
-                ? 'linear-gradient(135deg, #FF3D00, #FF6D00, #FFD600)'
-                : comboMultiplier >= 4
-                  ? 'linear-gradient(135deg, #FF6D00, #FF9100)'
+          {comboMultiplier >= 2 ? (
+            <div
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full"
+              style={{
+                background: comboMultiplier >= 5
+                  ? 'linear-gradient(135deg, #FF3D00, #FF6D00, #FFD600)'
+                  : comboMultiplier >= 4
+                    ? 'linear-gradient(135deg, #FF6D00, #FF9100)'
+                    : comboMultiplier >= 3
+                      ? 'linear-gradient(135deg, #EDC22E, #FF7A00)'
+                      : 'linear-gradient(135deg, #00E676, #00C853)',
+                boxShadow: comboMultiplier >= 4
+                  ? `0 0 20px rgba(255,109,0,0.5), 0 0 40px rgba(255,109,0,0.2)`
                   : comboMultiplier >= 3
-                    ? 'linear-gradient(135deg, #EDC22E, #FF7A00)'
-                    : 'linear-gradient(135deg, #00E676, #00C853)',
-              boxShadow: comboMultiplier >= 4
-                ? `0 0 20px rgba(255,109,0,0.5), 0 0 40px rgba(255,109,0,0.2)`
-                : comboMultiplier >= 3
-                  ? `0 0 15px rgba(237,194,46,0.4), 0 0 30px rgba(237,194,46,0.15)`
-                  : `0 0 10px rgba(0,230,118,0.3)`,
-              border: `1.5px solid ${comboMultiplier >= 4 ? 'rgba(255,255,255,0.4)' : comboMultiplier >= 3 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.2)'}`,
-              transition: 'background 0.3s, box-shadow 0.3s, border-color 0.3s',
-            }}
-          >
-            <Zap className="w-3.5 h-3.5" style={{ color: '#FFFFFF' }} fill="white" />
-            <span style={{
-              fontSize: 14,
-              fontWeight: 900,
-              color: '#FFFFFF',
-              textShadow: '0 1px 3px rgba(0,0,0,0.3)',
-              fontFamily: 'monospace',
-            }}>
-              {comboMultiplier}x COMBO
-            </span>
-            {comboMultiplier >= 3 && (
+                    ? `0 0 15px rgba(237,194,46,0.4), 0 0 30px rgba(237,194,46,0.15)`
+                    : `0 0 10px rgba(0,230,118,0.3)`,
+                border: `1.5px solid ${comboMultiplier >= 4 ? 'rgba(255,255,255,0.4)' : comboMultiplier >= 3 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.2)'}`,
+                transition: 'background 0.3s, box-shadow 0.3s, border-color 0.3s',
+              }}
+            >
+              <Zap className="w-3.5 h-3.5" style={{ color: '#FFFFFF' }} fill="white" />
               <span style={{
-                fontSize: 8,
-                fontWeight: 700,
-                color: 'rgba(255,255,255,0.8)',
+                fontSize: 14,
+                fontWeight: 900,
+                color: '#FFFFFF',
+                textShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                fontFamily: 'monospace',
               }}>
-                🔥
+                {comboMultiplier}x COMBO
               </span>
-            )}
-          </div>
+              {comboMultiplier >= 3 && (
+                <span style={{
+                  fontSize: 8,
+                  fontWeight: 700,
+                  color: 'rgba(255,255,255,0.8)',
+                }}>
+                  🔥
+                </span>
+              )}
+            </div>
+          ) : null}
         </div>
-      )}
-      {/* Placeholder when no combo to keep layout stable */}
-      {isBattleMode && (comboMultiplier < 2 || botBattleResult) && (
-        <div className="flex-shrink-0" style={{ height: 0 }} />
       )}
 
       {/* Timer Paused Overlay - Watch ad to revive */}
@@ -513,7 +522,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
               Timer paused at {battleTimer}s • Score: {score}
             </p>
             <button
-              onClick={() => { setGameOverDismissed(false); reviveWithAd() }}
+              onClick={openAdAndRevive}
               style={{
                 padding: '8px 24px',
                 borderRadius: 8,
@@ -762,7 +771,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
               <h2 className="text-2xl font-extrabold mb-1" style={{ color: '#FFFFFF' }}>Game Over!</h2>
               <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>Score: {score} • Best: {bestScore}</p>
               <div className="space-y-2">
-                <button onClick={() => { setGameOverDismissed(false); reviveWithAd() }}
+                <button onClick={openAdAndRevive}
                   className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
                   style={{ background: 'linear-gradient(135deg, #F65E3B, #F67C5F)', color: '#FFFFFF' }}>
                   <Heart className="w-4 h-4" /> Get Free Life

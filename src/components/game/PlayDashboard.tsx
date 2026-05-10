@@ -19,6 +19,7 @@ import {
   AdsterraBanner320x50,
 } from '@/components/ads/AdsterraAds'
 import { PowerUp, Notification, DailyTask, getLevelInfo } from '@/hooks/useGame'
+import { ADSTERRA_DIRECT_LINK } from '@/components/ads/AdOverlay'
 
 interface PlayDashboardProps {
   coins: number
@@ -70,6 +71,7 @@ interface PlayDashboardProps {
   onUpdatePlayerAvatar: (avatar: string) => void
   dailyTasks?: DailyTask[]
   onClaimDailyTask?: (id: string) => void
+  onCompleteVisitWebsiteTask?: () => void
   onResetAllData?: () => void
   weeklyBonusClaimed?: boolean
   onClaimWeeklyBonus?: () => void
@@ -96,7 +98,7 @@ export function PlayDashboard({
   onAddCoins, onAddPowerUp, onAddUndos, onClaimCommission, onToggleAutoClaim,
   onAddNotification, onMarkNotificationRead, onMarkAllNotificationsRead,
   onUpdatePlayerName, onUpdatePlayerAvatar,
-  dailyTasks, onClaimDailyTask, onResetAllData,
+  dailyTasks, onClaimDailyTask, onCompleteVisitWebsiteTask, onResetAllData,
   weeklyBonusClaimed = false, onClaimWeeklyBonus,
 }: PlayDashboardProps) {
   const [showSpin, setShowSpin] = useState(false)
@@ -406,6 +408,54 @@ export function PlayDashboard({
           <div className="w-full">
             <AdsterraBanner300x250 />
           </div>
+
+          {/* Daily Tasks */}
+          {dailyTasks && dailyTasks.length > 0 && (
+            <div className="w-full rounded-lg p-2" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="flex items-center gap-1 mb-1.5">
+                <span className="text-[9px]">📋</span>
+                <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Daily Tasks</p>
+              </div>
+              <div className="flex flex-col gap-1">
+                {dailyTasks.map(task => {
+                  const isComplete = task.progress >= task.target
+                  const isVisitTask = task.id.startsWith('visit-')
+                  return (
+                    <div key={task.id} className="flex items-center justify-between px-2 py-1.5 rounded-lg"
+                      style={{ backgroundColor: isComplete ? 'rgba(0,230,118,0.06)' : 'rgba(255,255,255,0.02)', border: `1px solid ${isComplete ? 'rgba(0,230,118,0.15)' : 'rgba(255,255,255,0.04)'}` }}>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px]">{task.emoji}</span>
+                        <div>
+                          <p className="text-[8px] font-semibold" style={{ color: isComplete ? '#00E676' : 'rgba(255,255,255,0.7)' }}>{task.description}</p>
+                          <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{task.progress}/{task.target} • +{task.reward}💰</p>
+                        </div>
+                      </div>
+                      {task.claimed ? (
+                        <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>✓</span>
+                      ) : isComplete ? (
+                        <button onClick={() => onClaimDailyTask?.(task.id)}
+                          className="px-2 py-0.5 rounded text-[7px] font-bold transition-transform active:scale-95"
+                          style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
+                          CLAIM
+                        </button>
+                      ) : isVisitTask && isOnline ? (
+                        <button onClick={() => {
+                          try { window.open(ADSTERRA_DIRECT_LINK, '_blank') } catch { /* popup blocked */ }
+                          onCompleteVisitWebsiteTask?.()
+                        }}
+                          className="px-2 py-0.5 rounded text-[7px] font-bold transition-transform active:scale-95"
+                          style={{ background: 'linear-gradient(135deg, #F65E3B, #FF7A00)', color: '#FFFFFF' }}>
+                          VISIT
+                        </button>
+                      ) : (
+                        <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.2)' }}>{task.progress}/{task.target}</span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Invite row */}
           <div className="w-full flex gap-1.5">
