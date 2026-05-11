@@ -119,6 +119,8 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   const [scoreGain, setScoreGain] = useState(0)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
   const [gameOverDismissed, setGameOverDismissed] = useState(false)
+  const [waitingForReturn, setWaitingForReturn] = useState(false) // User visiting ad site
+  const [showWelcomeBack, setShowWelcomeBack] = useState(false) // Show welcome back overlay
 
   // Determine game type
   const isBattleMode = gameMode === 'bot' || gameMode === 'coins' || gameMode === 'tournament'
@@ -147,6 +149,18 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     window.addEventListener('offline', off)
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
   }, [])
+
+  // Detect when user returns from ad website
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && waitingForReturn) {
+        setWaitingForReturn(false)
+        setShowWelcomeBack(true)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [waitingForReturn])
 
   // Battle timer tick - don't tick during countdown or when paused
   useEffect(() => {
@@ -204,14 +218,24 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   const handleStuckContinue = useCallback(() => { restartAfterStuck() }, [restartAfterStuck])
   const handleBack = useCallback(() => { onBackToDashboard() }, [onBackToDashboard])
 
-  // Open direct link for ad revenue before revive
+  // Open direct link for ad revenue - wait for user to return before reviving
   const openAdAndRevive = useCallback(() => {
     if (isOnline) {
       try { window.open(ADSTERRA_DIRECT_LINK, '_blank') } catch { /* popup blocked */ }
+      setWaitingForReturn(true)
+    } else {
+      // Offline - just revive immediately
+      setGameOverDismissed(false)
+      reviveWithAd()
     }
+  }, [isOnline, reviveWithAd])
+
+  // Handle user returning from ad - revive the game
+  const handleWelcomeBackContinue = useCallback(() => {
+    setShowWelcomeBack(false)
     setGameOverDismissed(false)
     reviveWithAd()
-  }, [isOnline, reviveWithAd])
+  }, [reviveWithAd])
 
   // Finalize current game (save history, coins, tournament points)
   const finalizeGame = useCallback(() => {
@@ -539,6 +563,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
                 margin: '0 auto',
               }}>
               ❤️ Get Free Life
+              <span style={{ fontSize: 8, fontWeight: 400, opacity: 0.7 }}> (opens ad)</span>
             </button>
           </motion.div>
         )}
@@ -775,6 +800,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
                   className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
                   style={{ background: 'linear-gradient(135deg, #F65E3B, #F67C5F)', color: '#FFFFFF' }}>
                   <Heart className="w-4 h-4" /> Get Free Life
+                  <span style={{ fontSize: 8, fontWeight: 400, opacity: 0.7 }}> (opens ad)</span>
                 </button>
                 <button onClick={() => {
                   addGameToHistory('classic', score, 'classic', 0, 0)
@@ -786,6 +812,50 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
                   Back to Dashboard
                 </button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Welcome Back overlay - shown when user returns from ad website */}
+      <AnimatePresence>
+        {showWelcomeBack && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center px-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.88)' }}
+          >
+            <motion.div
+              initial={{ scale: 0.85, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.85 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              className="w-full max-w-xs rounded-2xl p-6 text-center"
+              style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.12)' }}
+            >
+              <span className="text-4xl block mb-3">👋</span>
+              <h2 className="text-xl font-extrabold mb-1" style={{ color: '#FFFFFF' }}>Welcome Back!</h2>
+              <p className="text-xs mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                Your game is ready to continue. Tap below to resume!
+              </p>
+              {isBattleMode && (
+                <p className="text-[10px] mb-3" style={{ color: '#EDC22E' }}>
+                  ⏱ Timer: {battleTimer}s remaining • Score: {score}
+                </p>
+              )}
+              <button
+                onClick={handleWelcomeBackContinue}
+                className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-transform active:scale-95"
+                style={{
+                  background: 'linear-gradient(135deg, #00E676, #00C853)',
+                  color: '#FFFFFF',
+                  boxShadow: '0 4px 15px rgba(0,230,118,0.3)',
+                }}
+              >
+                ❤️ Continue Game
+              </button>
             </motion.div>
           </motion.div>
         )}

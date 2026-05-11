@@ -108,3 +108,69 @@ Stage Summary:
 - Background impression timer added
 - Deployed to: https://merge-master-2048-oaou.vercel.app
 
+---
+Task ID: 2
+Agent: Level & Streak Fix Agent
+Task: Fix Level System and Add Coins to Daily Streak
+
+Work Log:
+- **Part 1: Fix Level System**
+  - Changed level system from gamePoints-based to tournamentPoints-based
+  - Updated `getLevelThreshold()` with much slower tournament-point progression:
+    - Old: L2=50, L10=2000, L50=50000, L100=500000, L1000=100000000000
+    - New: L2=10, L3=25, L5=80, L10=200, L20=600, L50=5000, L100=25000, L200=150000, L500=2000000, L1000=50000000
+  - Updated `calculateLevel()` parameter name from `gamePoints` to `tournamentPoints`
+  - Updated initial state loading: `playerLevel: calculateLevel(tournamentPoints)` instead of `calculateLevel(gamePoints)`
+  - Updated `handleMove()`: `playerLevel: calculateLevel(prev.tournamentPoints)` instead of `calculateLevel(newGamePoints)`
+  - Updated `calculateTournamentPoints()`: adds `playerLevel: calculateLevel(newTournamentPoints)` so level updates when tournament points are earned
+  - Updated `tickBattleTimer()`: adds `playerLevel: calculateLevel(tournamentPoints)` for tournament time-up scenarios
+  - `gamePoints` field still exists and tracks score-based points, but does NOT determine level anymore
+  - All title/icon/color systems preserved as-is
+
+- **Part 2: Add Coins to Daily Streak Rewards**
+  - Updated `STREAK_REWARDS` array in LoginStreak.tsx with coin amounts and updated labels/items:
+    - Day 1: 10 coins, Day 2: 25 coins, Day 3: 35 coins, Day 4: 50 coins
+    - Day 5: 65 coins, Day 6: 100 coins, Day 7: 200 coins (BIG reward!)
+  - Added `coins` field to each STREAK_REWARDS entry for potential future use
+  - Updated `claimStreakDay()` in useGame.ts to add coins to player balance:
+    - Added `STREAK_COIN_REWARDS = [10, 25, 35, 50, 65, 100, 200]`
+    - Added `coins: prev.coins + coinReward` to the return object
+
+- Lint check passes with no errors (`bun run lint` ✅)
+
+Stage Summary:
+- Levels now based on tournament points only (much slower, meaningful progression)
+- Level 2 requires 10 tournament points (was 50 game points)
+- Level 10 requires 200 tournament points (was 2000 game points)
+- Level 100 requires 25,000 tournament points (was 500,000 game points)
+- Daily streak now awards coins in addition to power-ups
+- Day 7 streak gives 200 coins as the BIG reward
+- All changes backward compatible - existing gamePoints field preserved
+Task: Fix Ad Placement and Timer Pause on Ad Visit
+
+Work Log:
+- Part 1: Removed 468x60 banner ad from PlayDashboard.tsx (too large/ugly on mobile)
+- Removed AdsterraBanner468x60 import from PlayDashboard.tsx (no longer used)
+- Dashboard ad layout now: Top 320x50 → Native Banner → 300x250 → Footer 320x50/728x90
+- Part 2: Modified GameBoard.tsx - timer now pauses when user visits ad website
+- Added `waitingForReturn` and `showWelcomeBack` state variables
+- Added `visibilitychange` listener to detect when user returns from ad tab
+- Changed `openAdAndRevive` to only open the link and set waiting state (not revive immediately)
+- Added `handleWelcomeBackContinue` callback that revives the game when user clicks "Continue"
+- Added "Welcome Back!" overlay with timer/score info and "Continue Game" button
+- Added "(opens ad)" hint text to both "Get Free Life" buttons (battle mode + classic game over)
+- Offline users still revive immediately (no ad to visit)
+- Part 3: Modified AdOverlay.tsx - "CLICK TO PLAY" now opens ad and waits for return
+- Added `adOpened` state to track when direct link has been opened
+- Added `handlePlayClick` that opens the link and shows "Ad opened in new tab! Come back to start your game!"
+- Added `visibilitychange` listener that auto-closes overlay when user returns
+- Removed `showDirectLink` prop (no longer needed - inner component handles link opening)
+- Simplified parent `handleClose` to just call `onClose()` (no more link opening in parent)
+- Lint check passed with zero errors
+
+Stage Summary:
+- Dashboard: Removed ugly 468x60 ad, now has clean layout (320x50 top + Native + 300x250 + 320x50/728x90 footer)
+- Game: Timer pauses when user clicks "Get Free Life" and visits ad site
+- Welcome Back overlay appears when user returns, requires explicit "Continue" click to resume
+- AdOverlay: "CLICK TO PLAY" opens ad in new tab, shows "come back" message, auto-closes on return
+- All changes lint-clean

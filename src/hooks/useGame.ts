@@ -304,12 +304,13 @@ function generateFairBotScore(playerScore: number): number {
 }
 
 // ============================================================
-// LEVEL SYSTEM - 1000 Levels, starting from 50 points
-// Gradually increasing exponential difficulty
-// Level 1 = 0 pts, Level 2 = 50 pts, Level 10 = 2,000 pts
-// Level 50 = 50,000 pts, Level 100 = 500,000 pts
-// Level 200 = 5,000,000 pts, Level 500 = 500,000,000 pts
-// Level 1000 = 100,000,000,000 pts
+// LEVEL SYSTEM - 1000 Levels, based on WEEKLY TOURNAMENT POINTS
+// Slow progression - levels require meaningful tournament effort
+// Level 1 = 0 pts, Level 2 = 10 pts, Level 3 = 25 pts
+// Level 5 = 80 pts, Level 10 = 200 pts, Level 20 = 600 pts
+// Level 50 = 5,000 pts, Level 100 = 25,000 pts
+// Level 200 = 150,000 pts, Level 500 = 2,000,000 pts
+// Level 1000 = 50,000,000 pts
 // ============================================================
 
 export const MAX_LEVEL = 1000
@@ -383,20 +384,23 @@ function hslToHex(h: number, s: number, l: number): string {
 
 // Compute the point threshold for a given level (1-1000)
 // Uses piecewise power-law interpolation between checkpoints:
-// L1=0, L2=50, L10=2000, L50=50000, L100=500000,
-// L200=5000000, L500=500000000, L1000=100000000000
+// L1=0, L2=10, L3=25, L5=80, L10=200, L20=600,
+// L50=5000, L100=25000, L200=150000, L500=2000000, L1000=50000000
 export function getLevelThreshold(level: number): number {
   if (level <= 1) return 0
   const l = level - 1 // l goes from 1 to 999
 
-  // Piecewise segments with continuous boundaries
-  if (l <= 1) return 50                                                             // L1→L2
-  if (l <= 9) return Math.floor(50 + 1950 * Math.pow((l - 1) / 8, 1.8))            // L2→L10
-  if (l <= 49) return Math.floor(2000 + 48000 * Math.pow((l - 9) / 40, 2.0))       // L10→L50
-  if (l <= 99) return Math.floor(50000 + 450000 * Math.pow((l - 49) / 50, 2.2))    // L50→L100
-  if (l <= 199) return Math.floor(500000 + 4500000 * Math.pow((l - 99) / 100, 2.5)) // L100→L200
-  if (l <= 499) return Math.floor(5000000 + 495000000 * Math.pow((l - 199) / 300, 2.8)) // L200→L500
-  return Math.floor(500000000 + 99500000000 * Math.pow((l - 499) / 500, 3.0))       // L500→L1000
+  // Piecewise segments with continuous boundaries (slow tournament-point progression)
+  if (l <= 1) return 10                                                               // L1→L2: 10 pts
+  if (l <= 2) return Math.floor(10 + 15 * ((l - 1) / 1))                             // L2→L3: 10→25
+  if (l <= 4) return Math.floor(25 + 55 * Math.pow((l - 2) / 2, 1.5))                // L3→L5: 25→80
+  if (l <= 9) return Math.floor(80 + 120 * Math.pow((l - 4) / 5, 1.8))               // L5→L10: 80→200
+  if (l <= 19) return Math.floor(200 + 400 * Math.pow((l - 9) / 10, 1.9))            // L10→L20: 200→600
+  if (l <= 49) return Math.floor(600 + 4400 * Math.pow((l - 19) / 30, 2.0))          // L20→L50: 600→5000
+  if (l <= 99) return Math.floor(5000 + 20000 * Math.pow((l - 49) / 50, 2.2))        // L50→L100: 5000→25000
+  if (l <= 199) return Math.floor(25000 + 125000 * Math.pow((l - 99) / 100, 2.5))    // L100→L200: 25000→150000
+  if (l <= 499) return Math.floor(150000 + 1850000 * Math.pow((l - 199) / 300, 2.8)) // L200→L500: 150000→2000000
+  return Math.floor(2000000 + 48000000 * Math.pow((l - 499) / 500, 3.0))             // L500→L1000: 2000000→50000000
 }
 
 // Generate title for a given level (1-1000)
@@ -472,13 +476,13 @@ export function getLevelColor(level: number): string {
   return hslToHex(hue, saturation, lightness)
 }
 
-// Calculate player level from game points using binary search (O(log N))
-function calculateLevel(gamePoints: number): number {
-  if (gamePoints <= 0) return 1
+// Calculate player level from tournament points using binary search (O(log N))
+function calculateLevel(tournamentPoints: number): number {
+  if (tournamentPoints <= 0) return 1
   let lo = 1, hi = MAX_LEVEL
   while (lo < hi) {
     const mid = Math.ceil((lo + hi) / 2)
-    if (getLevelThreshold(mid) <= gamePoints) {
+    if (getLevelThreshold(mid) <= tournamentPoints) {
       lo = mid
     } else {
       hi = mid - 1
@@ -677,7 +681,7 @@ export function useGame() {
       notifications: saved.notifications || [],
       playerName: saved.playerName || 'Player',
       playerAvatar: saved.playerAvatar || '😎',
-      playerLevel: calculateLevel(gamePoints),
+      playerLevel: calculateLevel(tournamentPoints),
       totalBattlesPlayed: saved.totalBattlesPlayed || 0,
       totalBattlesWon: saved.totalBattlesWon || 0,
       tournamentJoined,
@@ -959,7 +963,7 @@ export function useGame() {
         comboMultiplier: comboMultiplier,
         gamePoints: newGamePoints,
         coinGameWon,
-        playerLevel: calculateLevel(newGamePoints),
+        playerLevel: calculateLevel(prev.tournamentPoints),
         totalBattlesPlayed,
         totalBattlesWon,
       }
@@ -1188,11 +1192,13 @@ export function useGame() {
       const total = finalScore + prev.tournamentCarryOver
       const newPoints = Math.floor(total / 10)
       const newCarryOver = total % 10
+      const newTournamentPoints = prev.tournamentPoints + newPoints
       return {
         ...prev,
-        tournamentPoints: prev.tournamentPoints + newPoints,
+        tournamentPoints: newTournamentPoints,
         tournamentCarryOver: newCarryOver,
         tournamentGamesPlayed: prev.tournamentGamesPlayed + 1,
+        playerLevel: calculateLevel(newTournamentPoints),
       }
     })
   }, [])
@@ -1248,6 +1254,7 @@ export function useGame() {
           tournamentPoints,
           tournamentCarryOver,
           tournamentGamesPlayed,
+          playerLevel: calculateLevel(tournamentPoints),
         }
       }
       return { ...prev, battleTimer: newTimer }
@@ -1304,6 +1311,9 @@ export function useGame() {
     })
   }, [])
 
+  // Coin rewards for each streak day
+  const STREAK_COIN_REWARDS = [10, 25, 35, 50, 65, 100, 200]
+
   const claimStreakDay = useCallback((day: number) => {
     setState(prev => {
       if (prev.streakClaimed[day]) return prev
@@ -1321,6 +1331,8 @@ export function useGame() {
         case 6: s = 5; break
       }
 
+      const coinReward = STREAK_COIN_REWARDS[day] || 0
+
       return {
         ...prev,
         streakClaimed: newClaimed,
@@ -1328,6 +1340,7 @@ export function useGame() {
         magnetCount: prev.magnetCount + m,
         blastCount: prev.blastCount + b,
         spinTickets: prev.spinTickets + s,
+        coins: prev.coins + coinReward,
       }
     })
   }, [])

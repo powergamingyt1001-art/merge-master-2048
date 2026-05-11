@@ -14,7 +14,6 @@ interface AdOverlayProps {
   countdownSeconds?: number
   title?: string
   subtitle?: string
-  showDirectLink?: boolean
   overlayKey?: number // Pass from parent to force remount
 }
 
@@ -24,24 +23,11 @@ export function AdOverlay({
   countdownSeconds = 5,
   title = 'Preparing Your Game...',
   subtitle = 'Watch this short ad to continue',
-  showDirectLink = true,
   overlayKey = 0,
 }: AdOverlayProps) {
-  const directLinkOpenedRef = useRef(false)
-
   const handleClose = useCallback(() => {
-    if (showDirectLink && !directLinkOpenedRef.current) {
-      try {
-        window.open(ADSTERRA_DIRECT_LINK, '_blank')
-        directLinkOpenedRef.current = true
-      } catch {
-        // Popup blocked
-      }
-    }
-    // Reset flag after close
-    directLinkOpenedRef.current = false
     onClose()
-  }, [showDirectLink, onClose])
+  }, [onClose])
 
   return (
     <AnimatePresence>
@@ -68,6 +54,7 @@ function AdOverlayInner({ countdownSeconds, title, subtitle, canCloseHandler }: 
 }) {
   const [timeLeft, setTimeLeft] = useState(countdownSeconds)
   const canClose = timeLeft <= 0
+  const [adOpened, setAdOpened] = useState(false) // Direct link opened, waiting for user return
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -81,6 +68,32 @@ function AdOverlayInner({ countdownSeconds, title, subtitle, canCloseHandler }: 
     }, 1000)
     return () => clearInterval(interval)
   }, [])
+
+  // Detect when user returns from ad website and close overlay
+  useEffect(() => {
+    if (!adOpened) return
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        // User came back - close overlay
+        canCloseHandler()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [adOpened, canCloseHandler])
+
+  const handlePlayClick = useCallback(() => {
+    // Open direct link
+    try {
+      window.open(ADSTERRA_DIRECT_LINK, '_blank')
+    } catch {
+      // Popup blocked - just close directly
+      canCloseHandler()
+      return
+    }
+    // Show "come back" message and wait for user return
+    setAdOpened(true)
+  }, [canCloseHandler])
 
   return (
     <motion.div
@@ -105,7 +118,7 @@ function AdOverlayInner({ countdownSeconds, title, subtitle, canCloseHandler }: 
             <Tv className="w-4 h-4" style={{ color: '#EDC22E' }} />
             {title}
           </h3>
-          {canClose && (
+          {canClose && !adOpened && (
             <button onClick={canCloseHandler} className="w-6 h-6 rounded-full flex items-center justify-center"
               style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
               <X className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
@@ -150,9 +163,19 @@ function AdOverlayInner({ countdownSeconds, title, subtitle, canCloseHandler }: 
                 Please wait {timeLeft}s...
               </span>
             </div>
+          ) : adOpened ? (
+            <div className="w-full py-3 rounded-xl text-center"
+              style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)' }}>
+              <p className="text-[11px] font-semibold" style={{ color: '#00E676' }}>
+                🌐 Ad opened in new tab!
+              </p>
+              <p className="text-[9px] mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                Come back to start your game!
+              </p>
+            </div>
           ) : (
             <button
-              onClick={canCloseHandler}
+              onClick={handlePlayClick}
               className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-transform active:scale-95"
               style={{
                 background: 'linear-gradient(135deg, #00E676, #00C853)',

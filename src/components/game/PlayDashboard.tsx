@@ -15,7 +15,6 @@ import {
   AdsterraNativeBanner,
   AdsterraBanner728x90,
   AdsterraBanner300x250,
-  AdsterraBanner468x60,
   AdsterraBanner320x50,
 } from '@/components/ads/AdsterraAds'
 import { PowerUp, Notification, DailyTask, getLevelInfo } from '@/hooks/useGame'
@@ -479,11 +478,6 @@ export function PlayDashboard({
                 <span className="text-[8px] font-bold" style={{ color: '#EDC22E' }}>{commissionBalance}💰</span>
               </div>
             )}
-          </div>
-
-          {/* 468x60 Banner Ad */}
-          <div className="w-full">
-            <AdsterraBanner468x60 />
           </div>
 
           {/* Footer links */}

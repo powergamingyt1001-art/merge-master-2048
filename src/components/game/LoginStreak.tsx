@@ -12,13 +12,13 @@ interface LoginStreakProps {
 }
 
 const STREAK_REWARDS = [
-  { day: 1, label: '2 Magnets', emoji: '🧲', color: '#00E676', items: '2x Magnet power-up' },
-  { day: 2, label: '2 Spins', emoji: '🎫', color: '#00FFFF', items: '2 Spin tickets' },
-  { day: 3, label: '1 Magnet + 1 Boom', emoji: '🧲💣', color: '#F59563', items: 'Magnet & Boom' },
-  { day: 4, label: '2 Booms', emoji: '💣', color: '#FF7A00', items: '2x Boom power-up' },
-  { day: 5, label: '1 Hammer + 2 Magnets', emoji: '🔨🧲', color: '#F67C5F', items: 'Hammer & Magnets' },
-  { day: 6, label: '3 Magnets + 2 Hammers', emoji: '🧲🔨', color: '#F59563', items: 'Mega power-ups!' },
-  { day: 7, label: '5 Spin Tickets', emoji: '🎰', color: '#EDC22E', items: 'BIG REWARD! 🎉' },
+  { day: 1, label: '2 Magnets + 10🪙', emoji: '🧲', color: '#00E676', items: '2x Magnet + 10 coins', coins: 10 },
+  { day: 2, label: '2 Spins + 25🪙', emoji: '🎫', color: '#00FFFF', items: '2 Spin tickets + 25 coins', coins: 25 },
+  { day: 3, label: 'Magnet + Boom + 35🪙', emoji: '🧲💣', color: '#F59563', items: 'Magnet & Boom + 35 coins', coins: 35 },
+  { day: 4, label: '2 Booms + 50🪙', emoji: '💣', color: '#FF7A00', items: '2x Boom + 50 coins', coins: 50 },
+  { day: 5, label: 'Hammer + Magnets + 65🪙', emoji: '🔨🧲', color: '#F67C5F', items: 'Hammer & Magnets + 65 coins', coins: 65 },
+  { day: 6, label: 'Mega Power-ups + 100🪙', emoji: '🧲🔨', color: '#F59563', items: 'Mega power-ups + 100 coins!', coins: 100 },
+  { day: 7, label: '5 Spins + 200🪙', emoji: '🎰', color: '#EDC22E', items: 'BIG REWARD! 5 spins + 200 coins 🎉', coins: 200 },
 ]
 
 export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim }: LoginStreakProps) {
