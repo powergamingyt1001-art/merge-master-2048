@@ -15,7 +15,6 @@ import {
   AdsterraNativeBanner,
   AdsterraBanner728x90,
   AdsterraBanner300x250,
-  AdsterraBanner320x50,
 } from '@/components/ads/AdsterraAds'
 import { PowerUp, Notification, DailyTask, getLevelInfo } from '@/hooks/useGame'
 import { ADSTERRA_DIRECT_LINK } from '@/components/ads/AdOverlay'
@@ -176,9 +175,9 @@ export function PlayDashboard({
       <div className="absolute top-1/4 left-1/3 w-48 h-48 rounded-full opacity-20 pointer-events-none" style={{ background: 'radial-gradient(circle, #EDC22E, transparent)', filter: 'blur(60px)' }} />
       <div className="absolute bottom-1/4 right-1/3 w-56 h-56 rounded-full opacity-15 pointer-events-none" style={{ background: 'radial-gradient(circle, #FF7A00, transparent)', filter: 'blur(70px)' }} />
 
-      {/* ====== HEADER AD - 320x50 pinned at top ====== */}
+      {/* ====== HEADER AD - 728x90 banner pinned at top ====== */}
       <div className="flex-shrink-0 relative z-10 w-full">
-        <AdsterraBanner320x50 />
+        <AdsterraBanner728x90 />
       </div>
 
       {/* Scrollable content */}
@@ -493,14 +492,9 @@ export function PlayDashboard({
         </div>
       </div>
 
-      {/* ====== FOOTER AD - mobile: 320x50, desktop: 728x90 ====== */}
+      {/* ====== FOOTER AD - bigger banner for more revenue ====== */}
       <div className="flex-shrink-0 relative z-10 w-full">
-        <div className="md:hidden">
-          <AdsterraBanner320x50 />
-        </div>
-        <div className="hidden md:block">
-          <AdsterraBanner728x90 />
-        </div>
+        <AdsterraBanner728x90 />
       </div>
 
       {/* Modals */}

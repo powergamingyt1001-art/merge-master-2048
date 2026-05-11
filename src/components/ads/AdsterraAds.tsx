@@ -8,6 +8,8 @@ import { useEffect, useRef } from 'react'
 // IMPORTANT: Each banner uses isolated scope to prevent
 // atOptions conflicts between multiple banners on same page
 // Popunder and Social Bar REMOVED - they redirect users away
+// CONTENT FILTERING: Added safe_content=1 to filter
+// inappropriate/dirty ads for family-friendly gaming
 // ============================================================
 
 // --- Native Banner Ad ---
@@ -55,6 +57,7 @@ function createIsolatedBanner(
   container.appendChild(iframe)
 
   // Write the ad code inside the iframe
+  // safe_content=1 filters inappropriate/dirty ads
   const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document
   if (iframeDoc) {
     iframeDoc.open()
@@ -64,7 +67,7 @@ function createIsolatedBanner(
       <head><style>body{margin:0;padding:0;overflow:hidden;}</style></head>
       <body>
         <script>
-          atOptions = {'key' : '${key}','format' : 'iframe','height' : ${height},'width' : ${width},'params' : {}};
+          atOptions = {'key' : '${key}','format' : 'iframe','height' : ${height},'width' : ${width},'params' : {'safe_content':'1'}};
         </script>
         <script src="https://www.highperformanceformat.com/${key}/invoke.js" async></script>
       </body>

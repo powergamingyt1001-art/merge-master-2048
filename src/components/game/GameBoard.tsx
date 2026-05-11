@@ -16,7 +16,7 @@ import {
   Trophy, RotateCcw, Undo2, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
   Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle, Swords, Coins,
 } from 'lucide-react'
-import { AdsterraBanner320x50, AdsterraBanner468x60 } from '@/components/ads/AdsterraAds'
+import { AdsterraBanner300x250, AdsterraBanner728x90 } from '@/components/ads/AdsterraAds'
 import { ADSTERRA_DIRECT_LINK } from '@/components/ads/AdOverlay'
 
 // ============================================================
@@ -769,17 +769,10 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
         ))}
       </div>
 
-      {/* ====== BOTTOM AD DURING GAMEPLAY - shown when online ====== */}
-      {isOnline && !gameOver && !botBattleResult && (
-        <div className="flex-shrink-0 w-full" style={{ marginTop: 4 }}>
-          <div className="md:hidden">
-            <AdsterraBanner320x50 />
-          </div>
-          <div className="hidden md:block">
-            <AdsterraBanner468x60 />
-          </div>
-        </div>
-      )}
+      {/* ====== BOTTOM AD DURING GAMEPLAY - always visible ====== */}
+      <div className="flex-shrink-0 w-full" style={{ marginTop: 4 }}>
+        <AdsterraBanner300x250 />
+      </div>
 
 
 
