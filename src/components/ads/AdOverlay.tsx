@@ -343,4 +343,122 @@ export function BackgroundImpressionTimer() {
   return null
 }
 
+// ============================================================
+// DASHBOARD RETURN OVERLAY - Shows when user finishes a game
+// and returns to dashboard. Opens direct link first, waits for
+// user to come back, then shows dashboard. Happens EVERY game.
+// ============================================================
+interface DashboardReturnOverlayProps {
+  isOpen: boolean
+  onClose: () => void
+  overlayKey?: number
+}
+
+export function DashboardReturnOverlay({ isOpen, onClose, overlayKey = 0 }: DashboardReturnOverlayProps) {
+  return (
+    <AnimatePresence>
+      {isOpen && <DashboardReturnOverlayInner key={overlayKey} onClose={onClose} />}
+    </AnimatePresence>
+  )
+}
+
+function DashboardReturnOverlayInner({ onClose }: { onClose: () => void }) {
+  const [adOpened, setAdOpened] = useState(false)
+  const [timeLeft, setTimeLeft] = useState(3)
+  const linkOpenedRef = useRef(false)
+
+  // Open direct link immediately when overlay shows
+  useEffect(() => {
+    if (!linkOpenedRef.current) {
+      try {
+        window.open(ADSTERRA_DIRECT_LINK, '_blank')
+        linkOpenedRef.current = true
+        // Use microtask to avoid calling setState synchronously in effect
+        queueMicrotask(() => setAdOpened(true))
+      } catch {
+        // Popup blocked - skip directly to dashboard after short delay
+        const timer = setTimeout(() => onClose(), 1500)
+        return () => clearTimeout(timer)
+      }
+    }
+  }, [onClose])
+
+  // Detect when user returns from ad website
+  useEffect(() => {
+    if (!adOpened) return
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        // User came back! Start countdown then close
+        setTimeLeft(2) // Short 2s welcome back countdown
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [adOpened])
+
+  // Countdown timer - auto-close when reaches 0
+  useEffect(() => {
+    if (timeLeft <= 0) {
+      onClose()
+      return
+    }
+    // Only start countdown after user has returned (adOpened + visibility back)
+    const timer = setTimeout(() => setTimeLeft(prev => prev - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [timeLeft, onClose])
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[300] flex items-center justify-center px-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.92)' }}
+    >
+      <motion.div
+        initial={{ scale: 0.85, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.85 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+        className="w-full max-w-xs rounded-2xl overflow-hidden text-center"
+        style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
+      >
+        <div className="p-5">
+          {adOpened ? (
+            <>
+              <span className="text-4xl block mb-3">🎮</span>
+              <h3 className="text-lg font-bold mb-1" style={{ color: '#FFFFFF' }}>Game Complete!</h3>
+              <p className="text-[11px] mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                Visit our sponsor, then come back to continue
+              </p>
+
+              {/* Ad banner */}
+              <div className="rounded-lg overflow-hidden flex justify-center mb-3"
+                style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <AdsterraBanner320x50 />
+              </div>
+
+              {/* Waiting for return */}
+              <div className="w-full py-3 rounded-xl"
+                style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '1px solid rgba(237,194,46,0.2)' }}>
+                <p className="text-[11px] font-semibold" style={{ color: '#EDC22E' }}>
+                  🌐 Sponsor page opened!
+                </p>
+                <p className="text-[9px] mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  Come back to return to dashboard
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="text-4xl block mb-3">⏳</span>
+              <h3 className="text-lg font-bold mb-1" style={{ color: '#FFFFFF' }}>Loading...</h3>
+            </>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 export { ADSTERRA_DIRECT_LINK }

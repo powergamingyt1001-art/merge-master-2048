@@ -16,7 +16,7 @@ import {
   Trophy, RotateCcw, Undo2, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
   Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle, Swords, Coins,
 } from 'lucide-react'
-import { AdsterraBanner300x250, AdsterraBanner728x90 } from '@/components/ads/AdsterraAds'
+import { AdsterraBanner300x250, AdsterraBanner468x60 } from '@/components/ads/AdsterraAds'
 import { ADSTERRA_DIRECT_LINK } from '@/components/ads/AdOverlay'
 
 // ============================================================
@@ -308,6 +308,11 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
       style={{ background: '#1e1b3a', overflow: 'hidden', touchAction: 'none' }}
       onKeyDown={handleKeyDown} tabIndex={0} role="application" aria-label="Merge Master 2048 Challenge"
     >
+
+      {/* ====== TOP HEADER AD - thin banner ====== */}
+      <div className="flex-shrink-0 w-full flex justify-center" style={{ maxHeight: 60, overflow: 'hidden' }}>
+        <AdsterraBanner468x60 />
+      </div>
 
       {/* ============================================================ */}
       {/* ROW 1: [ BACK + SCORE ]   [ TIMER TEXT ]                     */}

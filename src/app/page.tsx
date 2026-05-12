@@ -8,7 +8,7 @@ import { GameBoard } from '@/components/game/GameBoard'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useGame } from '@/hooks/useGame'
 import { GameProvider } from '@/context/GameContext'
-import { AdOverlay, BackgroundImpressionTimer } from '@/components/ads/AdOverlay'
+import { AdOverlay, BackgroundImpressionTimer, DashboardReturnOverlay } from '@/components/ads/AdOverlay'
 
 type GamePhase = 'loading' | 'dashboard' | 'game'
 type PendingGameAction = 'classic' | 'bot' | 'coins' | 'tournament' | null
@@ -21,6 +21,8 @@ export default function Home() {
   const [pendingBotTime, setPendingBotTime] = useState(60)
   const [pendingCoinFee, setPendingCoinFee] = useState(0)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
+  const [showDashboardReturnOverlay, setShowDashboardReturnOverlay] = useState(false)
+  const [dashboardReturnKey, setDashboardReturnKey] = useState(0)
   const game = useGame()
 
   // Online detection
@@ -106,8 +108,20 @@ export default function Home() {
 
   const handleBackToDashboard = useCallback(() => {
     game.goBackToDashboard()
+    if (isOnline) {
+      // Show dashboard return overlay with direct link - EVERY game when online
+      setDashboardReturnKey(k => k + 1)
+      setShowDashboardReturnOverlay(true)
+    } else {
+      // Offline - go directly to dashboard
+      setPhase('dashboard')
+    }
+  }, [game, isOnline])
+
+  const handleDashboardReturnClose = useCallback(() => {
+    setShowDashboardReturnOverlay(false)
     setPhase('dashboard')
-  }, [game])
+  }, [])
 
   const handlePlayAgain = useCallback((mode: 'bot' | 'coins' | 'tournament', timeLimit: number, entryFee: number) => {
     game.goBackToDashboard()
@@ -221,6 +235,13 @@ export default function Home() {
           title="Preparing Your Game..."
           subtitle="Watch this short ad to continue"
           overlayKey={overlayKey}
+        />
+
+        {/* Dashboard Return Overlay - shown when game ends and user returns to dashboard */}
+        <DashboardReturnOverlay
+          isOpen={showDashboardReturnOverlay}
+          onClose={handleDashboardReturnClose}
+          overlayKey={dashboardReturnKey}
         />
       </GameProvider>
     </ErrorBoundary>
