@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { syncPlayerToFirebase, processReferral, processCommissionForReferrer, getReferrals, onReferralsUpdate, getCommissionNotifications, claimCommissionNotification, type FirebaseReferral } from '@/lib/firebase-service'
 
 export type Direction = 'up' | 'down' | 'left' | 'right'
-export type PowerUp = 'hammer' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x' | 'extraTime'
+export type PowerUp = 'hammer' | 'magnet' | 'blast'
 export type GameMode = 'classic' | 'bot' | 'coins' | 'tournament'
 
 export interface Tile {
@@ -50,25 +50,14 @@ export interface GameHistoryEntry {
   timeLimit: number
 }
 
-export interface DailyTaskReward {
-  type: 'coins' | 'spin' | 'hammer' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x' | 'extraTime' | 'undo'
-  count: number
-  label: string
-  emoji: string
-}
-
 export interface DailyTask {
   id: string
   description: string
   emoji: string
   target: number
   progress: number
-  reward: DailyTaskReward
+  reward: number
   claimed: boolean
-  // Task action type - determines UI button and behavior
-  actionType?: 'visit' | 'play' | 'spin' | 'claim' | 'auto' // auto = tracks automatically
-  // For visit tasks: how many visits required
-  visitCount?: number
 }
 
 export interface GameState {
@@ -152,12 +141,6 @@ export interface GameState {
   weeklyBonusClaimed: boolean
   // Daily tasks
   dailyTasks: DailyTask[]
-  // New ability types
-  multiplier5xCount: number
-  multiplier2_5xCount: number
-  extraTimeCount: number
-  activeMultiplier: number // 1 = none, 5 = 5x active, 2.5 = 2.5x active
-  multiplierTimeLeft: number // seconds remaining for multiplier
 }
 
 const BOT_NAMES = [
@@ -566,38 +549,14 @@ export function getCurrentLevelPoints(level: number): number {
   return getLevelThreshold(Math.min(Math.max(level, 1), MAX_LEVEL))
 }
 
-// Generate daily tasks for today - varied tasks with coins + ability rewards
+// Generate daily tasks for today
 function generateDailyTasks(): DailyTask[] {
   const today = getTodayStr()
-  // Use day of year to vary tasks slightly each day
-  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24))
-  const taskVariant = dayOfYear % 7 // Rotate ability rewards weekly
-
-  // Ability reward varies by day of week
-  const abilityRewards: DailyTaskReward[] = [
-    { type: 'blast', count: 3, label: '3 Bombs', emoji: '💣' },
-    { type: 'hammer', count: 3, label: '3 Hammers', emoji: '🔨' },
-    { type: 'magnet', count: 3, label: '3 Magnets', emoji: '🧲' },
-    { type: 'extraTime', count: 3, label: '3 Timers', emoji: '⏱️' },
-    { type: 'undo', count: 3, label: '3 Undos', emoji: '↩️' },
-    { type: 'blast', count: 5, label: '5 Bombs', emoji: '💣' },
-    { type: 'hammer', count: 5, label: '5 Hammers', emoji: '🔨' },
-  ]
-
   return [
-    // Visit tasks - some require 2 visits
-    { id: `visit1-${today}`, description: 'Visit Sponsor Website', emoji: '🌐', target: 1, progress: 0, reward: { type: 'coins', count: 50, label: '50 Coins', emoji: '💰' }, claimed: false, actionType: 'visit', visitCount: 1 },
-    { id: `visit2-${today}`, description: 'Visit 2 Sponsor Pages', emoji: '🌐', target: 2, progress: 0, reward: { type: 'coins', count: 100, label: '100 Coins', emoji: '💰' }, claimed: false, actionType: 'visit', visitCount: 2 },
-    // Play games task
-    { id: `play3-${today}`, description: 'Play 3 Games', emoji: '🎮', target: 3, progress: 0, reward: { type: 'coins', count: 30, label: '30 Coins', emoji: '💰' }, claimed: false, actionType: 'play' },
-    // Score task
-    { id: `score500-${today}`, description: 'Score 500+ in a game', emoji: '🏆', target: 1, progress: 0, reward: { type: 'coins', count: 40, label: '40 Coins', emoji: '💰' }, claimed: false, actionType: 'auto' },
-    // Spin task
-    { id: `spin-${today}`, description: 'Spin the Wheel', emoji: '🎰', target: 1, progress: 0, reward: { type: 'coins', count: 20, label: '20 Coins', emoji: '💰' }, claimed: false, actionType: 'spin' },
-    // Ability reward task - varies daily
-    { id: `ability-${today}`, description: 'Play 5 Games', emoji: '🎯', target: 5, progress: 0, reward: abilityRewards[taskVariant], claimed: false, actionType: 'play' },
-    // Claim free coins task (just press claim)
-    { id: `claim-coins-${today}`, description: 'Claim Free Coins', emoji: '💰', target: 1, progress: 0, reward: { type: 'coins', count: 100, label: '100 Coins', emoji: '💰' }, claimed: false, actionType: 'claim' },
+    { id: `visit-${today}`, description: 'Visit Sponsor Website', emoji: '🌐', target: 1, progress: 0, reward: 50, claimed: false },
+    { id: `play3-${today}`, description: 'Play 3 Games', emoji: '🎮', target: 3, progress: 0, reward: 30, claimed: false },
+    { id: `score500-${today}`, description: 'Score 500+ in a game', emoji: '🏆', target: 1, progress: 0, reward: 40, claimed: false },
+    { id: `spin-${today}`, description: 'Spin the Wheel', emoji: '🎰', target: 1, progress: 0, reward: 20, claimed: false },
   ]
 }
 
@@ -671,11 +630,6 @@ export function useGame() {
       gameHistory: [],
       weeklyBonusClaimed: false,
       dailyTasks: generateDailyTasks(),
-      multiplier5xCount: 0,
-      multiplier2_5xCount: 0,
-      extraTimeCount: 0,
-      activeMultiplier: 1,
-      multiplierTimeLeft: 0,
     }
 
     if (!saved) {
@@ -790,11 +744,6 @@ export function useGame() {
         if (!hasTodayTasks) return generateDailyTasks()
         return savedTasks
       })(),
-      multiplier5xCount: saved.multiplier5xCount ?? 0,
-      multiplier2_5xCount: saved.multiplier2_5xCount ?? 0,
-      extraTimeCount: saved.extraTimeCount ?? 0,
-      activeMultiplier: 1,
-      multiplierTimeLeft: 0,
     }
   })
 
@@ -844,12 +793,9 @@ export function useGame() {
       gameHistory: state.gameHistory.slice(0, 30),
       weeklyBonusClaimed: state.weeklyBonusClaimed,
       dailyTasks: state.dailyTasks,
-      multiplier5xCount: state.multiplier5xCount,
-      multiplier2_5xCount: state.multiplier2_5xCount,
-      extraTimeCount: state.extraTimeCount,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks])
 
   // ============================================================
   // FIREBASE SYNC - Sync player data to Firebase RTDB
@@ -974,18 +920,12 @@ export function useGame() {
       timeLimit,
     }
     setState(prev => {
-      // Update daily task progress for games played, score, and ability tasks
+      // Update daily task progress for games played and score
       const today = getTodayStr()
       const tasks = prev.dailyTasks.map(t => {
-        // Play 3 games task
         if (t.id === `play3-${today}` && !t.claimed) {
           return { ...t, progress: Math.min(t.progress + 1, t.target) }
         }
-        // Play 5 games (ability) task
-        if (t.id === `ability-${today}` && !t.claimed) {
-          return { ...t, progress: Math.min(t.progress + 1, t.target) }
-        }
-        // Score 500+ task
         if (t.id === `score500-${today}` && !t.claimed && score >= 500) {
           return { ...t, progress: Math.min(t.progress + 1, t.target) }
         }
@@ -1044,20 +984,7 @@ export function useGame() {
         comboMultiplier = 1
       }
 
-      // Apply active multiplier to score gain
-      let multiplierExtra = 0
-      let newActiveMultiplier = prev.activeMultiplier
-      let newMultiplierTimeLeft = prev.multiplierTimeLeft
-      if (prev.activeMultiplier > 1 && prev.multiplierTimeLeft > 0) {
-        multiplierExtra = Math.round((scoreGain + comboExtra) * (prev.activeMultiplier - 1))
-        newMultiplierTimeLeft = prev.multiplierTimeLeft - 1
-        if (newMultiplierTimeLeft <= 0) {
-          newActiveMultiplier = 1
-          newMultiplierTimeLeft = 0
-        }
-      }
-
-      const newScore = prev.score + scoreGain + comboExtra + multiplierExtra
+      const newScore = prev.score + scoreGain + comboExtra
       const newBestScore = Math.max(newScore, prev.bestScore)
       const isStuck = !canMove(tilesWithNew)
       const won = !prev.won && hasWon(tilesWithNew)
@@ -1152,9 +1079,7 @@ export function useGame() {
         consecutiveMerges: newConsecutiveMerges,
         comboBonus: newComboBonus,
         comboMultiplier: comboMultiplier,
-        gamePoints: newGamePoints + multiplierExtra,
-        activeMultiplier: newActiveMultiplier,
-        multiplierTimeLeft: newMultiplierTimeLeft,
+        gamePoints: newGamePoints,
         coinGameWon,
         playerLevel: calculateLevel(prev.levelXP),
         totalBattlesPlayed,
@@ -1188,21 +1113,6 @@ export function useGame() {
       if (pu === 'hammer' && prev.hammerCount <= 0) return prev
       if (pu === 'magnet' && prev.magnetCount <= 0) return prev
       if (pu === 'blast' && prev.blastCount <= 0) return prev
-      if (pu === 'multiplier5x' && prev.multiplier5xCount <= 0) return prev
-      if (pu === 'multiplier2_5x' && prev.multiplier2_5xCount <= 0) return prev
-      if (pu === 'extraTime' && prev.extraTimeCount <= 0) return prev
-
-      if (pu === 'multiplier5x') {
-        return { ...prev, activeMultiplier: 5, multiplierTimeLeft: 10, multiplier5xCount: prev.multiplier5xCount - 1, activePowerUp: null }
-      }
-      if (pu === 'multiplier2_5x') {
-        return { ...prev, activeMultiplier: 2.5, multiplierTimeLeft: 10, multiplier2_5xCount: prev.multiplier2_5xCount - 1, activePowerUp: null }
-      }
-      if (pu === 'extraTime') {
-        const isBattleMode = prev.gameMode === 'bot' || prev.gameMode === 'coins' || prev.gameMode === 'tournament'
-        if (!isBattleMode) return prev
-        return { ...prev, battleTimer: prev.battleTimer + 10, extraTimeCount: prev.extraTimeCount - 1, activePowerUp: null }
-      }
 
       if (pu === 'blast') {
         const tilesToRemove = Math.ceil(prev.tiles.length / 2)
@@ -1226,32 +1136,20 @@ export function useGame() {
       if (prev.activePowerUp === 'hammer') {
         if (!prev.tiles.some(t => t.row === row && t.col === col) || prev.hammerCount <= 0) return { ...prev, activePowerUp: null }
         prevState.current = prev
-        // Find adjacent tiles (up/down/left/right)
-        const adjacentOffsets = [[-1, 0], [1, 0], [0, -1], [0, 1]]
-        const adjacentTiles: Tile[] = []
-        for (const [dr, dc] of adjacentOffsets) {
-          const adj = prev.tiles.find(t => t.row === row + dr && t.col === col + dc)
-          if (adj) adjacentTiles.push(adj)
-        }
-        // Remove clicked tile + up to 2 adjacent tiles
-        const tilesToRemove = adjacentTiles.slice(0, 2)
-        const removeSet = new Set<string>()
-        removeSet.add(`${row}-${col}`)
-        for (const t of tilesToRemove) {
-          removeSet.add(`${t.row}-${t.col}`)
-        }
-        return { ...prev, tiles: prev.tiles.filter(t => !removeSet.has(`${t.row}-${t.col}`)), hammerCount: prev.hammerCount - 1, activePowerUp: null, canUndo: true }
+        return { ...prev, tiles: prev.tiles.filter(t => !(t.row === row && t.col === col)), hammerCount: prev.hammerCount - 1, activePowerUp: null, canUndo: true }
       }
       if (prev.activePowerUp === 'magnet') {
         const targetTile = prev.tiles.find(t => t.row === row && t.col === col)
         if (!targetTile || prev.magnetCount <= 0) return { ...prev, activePowerUp: null }
-        // Find ALL tiles with the same value
-        const sameValueTiles = prev.tiles.filter(t => t.value === targetTile.value)
-        // Remove ALL of them (including the clicked one)
-        const removedValuesSum = sameValueTiles.reduce((sum, t) => sum + t.value, 0)
+        const same = prev.tiles.filter(t => t.value === targetTile.value && !(t.row === row && t.col === col))
+        if (same.length === 0) return { ...prev, activePowerUp: null }
+        const mergeTarget = same[0]
+        const newValue = targetTile.value * 2
         prevState.current = prev
-        const newTiles = prev.tiles.filter(t => t.value !== targetTile.value)
-        return { ...prev, tiles: newTiles, score: prev.score + removedValuesSum, magnetCount: prev.magnetCount - 1, activePowerUp: null, canUndo: true, gamePoints: prev.gamePoints + removedValuesSum }
+        const newTiles = prev.tiles
+          .filter(t => !(t.row === row && t.col === col) && !(t.row === mergeTarget.row && t.col === mergeTarget.col))
+          .concat([{ id: getNextId(), value: newValue, row: mergeTarget.row, col: mergeTarget.col, isNew: false, isMerged: true, flash: true }])
+        return { ...prev, tiles: newTiles, score: prev.score + newValue, magnetCount: prev.magnetCount - 1, activePowerUp: null, canUndo: true, gamePoints: prev.gamePoints + newValue }
       }
       return prev
     })
@@ -1283,8 +1181,6 @@ export function useGame() {
       comboMultiplier: 1,
       coinEntryFee: 0,
       coinGameWon: null,
-      activeMultiplier: 1,
-      multiplierTimeLeft: 0,
     }))
   }, [])
 
@@ -1322,8 +1218,6 @@ export function useGame() {
         lastPlayDate: today,
         coinEntryFee: 0,
         coinGameWon: null,
-        activeMultiplier: 1,
-        multiplierTimeLeft: 0,
       }
     })
   }, [])
@@ -1362,8 +1256,6 @@ export function useGame() {
         coins: prev.coins - entryFee,
         coinEntryFee: entryFee,
         coinGameWon: null,
-        activeMultiplier: 1,
-        multiplierTimeLeft: 0,
         gamesPlayedToday: gamesToday + 1,
         lastPlayDate: today,
       }
@@ -1405,8 +1297,6 @@ export function useGame() {
         comboBonus: 0,
         coinEntryFee: 0,
         coinGameWon: null,
-        activeMultiplier: 1,
-        multiplierTimeLeft: 0,
         gamesPlayedToday: gamesToday + 1,
         lastPlayDate: today,
       }
@@ -1604,9 +1494,6 @@ export function useGame() {
         case 'hammer': return { ...prev, hammerCount: prev.hammerCount + count }
         case 'magnet': return { ...prev, magnetCount: prev.magnetCount + count }
         case 'blast': return { ...prev, blastCount: prev.blastCount + count }
-        case 'multiplier5x': return { ...prev, multiplier5xCount: prev.multiplier5xCount + count }
-        case 'multiplier2_5x': return { ...prev, multiplier2_5xCount: prev.multiplier2_5xCount + count }
-        case 'extraTime': return { ...prev, extraTimeCount: prev.extraTimeCount + count }
         default: return prev
       }
     })
@@ -1661,8 +1548,6 @@ export function useGame() {
       comboMultiplier: 1,
       coinEntryFee: 0,
       coinGameWon: null,
-      activeMultiplier: 1,
-      multiplierTimeLeft: 0,
     }))
   }, [])
 
@@ -1750,53 +1635,19 @@ export function useGame() {
   // Claim daily task reward
   const claimDailyTask = useCallback((taskId: string) => {
     setState(prev => {
-      const task = prev.dailyTasks.find(t => t.id === taskId)
-      if (!task || task.claimed) return prev
-
-      // For 'claim' action type, auto-complete (progress = target)
-      // For other types, require progress >= target
-      if (task.actionType !== 'claim' && task.progress < task.target) return prev
-
       const tasks = prev.dailyTasks.map(t => {
-        if (t.id === taskId) return { ...t, claimed: true, progress: Math.max(t.progress, t.target) }
+        if (t.id === taskId && !t.claimed && t.progress >= t.target) {
+          return { ...t, claimed: true }
+        }
         return t
       })
-
-      // Grant the reward based on type
-      const reward = task.reward
-      let newState: Partial<GameState> = { dailyTasks: tasks }
-
-      switch (reward.type) {
-        case 'coins':
-          newState = { ...newState, coins: prev.coins + reward.count }
-          break
-        case 'spin':
-          newState = { ...newState, spinTickets: prev.spinTickets + reward.count }
-          break
-        case 'hammer':
-          newState = { ...newState, hammerCount: prev.hammerCount + reward.count }
-          break
-        case 'magnet':
-          newState = { ...newState, magnetCount: prev.magnetCount + reward.count }
-          break
-        case 'blast':
-          newState = { ...newState, blastCount: prev.blastCount + reward.count }
-          break
-        case 'multiplier5x':
-          newState = { ...newState, multiplier5xCount: prev.multiplier5xCount + reward.count }
-          break
-        case 'multiplier2_5x':
-          newState = { ...newState, multiplier2_5xCount: prev.multiplier2_5xCount + reward.count }
-          break
-        case 'extraTime':
-          newState = { ...newState, extraTimeCount: prev.extraTimeCount + reward.count }
-          break
-        case 'undo':
-          newState = { ...newState, undoTotal: prev.undoTotal + reward.count }
-          break
+      const task = prev.dailyTasks.find(t => t.id === taskId)
+      if (!task || task.claimed || task.progress < task.target) return prev
+      return {
+        ...prev,
+        dailyTasks: tasks,
+        coins: prev.coins + task.reward,
       }
-
-      return { ...prev, ...newState }
     })
   }, [])
 
@@ -1869,20 +1720,6 @@ export function useGame() {
       gameHistory: [],
       weeklyBonusClaimed: false,
       dailyTasks: generateDailyTasks(),
-      multiplier5xCount: 0,
-      multiplier2_5xCount: 0,
-      extraTimeCount: 0,
-      activeMultiplier: 1,
-      multiplierTimeLeft: 0,
-    })
-  }, [])
-
-  const multiplierTick = useCallback(() => {
-    setState(prev => {
-      if (prev.multiplierTimeLeft <= 0) return { ...prev, activeMultiplier: 1 }
-      const newTime = prev.multiplierTimeLeft - 1
-      if (newTime <= 0) return { ...prev, multiplierTimeLeft: 0, activeMultiplier: 1 }
-      return { ...prev, multiplierTimeLeft: newTime }
     })
   }, [])
 
@@ -1937,17 +1774,11 @@ export function useGame() {
     claimWeeklyBonus,
     claimDailyTask,
     resetAllData,
-    multiplierTick,
     completeVisitWebsiteTask: useCallback(() => {
       setState(prev => {
         const today = getTodayStr()
         const tasks = prev.dailyTasks.map(t => {
-          // Update visit1 task
-          if (t.id === `visit1-${today}` && !t.claimed) {
-            return { ...t, progress: Math.min(t.progress + 1, t.target) }
-          }
-          // Update visit2 task (requires 2 visits)
-          if (t.id === `visit2-${today}` && !t.claimed) {
+          if (t.id === `visit-${today}` && !t.claimed) {
             return { ...t, progress: Math.min(t.progress + 1, t.target) }
           }
           return t

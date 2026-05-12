@@ -11,16 +11,12 @@ import { Tournament } from './Tournament'
 import { InvitePanel } from './InvitePanel'
 import { ProfilePanel, NotificationsPanel } from './ProfilePanel'
 import { PrivacyPolicy, AboutPage, ContactPage } from './FooterPages'
-import { Store } from './Store'
-import { CouponCode } from './CouponCode'
 import {
   AdsterraNativeBanner,
   AdsterraBanner728x90,
   AdsterraBanner300x250,
-  AdsterraBanner320x50,
-  getDashboardBigBannerSlot,
 } from '@/components/ads/AdsterraAds'
-import { PowerUp, Notification, DailyTask, DailyTaskReward, getLevelInfo } from '@/hooks/useGame'
+import { PowerUp, Notification, DailyTask, getLevelInfo } from '@/hooks/useGame'
 import { getRandomLink } from '@/components/ads/AdOverlay'
 
 interface PlayDashboardProps {
@@ -32,9 +28,6 @@ interface PlayDashboardProps {
   hammerCount: number
   magnetCount: number
   blastCount: number
-  multiplier5xCount: number
-  multiplier2_5xCount: number
-  extraTimeCount: number
   modBestScore: number
   gamePoints: number
   bestScore: number
@@ -92,16 +85,11 @@ const COIN_GAME_MODES = [
   { fee: 200, win: 400, color: '#EDC22E', label: '₹200' },
   { fee: 500, win: 1000, color: '#FF7A00', label: '₹500' },
   { fee: 1000, win: 2000, color: '#F65E3B', label: '₹1000' },
-  { fee: 2000, win: 4000, color: '#FF4081', label: '₹2K' },
-  { fee: 3000, win: 6000, color: '#E040FB', label: '₹3K' },
-  { fee: 4000, win: 8000, color: '#7C4DFF', label: '₹4K' },
-  { fee: 5000, win: 10000, color: '#FFD700', label: '₹5K' },
 ]
 
 export function PlayDashboard({
   coins, spinTickets, streakDay, streakClaimed, welcomeClaimed,
-  hammerCount, magnetCount, blastCount, multiplier5xCount, multiplier2_5xCount, extraTimeCount,
-  modBestScore, gamePoints, bestScore,
+  hammerCount, magnetCount, blastCount, modBestScore, gamePoints, bestScore,
   inviteCode, invitedUsers, commissionBalance, commissionClaimed, autoClaimCommission,
   gamesPlayedToday, maxGamesPerDay, notifications,
   playerName, playerAvatar, playerLevel, playerId, firebaseReferrals, firebaseCommissionPending,
@@ -129,11 +117,7 @@ export function PlayDashboard({
   const [showPrivacy, setShowPrivacy] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
   const [showContact, setShowContact] = useState(false)
-  const [showStore, setShowStore] = useState(false)
-  const [showCoupon, setShowCoupon] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
-  // Decide which big banner to show (only 1 per session) - lazy init
-  const [bigBannerSlot] = useState<string>(() => getDashboardBigBannerSlot())
 
   const unreadNotifications = notifications.filter(n => !n.read).length
   const gamesLeft = maxGamesPerDay - gamesPlayedToday
@@ -196,9 +180,9 @@ export function PlayDashboard({
       <div className="absolute top-1/4 left-1/3 w-48 h-48 rounded-full opacity-20 pointer-events-none" style={{ background: 'radial-gradient(circle, #EDC22E, transparent)', filter: 'blur(60px)' }} />
       <div className="absolute bottom-1/4 right-1/3 w-56 h-56 rounded-full opacity-15 pointer-events-none" style={{ background: 'radial-gradient(circle, #FF7A00, transparent)', filter: 'blur(70px)' }} />
 
-      {/* ====== HEADER AD - Only big banner if 'top' slot chosen ====== */}
+      {/* ====== HEADER AD - 728x90 banner pinned at top ====== */}
       <div className="flex-shrink-0 relative z-10 w-full">
-        {bigBannerSlot === 'top' ? <AdsterraBanner728x90 /> : <AdsterraBanner320x50 />}
+        <AdsterraBanner728x90 />
       </div>
 
       {/* Scrollable content */}
@@ -258,9 +242,6 @@ export function PlayDashboard({
               <InventoryItem emoji="🔨" count={hammerCount} color="#F59563" />
               <InventoryItem emoji="🧲" count={magnetCount} color="#00E676" />
               <InventoryItem emoji="💣" count={blastCount} color="#FF7A00" />
-              <InventoryItem emoji="5️⃣" count={multiplier5xCount} color="#F65E3B" />
-              <InventoryItem emoji="⚡" count={multiplier2_5xCount} color="#FF7A00" />
-              <InventoryItem emoji="⏱️" count={extraTimeCount} color="#00FFFF" />
             </div>
             <div className="flex items-center gap-1.5">
               <div className="flex items-center gap-0.5 px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(0,230,118,0.08)' }}>
@@ -390,7 +371,7 @@ export function PlayDashboard({
             <AdsterraNativeBanner />
           </div>
 
-          {/* Quick Actions Row 1: Streak + Spin + Store + Coupon */}
+          {/* Quick Actions: Streak + Spin + Weekly + Leaderboard */}
           <div className="w-full grid grid-cols-4 gap-1.5">
             <button onClick={() => setShowStreak(true)}
               className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
@@ -406,24 +387,6 @@ export function PlayDashboard({
               <p className="text-[7px] font-bold" style={{ color: '#00E676' }}>Spin</p>
               <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{spinTickets}🎫</p>
             </button>
-            <button onClick={() => setShowStore(true)}
-              className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
-              style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '1px solid rgba(237,194,46,0.2)' }}>
-              <span className="text-base">🏪</span>
-              <p className="text-[7px] font-bold" style={{ color: '#EDC22E' }}>Store</p>
-              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Buy</p>
-            </button>
-            <button onClick={() => setShowCoupon(true)}
-              className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
-              style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
-              <span className="text-base">🎟️</span>
-              <p className="text-[7px] font-bold" style={{ color: '#00E676' }}>Coupon</p>
-              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Code</p>
-            </button>
-          </div>
-
-          {/* Quick Actions Row 2: Weekly + Rank + Invite */}
-          <div className="w-full grid grid-cols-3 gap-1.5">
             <button onClick={() => !weeklyBonusClaimed && onClaimWeeklyBonus?.()}
               className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
               style={{
@@ -442,21 +405,12 @@ export function PlayDashboard({
               <p className="text-[7px] font-bold" style={{ color: '#F65E3B' }}>Rank</p>
               <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Board</p>
             </button>
-            <button onClick={() => setShowInvite(true)}
-              className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
-              style={{ backgroundColor: 'rgba(0,230,118,0.05)', border: '1px solid rgba(0,230,118,0.1)' }}>
-              <span className="text-base">🤝</span>
-              <p className="text-[7px] font-bold" style={{ color: '#00E676' }}>Invite</p>
-              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.3)' }}>5%</p>
-            </button>
           </div>
 
-          {/* Big Banner Ad - Only shown if 'middle' slot chosen */}
-          {bigBannerSlot === 'middle' && (
-            <div className="w-full">
-              <AdsterraBanner300x250 />
-            </div>
-          )}
+          {/* 300x250 Banner Ad */}
+          <div className="w-full">
+            <AdsterraBanner300x250 />
+          </div>
 
           {/* Daily Tasks */}
           {dailyTasks && dailyTasks.length > 0 && (
@@ -468,10 +422,7 @@ export function PlayDashboard({
               <div className="flex flex-col gap-1">
                 {dailyTasks.map(task => {
                   const isComplete = task.progress >= task.target
-                  const isVisitTask = task.actionType === 'visit'
-                  const isClaimTask = task.actionType === 'claim'
-                  const isSpinTask = task.actionType === 'spin'
-                  const rewardDisplay = task.reward.emoji + ' ' + task.reward.label
+                  const isVisitTask = task.id.startsWith('visit-')
                   return (
                     <div key={task.id} className="flex items-center justify-between px-2 py-1.5 rounded-lg"
                       style={{ backgroundColor: isComplete ? 'rgba(0,230,118,0.06)' : 'rgba(255,255,255,0.02)', border: `1px solid ${isComplete ? 'rgba(0,230,118,0.15)' : 'rgba(255,255,255,0.04)'}` }}>
@@ -479,7 +430,7 @@ export function PlayDashboard({
                         <span className="text-[10px]">{task.emoji}</span>
                         <div>
                           <p className="text-[8px] font-semibold" style={{ color: isComplete ? '#00E676' : 'rgba(255,255,255,0.7)' }}>{task.description}</p>
-                          <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{task.progress}/{task.target} • {rewardDisplay}</p>
+                          <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{task.progress}/{task.target} • +{task.reward}💰</p>
                         </div>
                       </div>
                       {task.claimed ? (
@@ -499,33 +450,6 @@ export function PlayDashboard({
                           style={{ background: 'linear-gradient(135deg, #F65E3B, #FF7A00)', color: '#FFFFFF' }}>
                           VISIT
                         </button>
-                      ) : isClaimTask ? (
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => {
-                            // Mark as complete immediately for claim tasks
-                            onClaimDailyTask?.(task.id)
-                          }}
-                            className="px-2 py-0.5 rounded text-[7px] font-bold transition-transform active:scale-95"
-                            style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF' }}>
-                            CLAIM 💰
-                          </button>
-                          <button onClick={() => {
-                            // Open popup ad for +100 bonus coins
-                            try { window.open(getRandomLink(), '_blank') } catch { /* popup blocked */ }
-                            onAddCoins(100)
-                            onAddNotification('Bonus Coins!', 'You watched an ad and got +100 bonus coins! 🎉', 'reward', '💰')
-                          }}
-                            className="px-1.5 py-0.5 rounded text-[6px] font-bold transition-transform active:scale-95"
-                            style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.2)' }}>
-                          +100 📺
-                          </button>
-                        </div>
-                      ) : isSpinTask ? (
-                        <button onClick={() => setShowSpin(true)}
-                          className="px-2 py-0.5 rounded text-[7px] font-bold transition-transform active:scale-95"
-                          style={{ background: 'rgba(0,230,118,0.15)', color: '#00E676', border: '1px solid rgba(0,230,118,0.3)' }}>
-                          SPIN
-                        </button>
                       ) : (
                         <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.2)' }}>{task.progress}/{task.target}</span>
                       )}
@@ -536,8 +460,15 @@ export function PlayDashboard({
             </div>
           )}
 
-          {/* Best Score + Commission row */}
+          {/* Invite row */}
           <div className="w-full flex gap-1.5">
+            <button onClick={() => setShowInvite(true)}
+              className="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-transform active:scale-95"
+              style={{ backgroundColor: 'rgba(0,230,118,0.05)', border: '1px solid rgba(0,230,118,0.1)' }}>
+              <span className="text-sm">🤝</span>
+              <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>Invite</span>
+              <span className="text-[6px]" style={{ color: 'rgba(255,255,255,0.3)' }}>5%</span>
+            </button>
             {modBestScore > 0 && (
               <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg"
                 style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -566,9 +497,9 @@ export function PlayDashboard({
         </div>
       </div>
 
-      {/* ====== FOOTER AD - Only big banner if 'footer' slot chosen ====== */}
+      {/* ====== FOOTER AD - bigger banner for more revenue ====== */}
       <div className="flex-shrink-0 relative z-10 w-full">
-        {bigBannerSlot === 'footer' ? <AdsterraBanner728x90 /> : <AdsterraBanner320x50 />}
+        <AdsterraBanner728x90 />
       </div>
 
       {/* Modals */}
@@ -608,8 +539,6 @@ export function PlayDashboard({
       <PrivacyPolicy isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
       <AboutPage isOpen={showAbout} onClose={() => setShowAbout(false)} />
       <ContactPage isOpen={showContact} onClose={() => setShowContact(false)} />
-      <Store isOpen={showStore} onClose={() => setShowStore(false)} playerId={playerId} coins={coins} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} />
-      <CouponCode isOpen={showCoupon} onClose={() => setShowCoupon(false)} onAddCoins={onAddCoins} onAddPowerUp={onAddPowerUp} onAddSpinTickets={onAddSpinTickets} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} />
     </div>
   )
 }
