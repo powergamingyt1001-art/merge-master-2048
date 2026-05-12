@@ -17,7 +17,7 @@ import {
   AdsterraBanner300x250,
 } from '@/components/ads/AdsterraAds'
 import { PowerUp, Notification, DailyTask, getLevelInfo } from '@/hooks/useGame'
-import { ADSTERRA_DIRECT_LINK } from '@/components/ads/AdOverlay'
+import { getRandomLink } from '@/components/ads/AdOverlay'
 
 interface PlayDashboardProps {
   coins: number
@@ -438,7 +438,7 @@ export function PlayDashboard({
                         </button>
                       ) : isVisitTask && isOnline ? (
                         <button onClick={() => {
-                          try { window.open(ADSTERRA_DIRECT_LINK, '_blank') } catch { /* popup blocked */ }
+                          try { window.open(getRandomLink(), '_blank') } catch { /* popup blocked */ }
                           onCompleteVisitWebsiteTask?.()
                         }}
                           className="px-2 py-0.5 rounded text-[7px] font-bold transition-transform active:scale-95"

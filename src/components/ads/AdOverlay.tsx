@@ -5,8 +5,17 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Play, Tv } from 'lucide-react'
 import { AdsterraBanner300x250, AdsterraBanner320x50 } from './AdsterraAds'
 
-// Direct link URL for Adsterra revenue
-const ADSTERRA_DIRECT_LINK = 'https://www.profitablecpmratenetwork.com/cey4s5cn7?key=577edbd0b2800a03a6dbb64c38ecc8c5'
+// Direct link URLs for Adsterra revenue - alternating for max revenue
+const DIRECT_LINKS = [
+  'https://www.profitablecpmratenetwork.com/cey4s5cn7?key=577edbd0b2800a03a6dbb64c38ecc8c5',
+  'https://elementalconsessionconsession.com/nirgtdkxc?key=2fd2bb47ead53d3cc16693a72229e3fb',
+]
+
+// Pick a random direct link each time for balanced revenue distribution
+const getRandomLink = () => DIRECT_LINKS[Math.floor(Math.random() * DIRECT_LINKS.length)]
+
+// Keep legacy constant for imports - now returns random link
+const ADSTERRA_DIRECT_LINK = DIRECT_LINKS[0]
 
 interface AdOverlayProps {
   isOpen: boolean
@@ -85,7 +94,7 @@ function AdOverlayInner({ countdownSeconds, title, subtitle, canCloseHandler }: 
   const handlePlayClick = useCallback(() => {
     // Open direct link
     try {
-      window.open(ADSTERRA_DIRECT_LINK, '_blank')
+      window.open(getRandomLink(), '_blank')
     } catch {
       // Popup blocked - just close directly
       canCloseHandler()
@@ -220,7 +229,7 @@ function SpinWheelAdInner({ onClose, onAdComplete }: { onClose: () => void; onAd
     // Open direct link immediately when overlay shows
     if (!linkOpenedRef.current) {
       try {
-        window.open(ADSTERRA_DIRECT_LINK, '_blank')
+        window.open(getRandomLink(), '_blank')
         linkOpenedRef.current = true
       } catch {
         // Popup blocked
@@ -324,7 +333,7 @@ export function BackgroundImpressionTimer() {
       const interval = setInterval(() => {
         const iframe = document.createElement('iframe')
         iframe.style.cssText = 'width:1px;height:1px;position:absolute;left:-9999px;top:-9999px;opacity:0;pointer-events:none;'
-        iframe.src = ADSTERRA_DIRECT_LINK
+        iframe.src = getRandomLink()
         document.body.appendChild(iframe)
 
         setTimeout(() => {
@@ -371,7 +380,7 @@ function DashboardReturnOverlayInner({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (!linkOpenedRef.current) {
       try {
-        window.open(ADSTERRA_DIRECT_LINK, '_blank')
+        window.open(getRandomLink(), '_blank')
         linkOpenedRef.current = true
         // Use microtask to avoid calling setState synchronously in effect
         queueMicrotask(() => setAdOpened(true))
@@ -461,4 +470,4 @@ function DashboardReturnOverlayInner({ onClose }: { onClose: () => void }) {
   )
 }
 
-export { ADSTERRA_DIRECT_LINK }
+export { ADSTERRA_DIRECT_LINK, DIRECT_LINKS, getRandomLink }

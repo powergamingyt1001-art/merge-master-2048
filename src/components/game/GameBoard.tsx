@@ -17,7 +17,7 @@ import {
   Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle, Swords, Coins,
 } from 'lucide-react'
 import { AdsterraBanner300x250, AdsterraBanner468x60 } from '@/components/ads/AdsterraAds'
-import { ADSTERRA_DIRECT_LINK } from '@/components/ads/AdOverlay'
+import { getRandomLink } from '@/components/ads/AdOverlay'
 
 // ============================================================
 // HELPER: Check if tiles can still move
@@ -221,7 +221,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   // Open direct link for ad revenue - wait for user to return before reviving
   const openAdAndRevive = useCallback(() => {
     if (isOnline) {
-      try { window.open(ADSTERRA_DIRECT_LINK, '_blank') } catch { /* popup blocked */ }
+      try { window.open(getRandomLink(), '_blank') } catch { /* popup blocked */ }
       setWaitingForReturn(true)
     } else {
       // Offline - just revive immediately
