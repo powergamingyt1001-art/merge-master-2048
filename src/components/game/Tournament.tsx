@@ -267,7 +267,9 @@ export function Tournament({
                       {[
                         `Entry fee: ${entryFee} coins to join`,
                         'Each game is 90 seconds',
-                        '10 score = 1 tournament point',
+                        '20 score = 1 tournament point',
+                        '50% points → Level upgrade (permanent)',
+                        '50% points → Tournament leaderboard (weekly)',
                         'Partial scores carry over to next game',
                         'Only tournament points count for ranking',
                         `Prize pool: 7K coins weekly`,

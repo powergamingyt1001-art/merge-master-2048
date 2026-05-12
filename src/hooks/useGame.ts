@@ -129,6 +129,7 @@ export interface GameState {
   tournamentPoints: number
   tournamentCarryOver: number
   tournamentGamesPlayed: number
+  levelXP: number // 50% of tournament points go here for level calculation
   // Game history
   gameHistory: GameHistoryEntry[]
   // Weekly bonus
@@ -304,13 +305,18 @@ function generateFairBotScore(playerScore: number): number {
 }
 
 // ============================================================
-// LEVEL SYSTEM - 1000 Levels, based on WEEKLY TOURNAMENT POINTS
+// LEVEL SYSTEM - 1000 Levels, based on LEVEL XP
+// Level XP = 50% of tournament points (permanent, never resets)
+// Tournament points: 20 score = 1 point (was 10 score = 1 point)
+// 50% of tournament points → levelXP (for level upgrade)
+// 50% of tournament points → tournamentPoints (for weekly leaderboard)
+// levelXP never resets on weekly tournament reset
 // Slow progression - levels require meaningful tournament effort
-// Level 1 = 0 pts, Level 2 = 10 pts, Level 3 = 25 pts
-// Level 5 = 80 pts, Level 10 = 200 pts, Level 20 = 600 pts
-// Level 50 = 5,000 pts, Level 100 = 25,000 pts
-// Level 200 = 150,000 pts, Level 500 = 2,000,000 pts
-// Level 1000 = 50,000,000 pts
+// Level 1 = 0 xp, Level 2 = 10 xp, Level 3 = 25 xp
+// Level 5 = 80 xp, Level 10 = 200 xp, Level 20 = 600 xp
+// Level 50 = 5,000 xp, Level 100 = 25,000 xp
+// Level 200 = 150,000 xp, Level 500 = 2,000,000 xp
+// Level 1000 = 50,000,000 xp
 // ============================================================
 
 export const MAX_LEVEL = 1000
@@ -476,13 +482,13 @@ export function getLevelColor(level: number): string {
   return hslToHex(hue, saturation, lightness)
 }
 
-// Calculate player level from tournament points using binary search (O(log N))
-function calculateLevel(tournamentPoints: number): number {
-  if (tournamentPoints <= 0) return 1
+// Calculate player level from level XP (50% of tournament points) using binary search
+function calculateLevel(levelXP: number): number {
+  if (levelXP <= 0) return 1
   let lo = 1, hi = MAX_LEVEL
   while (lo < hi) {
     const mid = Math.ceil((lo + hi) / 2)
-    if (getLevelThreshold(mid) <= tournamentPoints) {
+    if (getLevelThreshold(mid) <= levelXP) {
       lo = mid
     } else {
       hi = mid - 1
@@ -588,6 +594,7 @@ export function useGame() {
       tournamentPoints: 0,
       tournamentCarryOver: 0,
       tournamentGamesPlayed: 0,
+      levelXP: 0,
       gameHistory: [],
       weeklyBonusClaimed: false,
       dailyTasks: generateDailyTasks(),
@@ -638,6 +645,7 @@ export function useGame() {
     let tournamentPoints = saved.tournamentPoints || 0
     let tournamentCarryOver = saved.tournamentCarryOver || 0
     let tournamentGamesPlayed = saved.tournamentGamesPlayed || 0
+    let levelXP = saved.levelXP || 0
     let weeklyBonusClaimed = saved.weeklyBonusClaimed || false
     // Simple weekly reset: check if last tournament week is different from current week
     if (saved.tournamentWeek) {
@@ -649,6 +657,7 @@ export function useGame() {
         tournamentPoints = 0
         tournamentCarryOver = 0
         tournamentGamesPlayed = 0
+        // levelXP is NOT reset on weekly reset - it carries over permanently
         weeklyBonusClaimed = false // Reset weekly bonus each week
       }
     }
@@ -681,13 +690,14 @@ export function useGame() {
       notifications: saved.notifications || [],
       playerName: saved.playerName || 'Player',
       playerAvatar: saved.playerAvatar || '😎',
-      playerLevel: calculateLevel(tournamentPoints),
+      playerLevel: calculateLevel(levelXP),
       totalBattlesPlayed: saved.totalBattlesPlayed || 0,
       totalBattlesWon: saved.totalBattlesWon || 0,
       tournamentJoined,
       tournamentPoints,
       tournamentCarryOver,
       tournamentGamesPlayed,
+      levelXP,
       gameHistory: saved.gameHistory || [],
       weeklyBonusClaimed,
       // Regenerate daily tasks if it's a new day or tasks are empty/stale
@@ -742,13 +752,14 @@ export function useGame() {
       tournamentPoints: state.tournamentPoints,
       tournamentCarryOver: state.tournamentCarryOver,
       tournamentGamesPlayed: state.tournamentGamesPlayed,
+      levelXP: state.levelXP,
       tournamentWeek: currentWeek,
       gameHistory: state.gameHistory.slice(0, 30),
       weeklyBonusClaimed: state.weeklyBonusClaimed,
       dailyTasks: state.dailyTasks,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks])
 
   // Clear flash
   useEffect(() => {
@@ -963,7 +974,7 @@ export function useGame() {
         comboMultiplier: comboMultiplier,
         gamePoints: newGamePoints,
         coinGameWon,
-        playerLevel: calculateLevel(prev.tournamentPoints),
+        playerLevel: calculateLevel(prev.levelXP),
         totalBattlesPlayed,
         totalBattlesWon,
       }
@@ -1186,19 +1197,26 @@ export function useGame() {
   }, [])
 
   // Calculate and add tournament points after a game
+  // NEW: 20 score = 1 point (was 10 score = 1 point)
+  // 50% of points go to levelXP, 50% to tournamentPoints
   const calculateTournamentPoints = useCallback((finalScore: number) => {
     setState(prev => {
       if (prev.gameMode !== 'tournament') return prev
       const total = finalScore + prev.tournamentCarryOver
-      const newPoints = Math.floor(total / 10)
-      const newCarryOver = total % 10
-      const newTournamentPoints = prev.tournamentPoints + newPoints
+      const newPoints = Math.floor(total / 20) // Changed: was /10, now /20
+      const newCarryOver = total % 20
+      // Split: 50% to level XP, 50% to tournament leaderboard
+      const levelXPAdd = Math.floor(newPoints / 2)      // 50% → level
+      const tournamentPointsAdd = newPoints - levelXPAdd  // remaining 50% → leaderboard
+      const newTournamentPoints = prev.tournamentPoints + tournamentPointsAdd
+      const newLevelXP = prev.levelXP + levelXPAdd
       return {
         ...prev,
         tournamentPoints: newTournamentPoints,
         tournamentCarryOver: newCarryOver,
         tournamentGamesPlayed: prev.tournamentGamesPlayed + 1,
-        playerLevel: calculateLevel(newTournamentPoints),
+        levelXP: newLevelXP,
+        playerLevel: calculateLevel(newLevelXP),
       }
     })
   }, [])
@@ -1233,11 +1251,15 @@ export function useGame() {
         let tournamentPoints = prev.tournamentPoints
         let tournamentCarryOver = prev.tournamentCarryOver
         let tournamentGamesPlayed = prev.tournamentGamesPlayed
+        let levelXP = prev.levelXP
         if (prev.gameMode === 'tournament') {
           const total = prev.score + prev.tournamentCarryOver
-          const newPts = Math.floor(total / 10)
-          tournamentCarryOver = total % 10
-          tournamentPoints += newPts
+          const newPts = Math.floor(total / 20) // Changed: was /10, now /20
+          tournamentCarryOver = total % 20
+          const levelXPAdd = Math.floor(newPts / 2)
+          const tournamentPointsAdd = newPts - levelXPAdd
+          tournamentPoints += tournamentPointsAdd
+          levelXP += levelXPAdd
           tournamentGamesPlayed++
         }
 
@@ -1254,7 +1276,8 @@ export function useGame() {
           tournamentPoints,
           tournamentCarryOver,
           tournamentGamesPlayed,
-          playerLevel: calculateLevel(tournamentPoints),
+          levelXP,
+          playerLevel: calculateLevel(levelXP),
         }
       }
       return { ...prev, battleTimer: newTimer }
@@ -1583,6 +1606,7 @@ export function useGame() {
       tournamentPoints: 0,
       tournamentCarryOver: 0,
       tournamentGamesPlayed: 0,
+      levelXP: 0,
       gameHistory: [],
       weeklyBonusClaimed: false,
       dailyTasks: generateDailyTasks(),

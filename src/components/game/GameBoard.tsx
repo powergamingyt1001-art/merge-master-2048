@@ -251,7 +251,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     if (isTournament) {
       calculateTournamentPoints(score)
       if (botBattleResult === 'win') {
-        addNotification('Tournament Win!', `+${Math.floor(score / 10)} points! Score: ${score}`, 'reward', '🏆')
+        addNotification('Tournament Win!', `+${Math.floor(score / 20)} points! Score: ${score}`, 'reward', '🏆')
       } else {
         addNotification('Tournament Game Over', `Score: ${score} - Keep playing!`, 'battle', '⚔️')
       }
@@ -719,8 +719,8 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
               {isTournament && (
                 <div className="mb-3 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
                   <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.6)' }}>Tournament Points</p>
-                  <p className="text-lg font-extrabold" style={{ color: '#00E676' }}>+{Math.floor((score + tournamentCarryOver) / 10)} pts</p>
-                  <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Total: {tournamentPoints + Math.floor((score + tournamentCarryOver) / 10)} pts</p>
+                  <p className="text-lg font-extrabold" style={{ color: '#00E676' }}>+{Math.floor((score + tournamentCarryOver) / 20)} pts</p>
+                  <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Total: {tournamentPoints + Math.floor((score + tournamentCarryOver) / 20)} pts</p>
                 </div>
               )}
               <div className="flex gap-3">
