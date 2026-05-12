@@ -6,7 +6,6 @@ import { syncPlayerToFirebase, processReferral, processCommissionForReferrer, ge
 export type Direction = 'up' | 'down' | 'left' | 'right'
 export type PowerUp = 'hammer' | 'magnet' | 'blast'
 export type GameMode = 'classic' | 'bot' | 'coins' | 'tournament'
-export type AbilityType = 'multiply5' | 'multiply2_5' | 'timeExtend'
 
 export interface Tile {
   id: number
@@ -61,13 +60,6 @@ export interface DailyTask {
   claimed: boolean
 }
 
-export interface CouponCode {
-  code: string
-  reward: string
-  expiresAt: number
-  claimed: boolean
-}
-
 export interface GameState {
   tiles: Tile[]
   score: number
@@ -103,8 +95,6 @@ export interface GameState {
   battleTimeLimit: number
   // Timer paused (when lives=0 in battle mode, waiting for ad)
   timerPaused: boolean
-  // Timer paused by visibility (tab switch)
-  timerPausedByVisibility: boolean
   // Countdown before game starts (3-2-1)
   countdownActive: boolean
   countdownSecondsLeft: number
@@ -145,26 +135,12 @@ export interface GameState {
   tournamentCarryOver: number
   tournamentGamesPlayed: number
   levelXP: number // 50% of tournament points go here for level calculation
-  // Score-to-points conversion: 50 score = 1.5 points, carry-over for precision
-  scorePoints: number // accumulated tournament points not yet converted to XP
-  scorePointsCarryOver: number // fractional points carry-over
   // Game history
   gameHistory: GameHistoryEntry[]
   // Weekly bonus
   weeklyBonusClaimed: boolean
   // Daily tasks
   dailyTasks: DailyTask[]
-  // Ability system
-  multiply5Count: number
-  multiply2_5Count: number
-  timeExtendCount: number
-  activeAbility: AbilityType | null
-  abilityTimer: number // seconds remaining for active ability
-  // Level completion rewards
-  pendingLevelUpCoins: number // coins to add when level increases
-  // Coupon code system
-  couponCodes: CouponCode[]
-  lastCouponRefresh: number
 }
 
 const BOT_NAMES = [
@@ -349,7 +325,7 @@ function generateBotOpponent(): BotOpponent {
 
 // Generate fair bot score at game end - 50/50 win chance
 // Score is based on player's ACTUAL score, not best score
-// Ties go to the player (>= comparison) to balance the 50/50
+// This ensures truly fair gameplay where both have equal chances
 function generateFairBotScore(playerScore: number): number {
   const base = Math.max(playerScore, 100)
   // ±30% variance around player's score for close, exciting games
@@ -358,53 +334,21 @@ function generateFairBotScore(playerScore: number): number {
 }
 
 // ============================================================
-// LEVEL SYSTEM - 200 Levels, based on LEVEL XP
-// Level XP comes from score conversion:
-//   50 score = 1.5 tournament points
-//   3 tournament points = 1 XP
-//   So effectively: 100 score → 3 points → 1 XP
-// 50% of points → levelXP (permanent, never resets)
-// 50% of points → tournamentPoints (for weekly leaderboard)
+// LEVEL SYSTEM - 1000 Levels, based on LEVEL XP
+// Level XP = 50% of tournament points (permanent, never resets)
+// Tournament points: 20 score = 1 point (was 10 score = 1 point)
+// 50% of tournament points → levelXP (for level upgrade)
+// 50% of tournament points → tournamentPoints (for weekly leaderboard)
 // levelXP never resets on weekly tournament reset
+// Slow progression - levels require meaningful tournament effort
+// Level 1 = 0 xp, Level 2 = 10 xp, Level 3 = 25 xp
+// Level 5 = 80 xp, Level 10 = 200 xp, Level 20 = 600 xp
+// Level 50 = 5,000 xp, Level 100 = 25,000 xp
+// Level 200 = 150,000 xp, Level 500 = 2,000,000 xp
+// Level 1000 = 50,000,000 xp
 // ============================================================
 
-export const MAX_LEVEL = 200
-
-// Exact XP lookup table for levels 1-100
-const LEVEL_XP_TABLE: Record<number, number> = {
-  1: 0, 2: 10, 3: 50, 4: 75, 5: 90,
-  6: 100, 7: 120, 8: 140, 9: 160, 10: 200,
-  11: 230, 12: 260, 13: 290, 14: 320, 15: 350,
-  16: 380, 17: 410, 18: 440, 19: 470, 20: 500,
-  21: 550, 22: 600, 23: 650, 24: 700, 25: 750,
-  26: 800, 27: 850, 28: 900, 29: 950, 30: 1000,
-  31: 1100, 32: 1200, 33: 1300, 34: 1400, 35: 1500,
-  36: 1600, 37: 1700, 38: 1800, 39: 1900, 40: 2000,
-  41: 2150, 42: 2300, 43: 2450, 44: 2600, 45: 2750,
-  46: 2900, 47: 3050, 48: 3200, 49: 3350, 50: 3500,
-  51: 3700, 52: 3900, 53: 4100, 54: 4300, 55: 4500,
-  56: 4700, 57: 4900, 58: 5100, 59: 5300, 60: 5500,
-  61: 5800, 62: 6100, 63: 6400, 64: 6700, 65: 7000,
-  66: 7300, 67: 7600, 68: 7900, 69: 8200, 70: 8500,
-  71: 8900, 72: 9300, 73: 9700, 74: 10100, 75: 10500,
-  76: 10900, 77: 11300, 78: 11700, 79: 12100, 80: 12500,
-  81: 13000, 82: 13500, 83: 14000, 84: 14500, 85: 15000,
-  86: 15500, 87: 16000, 88: 16500, 89: 17000, 90: 17500,
-  91: 18100, 92: 18700, 93: 19300, 94: 19900, 95: 20500,
-  96: 21100, 97: 21700, 98: 22300, 99: 23000, 100: 25000,
-}
-
-// Compute the XP threshold for a given level (1-200)
-// Levels 1-100: exact lookup table
-// Levels 101-200: threshold = 25000 + (n-100) * 2500 + (n-100)^2 * 50
-export function getLevelThreshold(level: number): number {
-  if (level <= 1) return 0
-  if (level <= 100) return LEVEL_XP_TABLE[level] ?? 0
-  if (level > MAX_LEVEL) level = MAX_LEVEL
-  // Formula for levels 101-200
-  const n = level - 100
-  return 25000 + n * 2500 + n * n * 50
-}
+export const MAX_LEVEL = 1000
 
 // Original titles/icons/colors for levels 1-50 (backward compatible)
 const ORIGINAL_TITLES = [
@@ -473,7 +417,28 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${f(0)}${f(8)}${f(4)}`
 }
 
-// Generate title for a given level (1-200)
+// Compute the point threshold for a given level (1-1000)
+// Uses piecewise power-law interpolation between checkpoints:
+// L1=0, L2=10, L3=25, L5=80, L10=200, L20=600,
+// L50=5000, L100=25000, L200=150000, L500=2000000, L1000=50000000
+export function getLevelThreshold(level: number): number {
+  if (level <= 1) return 0
+  const l = level - 1 // l goes from 1 to 999
+
+  // Piecewise segments with continuous boundaries (slow tournament-point progression)
+  if (l <= 1) return 10                                                               // L1→L2: 10 pts
+  if (l <= 2) return Math.floor(10 + 15 * ((l - 1) / 1))                             // L2→L3: 10→25
+  if (l <= 4) return Math.floor(25 + 55 * Math.pow((l - 2) / 2, 1.5))                // L3→L5: 25→80
+  if (l <= 9) return Math.floor(80 + 120 * Math.pow((l - 4) / 5, 1.8))               // L5→L10: 80→200
+  if (l <= 19) return Math.floor(200 + 400 * Math.pow((l - 9) / 10, 1.9))            // L10→L20: 200→600
+  if (l <= 49) return Math.floor(600 + 4400 * Math.pow((l - 19) / 30, 2.0))          // L20→L50: 600→5000
+  if (l <= 99) return Math.floor(5000 + 20000 * Math.pow((l - 49) / 50, 2.2))        // L50→L100: 5000→25000
+  if (l <= 199) return Math.floor(25000 + 125000 * Math.pow((l - 99) / 100, 2.5))    // L100→L200: 25000→150000
+  if (l <= 499) return Math.floor(150000 + 1850000 * Math.pow((l - 199) / 300, 2.8)) // L200→L500: 150000→2000000
+  return Math.floor(2000000 + 48000000 * Math.pow((l - 499) / 500, 3.0))             // L500→L1000: 2000000→50000000
+}
+
+// Generate title for a given level (1-1000)
 export function getLevelTitle(level: number): string {
   const clampedLevel = Math.min(Math.max(level, 1), MAX_LEVEL)
   if (clampedLevel <= 50) return ORIGINAL_TITLES[clampedLevel - 1]
@@ -487,13 +452,31 @@ export function getLevelTitle(level: number): string {
   }
 
   // Levels 101-200: Elemental + Title (10×10=100 combos)
-  const prefixes = ['Fire', 'Ice', 'Storm', 'Shadow', 'Light', 'Thunder', 'Frost', 'Void', 'Arcane', 'Sacred']
-  const suffixes = ['Lord', 'Sage', 'Master', 'King', 'Oracle', 'Archon', 'Titan', 'Deity', 'Phoenix', 'Dragon']
-  const idx = clampedLevel - 101
-  return `${prefixes[Math.floor(idx / 10) % prefixes.length]} ${suffixes[idx % suffixes.length]}`
+  if (clampedLevel <= 200) {
+    const prefixes = ['Fire', 'Ice', 'Storm', 'Shadow', 'Light', 'Thunder', 'Frost', 'Void', 'Arcane', 'Sacred']
+    const suffixes = ['Lord', 'Sage', 'Master', 'King', 'Oracle', 'Archon', 'Titan', 'Deity', 'Phoenix', 'Dragon']
+    const idx = clampedLevel - 101
+    return `${prefixes[Math.floor(idx / 10) % prefixes.length]} ${suffixes[idx % suffixes.length]}`
+  }
+
+  // Levels 201-500: Cosmic prefix + Roman numeral tier (15×20=300 combos)
+  if (clampedLevel <= 500) {
+    const prefixes = ['Nebula', 'Stellar', 'Astral', 'Solar', 'Lunar', 'Comet', 'Nova', 'Quasar', 'Pulsar', 'Cosmos', 'Galactic', 'Orbital', 'Zenith', 'Eclipse', 'Aurora']
+    const idx = clampedLevel - 201
+    const prefixIdx = Math.floor(idx / 20) % prefixes.length
+    const tierNum = (idx % 20) + 1
+    return `${prefixes[prefixIdx]} ${toRoman(tierNum)}`
+  }
+
+  // Levels 501-1000: Mythic prefix + Roman numeral tier (20×25=500 combos)
+  const prefixes = ['Omega', 'Alpha', 'Ultra', 'Mega', 'Prime', 'Exalted', 'Sovereign', 'Transcendent', 'Eternal', 'Primordial', 'Celestial', 'Immortal', 'Divine', 'Infinite', 'Absolute', 'Cosmic', 'Apotheosis', 'Paradigm', 'Apex', 'Supreme']
+  const idx = clampedLevel - 501
+  const prefixIdx = Math.floor(idx / 25) % prefixes.length
+  const tierNum = (idx % 25) + 1
+  return `${prefixes[prefixIdx]} ${toRoman(tierNum)}`
 }
 
-// Generate icon for a given level (1-200)
+// Generate icon for a given level (1-1000)
 export function getLevelIcon(level: number): string {
   const clampedLevel = Math.min(Math.max(level, 1), MAX_LEVEL)
   if (clampedLevel <= 50) return ORIGINAL_ICONS[clampedLevel - 1]
@@ -503,12 +486,20 @@ export function getLevelIcon(level: number): string {
     const pool = ['⚔️', '🛡️', '🏹', '🗡️', '🏇', '🏰', '💎', '🎺', '📯', '⚔️']
     return pool[(clampedLevel - 51) % pool.length]
   }
-  // 101-200
-  const pool = ['🔥', '❄️', '⚡', '🌑', '✨', '🌩️', '🏔️', '🌀', '🔮', '☀️']
-  return pool[(clampedLevel - 101) % pool.length]
+  if (clampedLevel <= 200) {
+    const pool = ['🔥', '❄️', '⚡', '🌑', '✨', '🌩️', '🏔️', '🌀', '🔮', '☀️']
+    return pool[(clampedLevel - 101) % pool.length]
+  }
+  if (clampedLevel <= 500) {
+    const pool = ['🌟', '💫', '⭐', '🌠', '🌙', '☄️', '💥', '🌌', '🪐', '🌍', '🔮', '✨', '🌈', '🌑', '🌅']
+    return pool[(clampedLevel - 201) % pool.length]
+  }
+  // 501-1000
+  const pool = ['👑', '🔱', '⚜️', '🐉', '🦅', '💎', '🏆', '🎯', '🌟', '💫', '⭐', '🌠', '🌙', '☄️', '💥', '🌌', '🪐', '🌍', '🔮', '✨']
+  return pool[(clampedLevel - 501) % pool.length]
 }
 
-// Generate color for a given level (1-200)
+// Generate color for a given level (1-1000)
 export function getLevelColor(level: number): string {
   const clampedLevel = Math.min(Math.max(level, 1), MAX_LEVEL)
   if (clampedLevel <= 50) return ORIGINAL_COLORS[clampedLevel - 1]
@@ -520,7 +511,7 @@ export function getLevelColor(level: number): string {
   return hslToHex(hue, saturation, lightness)
 }
 
-// Calculate player level from level XP using binary search
+// Calculate player level from level XP (50% of tournament points) using binary search
 function calculateLevel(levelXP: number): number {
   if (levelXP <= 0) return 1
   let lo = 1, hi = MAX_LEVEL
@@ -533,19 +524,6 @@ function calculateLevel(levelXP: number): number {
     }
   }
   return lo
-}
-
-// Calculate level-up coin rewards
-// 100 coins per level, every 5 levels: bonus 200 + 100 extra (total 400)
-function calculateLevelUpCoins(oldLevel: number, newLevel: number): number {
-  let totalCoins = 0
-  for (let lvl = oldLevel + 1; lvl <= newLevel; lvl++) {
-    totalCoins += 100 // Base 100 coins per level
-    if (lvl % 5 === 0) {
-      totalCoins += 300 // Bonus: 200 + 100 extra on every 5th level
-    }
-  }
-  return totalCoins
 }
 
 // Get level info helper (same return shape as before)
@@ -580,87 +558,6 @@ function generateDailyTasks(): DailyTask[] {
     { id: `score500-${today}`, description: 'Score 500+ in a game', emoji: '🏆', target: 1, progress: 0, reward: 40, claimed: false },
     { id: `spin-${today}`, description: 'Spin the Wheel', emoji: '🎰', target: 1, progress: 0, reward: 20, claimed: false },
   ]
-}
-
-// ============================================================
-// COUPON CODE SYSTEM
-// ============================================================
-
-// Get current IST hour to determine which coupon is active
-function getISTHour(): number {
-  const now = new Date()
-  // IST = UTC + 5:30
-  const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000))
-  return istTime.getUTCHours()
-}
-
-// Generate daily coupon codes based on current IST time
-function generateDailyCoupons(existingCodes: CouponCode[], lastRefresh: number): CouponCode[] {
-  const now = Date.now()
-  const istHour = getISTHour()
-
-  // Check if we need to regenerate (every 12 hours based on IST)
-  // Day coupon: 12:00 PM to 11:59 PM IST (hours 12-23)
-  // Night coupon: 12:00 AM to 11:59 AM IST (hours 0-11)
-  const currentPeriod = istHour >= 12 ? 'day' : 'night'
-
-  // Check if existing codes are still valid
-  const validCodes = existingCodes.filter(c => c.expiresAt > now && !c.claimed)
-  if (validCodes.length >= 2) return validCodes
-
-  // Calculate expiry: end of current IST period
-  const istNow = new Date(now + (5.5 * 60 * 60 * 1000))
-  let expiryDate: Date
-  if (currentPeriod === 'day') {
-    // Expires at midnight IST (start of next day)
-    expiryDate = new Date(istNow)
-    expiryDate.setUTCHours(0, 0, 0, 0)
-    expiryDate = new Date(expiryDate.getTime() + 24 * 60 * 60 * 1000) // Next day midnight
-  } else {
-    // Expires at noon IST
-    expiryDate = new Date(istNow)
-    expiryDate.setUTCHours(12, 0, 0, 0)
-    if (expiryDate.getTime() <= now) {
-      expiryDate = new Date(expiryDate.getTime() + 24 * 60 * 60 * 1000)
-    }
-  }
-  const expiresAt = expiryDate.getTime() - (5.5 * 60 * 60 * 1000) // Convert back to UTC ms
-
-  // Keep unclaimed codes from same period
-  const keptCodes = existingCodes.filter(c => c.expiresAt > now && !c.claimed)
-
-  // Generate new codes if needed
-  const newCodes: CouponCode[] = [...keptCodes]
-
-  // Special codes
-  const specialCodes = [
-    { code: '100Boom', reward: '100 blast' },
-    { code: '10kCoin', reward: '10000 coins' },
-  ]
-
-  // Regular rewards
-  const regularRewards = [
-    () => `${50 + Math.floor(Math.random() * 150)} coins`,
-    () => `${1 + Math.floor(Math.random() * 3)} power-ups`,
-  ]
-
-  // Add special codes periodically (one per day period)
-  if (currentPeriod === 'day' && !newCodes.some(c => c.code === '100Boom')) {
-    newCodes.push({ code: '100Boom', reward: '100 blast', expiresAt, claimed: false })
-  } else if (currentPeriod === 'night' && !newCodes.some(c => c.code === '10kCoin')) {
-    newCodes.push({ code: '10kCoin', reward: '10000 coins', expiresAt, claimed: false })
-  }
-
-  // Add a regular coupon code
-  const regularCodeChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let regularCode = ''
-  for (let i = 0; i < 8; i++) {
-    regularCode += regularCodeChars[Math.floor(Math.random() * regularCodeChars.length)]
-  }
-  const rewardFn = regularRewards[Math.floor(Math.random() * regularRewards.length)]
-  newCodes.push({ code: regularCode, reward: rewardFn(), expiresAt, claimed: false })
-
-  return newCodes
 }
 
 export function useGame() {
@@ -700,7 +597,6 @@ export function useGame() {
       battleTimer: 0,
       battleTimeLimit: 60,
       timerPaused: false,
-      timerPausedByVisibility: false,
       countdownActive: false,
       countdownSecondsLeft: 0,
       consecutiveMerges: 0,
@@ -731,19 +627,9 @@ export function useGame() {
       tournamentCarryOver: 0,
       tournamentGamesPlayed: 0,
       levelXP: 0,
-      scorePoints: 0,
-      scorePointsCarryOver: 0,
       gameHistory: [],
       weeklyBonusClaimed: false,
       dailyTasks: generateDailyTasks(),
-      multiply5Count: 0,
-      multiply2_5Count: 0,
-      timeExtendCount: 0,
-      activeAbility: null,
-      abilityTimer: 0,
-      pendingLevelUpCoins: 0,
-      couponCodes: [],
-      lastCouponRefresh: 0,
     }
 
     if (!saved) {
@@ -847,8 +733,6 @@ export function useGame() {
       tournamentCarryOver,
       tournamentGamesPlayed,
       levelXP,
-      scorePoints: saved.scorePoints || 0,
-      scorePointsCarryOver: saved.scorePointsCarryOver || 0,
       gameHistory: saved.gameHistory || [],
       weeklyBonusClaimed,
       // Regenerate daily tasks if it's a new day or tasks are empty/stale
@@ -860,15 +744,6 @@ export function useGame() {
         if (!hasTodayTasks) return generateDailyTasks()
         return savedTasks
       })(),
-      // New fields with fallbacks for backward compatibility
-      multiply5Count: saved.multiply5Count ?? 0,
-      multiply2_5Count: saved.multiply2_5Count ?? 0,
-      timeExtendCount: saved.timeExtendCount ?? 0,
-      activeAbility: saved.activeAbility ?? null,
-      abilityTimer: saved.abilityTimer ?? 0,
-      pendingLevelUpCoins: saved.pendingLevelUpCoins ?? 0,
-      couponCodes: saved.couponCodes ?? [],
-      lastCouponRefresh: saved.lastCouponRefresh ?? 0,
     }
   })
 
@@ -914,55 +789,13 @@ export function useGame() {
       tournamentCarryOver: state.tournamentCarryOver,
       tournamentGamesPlayed: state.tournamentGamesPlayed,
       levelXP: state.levelXP,
-      scorePoints: state.scorePoints,
-      scorePointsCarryOver: state.scorePointsCarryOver,
       tournamentWeek: currentWeek,
       gameHistory: state.gameHistory.slice(0, 30),
       weeklyBonusClaimed: state.weeklyBonusClaimed,
       dailyTasks: state.dailyTasks,
-      multiply5Count: state.multiply5Count,
-      multiply2_5Count: state.multiply2_5Count,
-      timeExtendCount: state.timeExtendCount,
-      activeAbility: state.activeAbility,
-      abilityTimer: state.abilityTimer,
-      pendingLevelUpCoins: state.pendingLevelUpCoins,
-      couponCodes: state.couponCodes,
-      lastCouponRefresh: state.lastCouponRefresh,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.scorePoints, state.scorePointsCarryOver, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiply5Count, state.multiply2_5Count, state.timeExtendCount, state.activeAbility, state.abilityTimer, state.pendingLevelUpCoins, state.couponCodes, state.lastCouponRefresh])
-
-  // ============================================================
-  // VISIBILITY CHANGE - Pause timer when tab is hidden
-  // ============================================================
-  useEffect(() => {
-    if (typeof document === 'undefined') return
-
-    const handleVisibilityChange = () => {
-      setState(prev => {
-        const isBattleMode = prev.gameMode === 'bot' || prev.gameMode === 'coins' || prev.gameMode === 'tournament'
-        if (!isBattleMode) return prev
-
-        if (document.hidden) {
-          // Tab became hidden - pause timer
-          return { ...prev, timerPausedByVisibility: true, timerPaused: true }
-        } else {
-          // Tab became visible - resume timer only if it was paused by visibility (not by lives=0)
-          if (prev.timerPausedByVisibility && prev.lives > 0) {
-            return { ...prev, timerPausedByVisibility: false, timerPaused: false }
-          }
-          // If paused by lives=0, don't auto-resume
-          if (prev.timerPausedByVisibility) {
-            return { ...prev, timerPausedByVisibility: false }
-          }
-          return prev
-        }
-      })
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks])
 
   // ============================================================
   // FIREBASE SYNC - Sync player data to Firebase RTDB
@@ -1106,54 +939,6 @@ export function useGame() {
     })
   }, [])
 
-  // ============================================================
-  // Score-to-Points-to-XP conversion helper
-  // 50 score = 1.5 tournament points
-  // 3 tournament points = 1 XP
-  // 50% of points → levelXP, 50% → tournamentPoints
-  // ============================================================
-  function convertScoreToXPAndTournamentPoints(
-    score: number,
-    currentScorePoints: number,
-    currentScorePointsCarryOver: number,
-    currentLevelXP: number,
-    currentTournamentPoints: number
-  ): { newScorePoints: number; newScorePointsCarryOver: number; newLevelXP: number; newTournamentPoints: number; newPlayerLevel: number; levelUpCoins: number } {
-    // Step 1: Convert score to tournament points
-    // 50 score = 1.5 points → points = (score + carryOver) * 1.5 / 50
-    const totalScoreInput = score + currentScorePointsCarryOver
-    const rawPoints = totalScoreInput * 1.5 / 50
-    const newPoints = Math.floor(rawPoints)
-    const newCarryOver = (totalScoreInput * 1.5) % 50 // Keep fractional part
-
-    // Step 2: Convert tournament points to XP
-    // 3 points = 1 XP
-    const totalPoints = currentScorePoints + newPoints
-    const xpFromPoints = Math.floor(totalPoints / 3)
-    const remainingPoints = totalPoints % 3
-
-    // Step 3: Split XP into levelXP (50%) and tournamentPoints (50%)
-    const levelXPAdd = Math.floor(xpFromPoints / 2)
-    const tournamentPointsAdd = xpFromPoints - levelXPAdd
-
-    const newLevelXP = currentLevelXP + levelXPAdd
-    const newTournamentPoints = currentTournamentPoints + tournamentPointsAdd
-
-    // Calculate new level and level-up coins
-    const oldLevel = calculateLevel(currentLevelXP)
-    const newPlayerLevel = calculateLevel(newLevelXP)
-    const levelUpCoins = calculateLevelUpCoins(oldLevel, newPlayerLevel)
-
-    return {
-      newScorePoints: remainingPoints,
-      newScorePointsCarryOver: newCarryOver,
-      newLevelXP,
-      newTournamentPoints,
-      newPlayerLevel,
-      levelUpCoins,
-    }
-  }
-
   const handleMove = useCallback((direction: Direction) => {
     setState(prev => {
       if (prev.gameOver || (prev.won && !prev.keepPlaying) || prev.activePowerUp || prev.timerPaused) return prev
@@ -1169,7 +954,7 @@ export function useGame() {
 
       // Combo system: Works in Battle, Coins, AND Tournament modes (NOT classic)
       // Progressive combo: consecutive moves with merges build multiplier
-      // 1st merge move = 1x (base), 2nd consecutive = 2x, 3rd = 3x, 4th = 4th, 5+ = 5x
+      // 1st merge move = 1x (base), 2nd consecutive = 2x, 3rd = 3x, 4th = 4x, 5+ = 5x
       // Combo resets when a move produces NO merge
       let newConsecutiveMerges = prev.consecutiveMerges
       let newComboBonus = prev.comboBonus
@@ -1199,15 +984,7 @@ export function useGame() {
         comboMultiplier = 1
       }
 
-      // Apply ability multipliers to score gain
-      let abilityExtra = 0
-      if (prev.activeAbility === 'multiply5' && prev.abilityTimer > 0) {
-        abilityExtra = (scoreGain + comboExtra) * 4 // 5x total = base + 4x extra
-      } else if (prev.activeAbility === 'multiply2_5' && prev.abilityTimer > 0) {
-        abilityExtra = Math.floor((scoreGain + comboExtra) * 1.5) // 2.5x total = base + 1.5x extra
-      }
-
-      const newScore = prev.score + scoreGain + comboExtra + abilityExtra
+      const newScore = prev.score + scoreGain + comboExtra
       const newBestScore = Math.max(newScore, prev.bestScore)
       const isStuck = !canMove(tilesWithNew)
       const won = !prev.won && hasWon(tilesWithNew)
@@ -1244,7 +1021,7 @@ export function useGame() {
       if (prev.gameMode === 'bot' && prev.botOpponent && !botBattleResult) {
         if (isGameOver) {
           const botFinalScore = generateFairBotScore(newScore)
-          botBattleResult = newScore >= botFinalScore ? 'win' : 'lose' // Ties = win for player
+          botBattleResult = newScore > botFinalScore ? 'win' : 'lose'
           botOpponent = { ...prev.botOpponent, finalScore: botFinalScore }
           totalBattlesPlayed++
           if (botBattleResult === 'win') {
@@ -1257,7 +1034,7 @@ export function useGame() {
       // Coin game mode check - generate fair bot score at game end
       if (prev.gameMode === 'coins' && isGameOver) {
         const botFinalScore = generateFairBotScore(newScore)
-        coinGameWon = newScore >= botFinalScore ? true : false // Ties = win for player
+        coinGameWon = newScore > botFinalScore ? true : false
         botBattleResult = coinGameWon ? 'win' : 'lose'
         botOpponent = prev.botOpponent ? { ...prev.botOpponent, finalScore: botFinalScore } : null
         totalBattlesPlayed++
@@ -1269,10 +1046,8 @@ export function useGame() {
 
       // Tournament mode check - generate fair bot score at game end
       if (prev.gameMode === 'tournament' && isGameOver) {
-        botBattleResult = newScore >= generateFairBotScore(newScore) ? 'win' : 'lose' // Ties = win for player
-        // Re-generate for the opponent score display
         const botFinalScore = generateFairBotScore(newScore)
-        botBattleResult = newScore >= botFinalScore ? 'win' : 'lose'
+        botBattleResult = newScore > botFinalScore ? 'win' : 'lose'
         botOpponent = prev.botOpponent ? { ...prev.botOpponent, finalScore: botFinalScore } : null
         totalBattlesPlayed++
         if (botBattleResult === 'win') {
@@ -1282,7 +1057,7 @@ export function useGame() {
       }
 
       // Game points only from actual gameplay (combo only counts in mods mode)
-      const newGamePoints = prev.gamePoints + scoreGain + comboExtra + abilityExtra
+      const newGamePoints = prev.gamePoints + scoreGain + comboExtra
 
       // comboMultiplier is used for display (2x/3x combo label)
       // It's derived from consecutiveMerges in the UI
@@ -1399,7 +1174,6 @@ export function useGame() {
       gameMode: 'classic',
       battleTimer: 0,
       timerPaused: false,
-      timerPausedByVisibility: false,
       countdownActive: false,
       countdownSecondsLeft: 0,
       consecutiveMerges: 0,
@@ -1407,8 +1181,6 @@ export function useGame() {
       comboMultiplier: 1,
       coinEntryFee: 0,
       coinGameWon: null,
-      activeAbility: null,
-      abilityTimer: 0,
     }))
   }, [])
 
@@ -1438,7 +1210,6 @@ export function useGame() {
         battleTimer: timeLimit,
         battleTimeLimit: timeLimit,
         timerPaused: false,
-        timerPausedByVisibility: false,
         countdownActive: true,
         countdownSecondsLeft: 3,
         consecutiveMerges: 0,
@@ -1447,8 +1218,6 @@ export function useGame() {
         lastPlayDate: today,
         coinEntryFee: 0,
         coinGameWon: null,
-        activeAbility: null,
-        abilityTimer: 0,
       }
     })
   }, [])
@@ -1480,7 +1249,6 @@ export function useGame() {
         battleTimer: 120, // 2 minutes for coins game
         battleTimeLimit: 120,
         timerPaused: false,
-        timerPausedByVisibility: false,
         countdownActive: true,
         countdownSecondsLeft: 3,
         consecutiveMerges: 0,
@@ -1490,8 +1258,6 @@ export function useGame() {
         coinGameWon: null,
         gamesPlayedToday: gamesToday + 1,
         lastPlayDate: today,
-        activeAbility: null,
-        abilityTimer: 0,
       }
     })
   }, [])
@@ -1525,7 +1291,6 @@ export function useGame() {
         battleTimer: 90,
         battleTimeLimit: 90,
         timerPaused: false,
-        timerPausedByVisibility: false,
         countdownActive: true,
         countdownSecondsLeft: 3,
         consecutiveMerges: 0,
@@ -1534,38 +1299,31 @@ export function useGame() {
         coinGameWon: null,
         gamesPlayedToday: gamesToday + 1,
         lastPlayDate: today,
-        activeAbility: null,
-        abilityTimer: 0,
       }
     })
   }, [])
 
   // Calculate and add tournament points after a game
-  // NEW: 50 score = 1.5 tournament points, 3 tournament points = 1 XP
-  // 50% of XP → levelXP, 50% → tournamentPoints
+  // NEW: 20 score = 1 point (was 10 score = 1 point)
+  // 50% of points go to levelXP, 50% to tournamentPoints
   const calculateTournamentPoints = useCallback((finalScore: number) => {
     setState(prev => {
       if (prev.gameMode !== 'tournament') return prev
-
-      const result = convertScoreToXPAndTournamentPoints(
-        finalScore,
-        prev.scorePoints,
-        prev.scorePointsCarryOver,
-        prev.levelXP,
-        prev.tournamentPoints
-      )
-
+      const total = finalScore + prev.tournamentCarryOver
+      const newPoints = Math.floor(total / 20) // Changed: was /10, now /20
+      const newCarryOver = total % 20
+      // Split: 50% to level XP, 50% to tournament leaderboard
+      const levelXPAdd = Math.floor(newPoints / 2)      // 50% → level
+      const tournamentPointsAdd = newPoints - levelXPAdd  // remaining 50% → leaderboard
+      const newTournamentPoints = prev.tournamentPoints + tournamentPointsAdd
+      const newLevelXP = prev.levelXP + levelXPAdd
       return {
         ...prev,
-        tournamentPoints: result.newTournamentPoints,
-        tournamentCarryOver: 0, // Using new carry-over system
+        tournamentPoints: newTournamentPoints,
+        tournamentCarryOver: newCarryOver,
         tournamentGamesPlayed: prev.tournamentGamesPlayed + 1,
-        levelXP: result.newLevelXP,
-        scorePoints: result.newScorePoints,
-        scorePointsCarryOver: result.newScorePointsCarryOver,
-        playerLevel: result.newPlayerLevel,
-        pendingLevelUpCoins: prev.pendingLevelUpCoins + result.levelUpCoins,
-        coins: prev.coins + result.levelUpCoins, // Add level-up coins silently
+        levelXP: newLevelXP,
+        playerLevel: calculateLevel(newLevelXP),
       }
     })
   }, [])
@@ -1590,9 +1348,9 @@ export function useGame() {
       const newTimer = prev.battleTimer - 1
       if (newTimer <= 0) {
         // Time's up - generate FAIR bot score based on player's actual score
-        // Ties go to player (>=) for balanced 50/50
+        // This ensures 50/50 win chance - both have equal opportunity
         const botFinalScore = generateFairBotScore(prev.score)
-        const result = prev.score >= botFinalScore ? 'win' : 'lose'
+        const result = prev.score > botFinalScore ? 'win' : 'lose'
         const newModBest = result === 'win' ? Math.max(prev.modBestScore, prev.score) : prev.modBestScore
         const coinGameWon = result === 'win' ? true : false
 
@@ -1601,27 +1359,15 @@ export function useGame() {
         let tournamentCarryOver = prev.tournamentCarryOver
         let tournamentGamesPlayed = prev.tournamentGamesPlayed
         let levelXP = prev.levelXP
-        let scorePoints = prev.scorePoints
-        let scorePointsCarryOver = prev.scorePointsCarryOver
-        let pendingLevelUpCoins = prev.pendingLevelUpCoins
-        let coins = prev.coins
-
         if (prev.gameMode === 'tournament') {
-          const convResult = convertScoreToXPAndTournamentPoints(
-            prev.score,
-            prev.scorePoints,
-            prev.scorePointsCarryOver,
-            prev.levelXP,
-            prev.tournamentPoints
-          )
-          tournamentPoints = convResult.newTournamentPoints
-          tournamentCarryOver = 0
+          const total = prev.score + prev.tournamentCarryOver
+          const newPts = Math.floor(total / 20) // Changed: was /10, now /20
+          tournamentCarryOver = total % 20
+          const levelXPAdd = Math.floor(newPts / 2)
+          const tournamentPointsAdd = newPts - levelXPAdd
+          tournamentPoints += tournamentPointsAdd
+          levelXP += levelXPAdd
           tournamentGamesPlayed++
-          levelXP = convResult.newLevelXP
-          scorePoints = convResult.newScorePoints
-          scorePointsCarryOver = convResult.newScorePointsCarryOver
-          pendingLevelUpCoins += convResult.levelUpCoins
-          coins += convResult.levelUpCoins
         }
 
         return {
@@ -1638,11 +1384,7 @@ export function useGame() {
           tournamentCarryOver,
           tournamentGamesPlayed,
           levelXP,
-          scorePoints,
-          scorePointsCarryOver,
           playerLevel: calculateLevel(levelXP),
-          pendingLevelUpCoins,
-          coins,
         }
       }
       return { ...prev, battleTimer: newTimer }
@@ -1657,20 +1399,6 @@ export function useGame() {
         return { ...prev, countdownActive: false, countdownSecondsLeft: 0 }
       }
       return { ...prev, countdownSecondsLeft: newSeconds }
-    })
-  }, [])
-
-  // ============================================================
-  // ABILITY SYSTEM - Tick ability timer each second
-  // ============================================================
-  const tickAbilityTimer = useCallback(() => {
-    setState(prev => {
-      if (!prev.activeAbility || prev.abilityTimer <= 0) return prev
-      const newTimer = prev.abilityTimer - 1
-      if (newTimer <= 0) {
-        return { ...prev, activeAbility: null, abilityTimer: 0 }
-      }
-      return { ...prev, abilityTimer: newTimer }
     })
   }, [])
 
@@ -1723,15 +1451,14 @@ export function useGame() {
       newClaimed[day] = true
 
       let h = 0, m = 0, b = 0, s = 0
-      let addMultiply5 = 0, addMultiply2_5 = 0, addTimeExtend = 0
       switch (day) {
         case 0: m = 2; break
         case 1: s = 2; break
-        case 2: m = 1; b = 1; addMultiply2_5 = 1; break
+        case 2: m = 1; b = 1; break
         case 3: b = 2; break
-        case 4: h = 1; m = 2; addTimeExtend = 1; break
+        case 4: h = 1; m = 2; break
         case 5: m = 3; h = 2; break
-        case 6: s = 5; addMultiply5 = 1; addMultiply2_5 = 1; addTimeExtend = 1; break
+        case 6: s = 5; break
       }
 
       const coinReward = STREAK_COIN_REWARDS[day] || 0
@@ -1744,9 +1471,6 @@ export function useGame() {
         blastCount: prev.blastCount + b,
         spinTickets: prev.spinTickets + s,
         coins: prev.coins + coinReward,
-        multiply5Count: prev.multiply5Count + addMultiply5,
-        multiply2_5Count: prev.multiply2_5Count + addMultiply2_5,
-        timeExtendCount: prev.timeExtendCount + addTimeExtend,
       }
     })
   }, [])
@@ -1791,7 +1515,6 @@ export function useGame() {
         lives: Math.min(prev.lives + 1, prev.maxLives),
         gameOver: false,
         timerPaused: false, // Resume timer after ad revive
-        timerPausedByVisibility: false,
         countdownActive: true,
         countdownSecondsLeft: 1, // 1-second hold before resuming gameplay
         consecutiveMerges: 0,
@@ -1818,7 +1541,6 @@ export function useGame() {
       botBattleResult: null,
       battleTimer: 0,
       timerPaused: false,
-      timerPausedByVisibility: false,
       countdownActive: false,
       countdownSecondsLeft: 0,
       consecutiveMerges: 0,
@@ -1826,8 +1548,6 @@ export function useGame() {
       comboMultiplier: 1,
       coinEntryFee: 0,
       coinGameWon: null,
-      activeAbility: null,
-      abilityTimer: 0,
     }))
   }, [])
 
@@ -1931,121 +1651,6 @@ export function useGame() {
     })
   }, [])
 
-  // ============================================================
-  // ABILITY SYSTEM - Activation functions
-  // ============================================================
-  const activateMultiply5 = useCallback(() => {
-    setState(prev => {
-      if (prev.multiply5Count <= 0 || prev.activeAbility) return prev
-      return {
-        ...prev,
-        multiply5Count: prev.multiply5Count - 1,
-        activeAbility: 'multiply5' as AbilityType,
-        abilityTimer: 10,
-      }
-    })
-  }, [])
-
-  const activateMultiply2_5 = useCallback(() => {
-    setState(prev => {
-      if (prev.multiply2_5Count <= 0 || prev.activeAbility) return prev
-      return {
-        ...prev,
-        multiply2_5Count: prev.multiply2_5Count - 1,
-        activeAbility: 'multiply2_5' as AbilityType,
-        abilityTimer: 10,
-      }
-    })
-  }, [])
-
-  const activateTimeExtend = useCallback(() => {
-    setState(prev => {
-      if (prev.timeExtendCount <= 0) return prev
-      // Only works in battle modes
-      const isBattleMode = prev.gameMode === 'bot' || prev.gameMode === 'coins' || prev.gameMode === 'tournament'
-      if (!isBattleMode) return prev
-      return {
-        ...prev,
-        timeExtendCount: prev.timeExtendCount - 1,
-        battleTimer: prev.battleTimer + 10,
-      }
-    })
-  }, [])
-
-  // Add ability counts (e.g., from spin wheel or purchases)
-  const addAbility = useCallback((ability: AbilityType, count: number) => {
-    setState(prev => {
-      switch (ability) {
-        case 'multiply5': return { ...prev, multiply5Count: prev.multiply5Count + count }
-        case 'multiply2_5': return { ...prev, multiply2_5Count: prev.multiply2_5Count + count }
-        case 'timeExtend': return { ...prev, timeExtendCount: prev.timeExtendCount + count }
-        default: return prev
-      }
-    })
-  }, [])
-
-  // ============================================================
-  // COUPON CODE SYSTEM
-  // ============================================================
-  const validateCouponCode = useCallback((code: string): { valid: boolean; reward?: string; alreadyClaimed?: boolean } => {
-    const coupon = state.couponCodes.find(c => c.code === code)
-    if (!coupon) return { valid: false }
-    if (coupon.claimed) return { valid: false, alreadyClaimed: true }
-    if (coupon.expiresAt < Date.now()) return { valid: false }
-    return { valid: true, reward: coupon.reward }
-  }, [state.couponCodes])
-
-  const claimCouponCode = useCallback((code: string) => {
-    setState(prev => {
-      const coupon = prev.couponCodes.find(c => c.code === code)
-      if (!coupon || coupon.claimed || coupon.expiresAt < Date.now()) return prev
-
-      // Parse and apply reward
-      const reward = coupon.reward.toLowerCase()
-      const updatedCoupons = prev.couponCodes.map(c =>
-        c.code === code ? { ...c, claimed: true } : c
-      )
-
-      let coins = prev.coins
-      let blastCount = prev.blastCount
-      let hammerCount = prev.hammerCount
-      let magnetCount = prev.magnetCount
-
-      if (reward.includes('coin')) {
-        const amount = parseInt(reward) || 0
-        coins += amount
-      } else if (reward.includes('blast')) {
-        const amount = parseInt(reward) || 0
-        blastCount += amount
-      } else if (reward.includes('power-up') || reward.includes('powerup')) {
-        const amount = parseInt(reward) || 1
-        hammerCount += amount
-        magnetCount += amount
-        blastCount += amount
-      }
-
-      return {
-        ...prev,
-        couponCodes: updatedCoupons,
-        coins,
-        blastCount,
-        hammerCount,
-        magnetCount,
-      }
-    })
-  }, [])
-
-  const generateCoupons = useCallback(() => {
-    setState(prev => {
-      const newCoupons = generateDailyCoupons(prev.couponCodes, prev.lastCouponRefresh)
-      return {
-        ...prev,
-        couponCodes: newCoupons,
-        lastCouponRefresh: Date.now(),
-      }
-    })
-  }, [])
-
   // Reset ALL data to 0 - fresh start (keeps welcome bonus available)
   const resetAllData = useCallback(() => {
     localStorage.removeItem('mergeMaster2048')
@@ -2082,7 +1687,6 @@ export function useGame() {
       battleTimer: 0,
       battleTimeLimit: 60,
       timerPaused: false,
-      timerPausedByVisibility: false,
       countdownActive: false,
       countdownSecondsLeft: 0,
       consecutiveMerges: 0,
@@ -2113,19 +1717,9 @@ export function useGame() {
       tournamentCarryOver: 0,
       tournamentGamesPlayed: 0,
       levelXP: 0,
-      scorePoints: 0,
-      scorePointsCarryOver: 0,
       gameHistory: [],
       weeklyBonusClaimed: false,
       dailyTasks: generateDailyTasks(),
-      multiply5Count: 0,
-      multiply2_5Count: 0,
-      timeExtendCount: 0,
-      activeAbility: null,
-      abilityTimer: 0,
-      pendingLevelUpCoins: 0,
-      couponCodes: [],
-      lastCouponRefresh: 0,
     })
   }, [])
 
@@ -2153,7 +1747,6 @@ export function useGame() {
     joinTournament,
     tickBattleTimer,
     tickCountdown,
-    tickAbilityTimer,
     goBackToDashboard,
     claimInviteReward,
     addInvitedUser,
@@ -2181,16 +1774,6 @@ export function useGame() {
     claimWeeklyBonus,
     claimDailyTask,
     resetAllData,
-    // Ability system
-    activateMultiply5,
-    activateMultiply2_5,
-    activateTimeExtend,
-    addAbility,
-    // Coupon code system
-    validateCouponCode,
-    claimCouponCode,
-    generateCoupons,
-    // Visit website task
     completeVisitWebsiteTask: useCallback(() => {
       setState(prev => {
         const today = getTodayStr()

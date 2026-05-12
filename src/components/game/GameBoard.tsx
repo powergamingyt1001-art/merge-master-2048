@@ -9,37 +9,15 @@
 
 import { useCallback, useRef, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Direction, PowerUp, AbilityType } from '@/hooks/useGame'
+import { Direction, PowerUp } from '@/hooks/useGame'
 import { useGameContext } from '@/context/GameContext'
 import { TileComponent } from './Tile'
 import {
   Trophy, RotateCcw, Undo2, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
   Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle, Swords, Coins,
-  Timer, Sparkles,
 } from 'lucide-react'
-import { AdsterraBanner300x250, AdsterraBanner468x60, AdsterraBanner320x50 } from '@/components/ads/AdsterraAds'
+import { AdsterraBanner300x250, AdsterraBanner468x60 } from '@/components/ads/AdsterraAds'
 import { getRandomLink } from '@/components/ads/AdOverlay'
-
-// ============================================================
-// BOT AVATARS for searching animation cycling
-// ============================================================
-const SEARCHING_BOT_AVATARS = [
-  { name: 'Aero 4', avatar: '🦅' },
-  { name: 'Blaze 7', avatar: '🔥' },
-  { name: 'Viper 9', avatar: '🐍' },
-  { name: 'Nova 3', avatar: '💫' },
-  { name: 'Storm 6', avatar: '⚡' },
-  { name: 'Raze 2', avatar: '💥' },
-  { name: 'Fang 8', avatar: '🐺' },
-  { name: 'Drift 5', avatar: '🌪️' },
-  { name: 'Apex 1', avatar: '🏆' },
-  { name: 'Volt 11', avatar: '⚡' },
-  { name: 'Shadow 3', avatar: '🌑' },
-  { name: 'Phantom 7', avatar: '👻' },
-  { name: 'Titan 5', avatar: '🗿' },
-  { name: 'Echo 9', avatar: '🔊' },
-  { name: 'Fury 4', avatar: '😡' },
-]
 
 // ============================================================
 // HELPER: Check if tiles can still move
@@ -89,9 +67,12 @@ interface GameBoardProps {
 
 export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   // ============================================================
-  // Use GameContext for SHARED game state
+  // 🔴 CRITICAL FIX: Use GameContext instead of useGame()
+  // Previously GameBoard called useGame() which created a NEW
+  // state with default values (gameMode='classic', battleTimer=0)
+  // Now it uses the SHARED state from page.tsx via GameContext
   // ============================================================
-  const game = useGameContext() as Record<string, unknown>
+  const game = useGameContext()
   const {
     tiles, score, bestScore, gameOver, won, keepPlaying,
     canUndo, undoCount, undoTotal,
@@ -104,21 +85,16 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     handleMove, newGame, continueGame, undo, activatePowerUp, handleTileClick,
     reviveWithAd, restartAfterStuck, tickBattleTimer, tickCountdown, addCoins, addNotification,
     goBackToDashboard, calculateTournamentPoints, addGameToHistory,
-    // Ability system
-    multiply5Count, multiply2_5Count, timeExtendCount,
-    activeAbility, abilityTimer,
-    activateMultiply5, activateMultiply2_5, activateTimeExtend, tickAbilityTimer,
-    // Player info for searching animation
-    playerName, playerAvatar,
-  } = game as typeof game & {
-    multiply5Count: number; multiply2_5Count: number; timeExtendCount: number;
-    activeAbility: AbilityType | null; abilityTimer: number;
-    activateMultiply5: () => void; activateMultiply2_5: () => void; activateTimeExtend: () => void; tickAbilityTimer: () => void;
-    playerName: string; playerAvatar: string;
-  }
+  } = game
 
   // ============================================================
   // INJECT BLINK CSS ANIMATION GLOBALLY (once)
+  // EXACTLY like user's HTML reference:
+  // @keyframes blink {
+  //   0% {opacity: 1;}
+  //   50% {opacity: 0.4;}
+  //   100% {opacity: 1;}
+  // }
   // ============================================================
   useEffect(() => {
     const id = 'timer-blink-style'
@@ -130,18 +106,6 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
           0% { opacity: 1; }
           50% { opacity: 0.4; }
           100% { opacity: 1; }
-        }
-        @keyframes searchPulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.3; }
-        }
-        @keyframes vsGlow {
-          0%, 100% { text-shadow: 0 0 10px rgba(237,194,46,0.5), 0 0 20px rgba(237,194,46,0.3); }
-          50% { text-shadow: 0 0 20px rgba(237,194,46,0.8), 0 0 40px rgba(237,194,46,0.5), 0 0 60px rgba(237,194,46,0.3); }
-        }
-        @keyframes dotBounce {
-          0%, 80%, 100% { transform: translateY(0); }
-          40% { transform: translateY(-4px); }
         }
       `
       document.head.appendChild(style)
@@ -155,17 +119,8 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   const [scoreGain, setScoreGain] = useState(0)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
   const [gameOverDismissed, setGameOverDismissed] = useState(false)
-  const [waitingForReturn, setWaitingForReturn] = useState(false)
-  const [showWelcomeBack, setShowWelcomeBack] = useState(false)
-
-  // ============================================================
-  // SEARCHING / MATCHMAKING ANIMATION STATE
-  // ============================================================
-  const [searchingPhase, setSearchingPhase] = useState(false)
-  const [searchingOpponentIndex, setSearchingOpponentIndex] = useState(0)
-  const [searchingFound, setSearchingFound] = useState(false)
-  const [finalOpponent, setFinalOpponent] = useState<{ name: string; avatar: string } | null>(null)
-  const searchingStartedRef = useRef(false) // Track if searching started this session
+  const [waitingForReturn, setWaitingForReturn] = useState(false) // User visiting ad site
+  const [showWelcomeBack, setShowWelcomeBack] = useState(false) // Show welcome back overlay
 
   // Determine game type
   const isBattleMode = gameMode === 'bot' || gameMode === 'coins' || gameMode === 'tournament'
@@ -179,63 +134,12 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   // Countdown overlay - derived from game state
   const countdownOverlay = countdownActive ? { seconds: countdownSecondsLeft, total: 3 } : null
 
-  // ============================================================
-  // SEARCHING PHASE - Start when battle mode begins with countdown
-  // The flow: searchingPhase (3s) → countdown (3-2-1) → game start
-  // ============================================================
-  // Reset searching when not in battle or no countdown
-  useEffect(() => {
-    if (!isBattleMode || !countdownActive) {
-      searchingStartedRef.current = false
-    }
-  }, [isBattleMode, countdownActive])
-
-  // Start searching when countdown first activates for battle modes
-  useEffect(() => {
-    if (!isBattleMode || !countdownActive || searchingStartedRef.current) return
-    searchingStartedRef.current = true
-    // Use a micro-delay to avoid synchronous setState in effect
-    const raf = requestAnimationFrame(() => {
-      setSearchingPhase(true)
-      setSearchingFound(false)
-      setFinalOpponent(null)
-      setSearchingOpponentIndex(0)
-    })
-    return () => cancelAnimationFrame(raf)
-  }, [isBattleMode, countdownActive])
-
-  // Cycle opponent avatars every 200ms during searching
-  useEffect(() => {
-    if (!searchingPhase || searchingFound) return
-    const interval = setInterval(() => {
-      setSearchingOpponentIndex(prev => (prev + 1) % SEARCHING_BOT_AVATARS.length)
-    }, 200)
-    return () => clearInterval(interval)
-  }, [searchingPhase, searchingFound])
-
-  // After 2.5 seconds, stop cycling and show "found" opponent
-  useEffect(() => {
-    if (!searchingPhase) return
-    const timer = setTimeout(() => {
-      const found = SEARCHING_BOT_AVATARS[Math.floor(Math.random() * SEARCHING_BOT_AVATARS.length)]
-      setFinalOpponent(found)
-      setSearchingFound(true)
-      // After showing found opponent for 0.5s, end searching phase
-      setTimeout(() => {
-        setSearchingPhase(false)
-      }, 500)
-    }, 2500)
-    return () => clearTimeout(timer)
-  }, [searchingPhase])
-
   // Countdown tick effect
   useEffect(() => {
     if (!countdownActive) return
-    // Delay countdown ticks while searching phase is active
-    if (searchingPhase) return
     const timer = setTimeout(() => { tickCountdown() }, 1000)
     return () => clearTimeout(timer)
-  }, [countdownActive, countdownSecondsLeft, tickCountdown, searchingPhase])
+  }, [countdownActive, countdownSecondsLeft, tickCountdown])
 
   // Internet detection
   useEffect(() => {
@@ -265,13 +169,6 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     return () => clearInterval(interval)
   }, [isBattleMode, botBattleResult, battleTimer, tickBattleTimer, countdownOverlay, timerPaused])
 
-  // Ability timer tick - call every second when abilityTimer > 0
-  useEffect(() => {
-    if ((abilityTimer as number) <= 0 || !activeAbility) return
-    const interval = setInterval(() => { (tickAbilityTimer as () => void)() }, 1000)
-    return () => clearInterval(interval)
-  }, [abilityTimer, activeAbility, tickAbilityTimer])
-
   // Score gain animation
   useEffect(() => {
     if (score > prevScore.current) {
@@ -282,6 +179,8 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     }
     prevScore.current = score
   }, [score])
+
+
 
   const onMove = useCallback((dir: Direction) => { handleMove(dir) }, [handleMove])
 
@@ -296,6 +195,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
 
   // Touch handlers
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    // Don't capture touch on buttons/interactive elements inside overlays
     if ((e.target as HTMLElement).closest('button, [role="button"], .overlay-content')) return
     e.preventDefault()
     touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
@@ -324,6 +224,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
       try { window.open(getRandomLink(), '_blank') } catch { /* popup blocked */ }
       setWaitingForReturn(true)
     } else {
+      // Offline - just revive immediately
       setGameOverDismissed(false)
       reviveWithAd()
     }
@@ -364,39 +265,42 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
 
   const handlePlayAgain = useCallback(() => {
     finalizeGame()
+    // Go through ad system when playing again
     onPlayAgain(gameMode as 'bot' | 'coins' | 'tournament', battleTimeLimit, coinEntryFee)
   }, [finalizeGame, onPlayAgain, gameMode, battleTimeLimit, coinEntryFee])
 
   // ============================================================
-  // TIMER SYSTEM
+  // TIMER SYSTEM - EXACTLY like user's HTML reference
+  // progress = timeLeft / totalTime
+  // >60% → GREEN (#00e676)
+  // 30-60% → YELLOW (#ffeb3b)
+  // 15-30% → ORANGE (#ff9800)
+  // <15% → RED (#ff3d00) + BLINK animation
   // ============================================================
   const progress = battleTimeLimit > 0 ? battleTimer / battleTimeLimit : 0
 
-  let timerColor = '#00e676'
+  let timerColor = '#00e676' // GREEN default
   if (progress <= 0.15) {
-    timerColor = '#ff3d00'
+    timerColor = '#ff3d00' // RED
   } else if (progress <= 0.30) {
-    timerColor = '#ff9800'
+    timerColor = '#ff9800' // ORANGE
   } else if (progress <= 0.60) {
-    timerColor = '#ffeb3b'
+    timerColor = '#ffeb3b' // YELLOW
   }
 
   const shouldBlink = progress <= 0.15 && isBattleMode && battleTimer > 0 && !botBattleResult
 
-  // Current opponent for searching display
-  const currentSearchingOpponent = searchingFound && finalOpponent
-    ? finalOpponent
-    : SEARCHING_BOT_AVATARS[searchingOpponentIndex % SEARCHING_BOT_AVATARS.length]
 
-  // Ability state helpers
-  const m5Count = (multiply5Count as number) ?? 0
-  const m2_5Count = (multiply2_5Count as number) ?? 0
-  const teCount = (timeExtendCount as number) ?? 0
-  const currentAbility = activeAbility as AbilityType | null
-  const currentAbilityTimer = (abilityTimer as number) ?? 0
 
   // ============================================================
   // RENDER - Main game screen layout
+  // EXACT LAYOUT (top to bottom):
+  // 1. [ BACK + SCORE ]   [ TIMER TEXT ]
+  // 2. [ LOADING BAR ]
+  // 3. [ HEARTS ]
+  // 4. [ GAME BOARD 4x4 ]
+  // 5. [ POWER-UPS ]
+  // 6. [ BANNER AD ]
   // ============================================================
   return (
     <div
@@ -412,6 +316,8 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
 
       {/* ============================================================ */}
       {/* ROW 1: [ BACK + SCORE ]   [ TIMER TEXT ]                     */}
+      {/* Timer number is BIG BOLD like "60" "59" "58"                 */}
+      {/* Exactly like user's HTML: #timer { font-size:28px; bold }    */}
       {/* ============================================================ */}
       <div style={{
         width: '100%',
@@ -456,18 +362,6 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
                     {comboMultiplier}x
                   </span>
                 )}
-                {/* Active ability multiplier indicator next to score */}
-                {currentAbility && currentAbilityTimer > 0 && (
-                  <span style={{
-                    fontSize: 10,
-                    fontWeight: 900,
-                    marginLeft: 4,
-                    color: currentAbility === 'multiply5' ? '#FF00FF' : '#00FFFF',
-                    textShadow: `0 0 6px ${currentAbility === 'multiply5' ? 'rgba(255,0,255,0.5)' : 'rgba(0,255,255,0.5)'}`,
-                  }}>
-                    {currentAbility === 'multiply5' ? '5x' : '2.5x'}
-                  </span>
-                )}
               </div>
             </div>
           </div>
@@ -475,6 +369,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
           {/* Right: Timer Number (only in battle modes) */}
           {isBattleMode && !botBattleResult ? (
             <div style={{ textAlign: 'right' }}>
+              {/* Mode label */}
               <div style={{
                 fontSize: 9,
                 color: 'rgba(255,255,255,0.5)',
@@ -483,6 +378,8 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
               }}>
                 {isCoinGame ? `💰 ₹${coinEntryFee} Game` : isTournament ? '🏆 Tournament' : '⚔️ 1v1 Battle'}
               </div>
+              {/* 🔥 TIMER NUMBER - EXACTLY like user's HTML reference */}
+              {/* #timer { font-size: 28px; font-weight: bold; } */}
               <div
                 style={{
                   fontSize: 28,
@@ -510,7 +407,13 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
       </div>
 
       {/* ============================================================ */}
-      {/* ROW 2: LOADING BAR                                           */}
+      {/* ROW 2: LOADING BAR - EXACTLY like user's HTML reference      */}
+      {/* .bar-container { width:90%; height:10px; background:#333;     */}
+      {/*   border-radius:10px; overflow:hidden; margin:auto; }        */}
+      {/* #bar { height:100%; width:100%; background:#00e676;           */}
+      {/*   transition: width 1s linear, background 0.5s;              */}
+      {/*   border-radius:10px; }                                       */}
+      {/* When <15%: .blink { animation: blink 0.5s infinite; }        */}
       {/* ============================================================ */}
       {isBattleMode && !botBattleResult && (
         <div style={{
@@ -518,6 +421,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
           padding: '10px 16px 0 16px',
           flexShrink: 0,
         }}>
+          {/* Bar container - EXACTLY like .bar-container */}
           <div style={{
             width: '90%',
             height: 10,
@@ -526,6 +430,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
             borderRadius: 10,
             overflow: 'hidden',
           }}>
+            {/* Bar fill - EXACTLY like #bar */}
             <div style={{
               height: '100%',
               width: `${Math.max(progress * 100, 0)}%`,
@@ -540,6 +445,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
 
       {/* ============================================================ */}
       {/* ROW 3: HEARTS / LIVES                                        */}
+      {/* Below the loading bar, above the game board                  */}
       {/* ============================================================ */}
       <div style={{
         display: 'flex',
@@ -549,22 +455,25 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
         padding: '8px 0 4px 0',
         flexShrink: 0,
       }}>
-        {Array.from({ length: maxLives as number }).map((_, i) => (
+        {Array.from({ length: maxLives }).map((_, i) => (
           <Heart
             key={i}
             style={{
-              width: i < (lives as number) ? 18 : 14,
-              height: i < (lives as number) ? 18 : 14,
-              color: i < (lives as number) ? '#F65E3B' : 'rgba(255,255,255,0.12)',
-              fill: i < (lives as number) ? '#F65E3B' : 'none',
-              filter: i < (lives as number) ? 'drop-shadow(0 0 4px rgba(246,94,59,0.6))' : 'none',
+              width: i < lives ? 18 : 14,
+              height: i < lives ? 18 : 14,
+              color: i < lives ? '#F65E3B' : 'rgba(255,255,255,0.12)',
+              fill: i < lives ? '#F65E3B' : 'none',
+              filter: i < lives ? 'drop-shadow(0 0 4px rgba(246,94,59,0.6))' : 'none',
             }}
           />
         ))}
       </div>
 
       {/* ============================================================ */}
-      {/* COMBO INDICATOR - FIXED SPACE (32px)                         */}
+      {/* COMBO INDICATOR - ALWAYS RESERVES FIXED SPACE (32px)         */}
+      {/* The combo badge stays in ONE place. When combo is active,    */}
+      {/* the badge shows. When no combo, empty space is reserved.     */}
+      {/* This prevents tiles from shaking/moving when combo appears.  */}
       {/* ============================================================ */}
       {isBattleMode && !botBattleResult && (
         <div
@@ -701,142 +610,9 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
           ))}
         </AnimatePresence>
 
-        {/* ============================================================ */}
-        {/* SEARCHING / MATCHMAKING OVERLAY - Before countdown           */}
-        {/* Shows when searchingPhase is true (battle modes only)        */}
-        {/* ============================================================ */}
-        <AnimatePresence>
-          {searchingPhase && isBattleMode && (
-            <motion.div
-              key="searching"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 flex flex-col items-center justify-center rounded-xl"
-              style={{ backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 160 }}
-            >
-              {/* Ad Banner - Top */}
-              <div style={{ position: 'absolute', top: 4, left: '50%', transform: 'translateX(-50%)', width: '90%' }}>
-                <AdsterraBanner320x50 />
-              </div>
-
-              {/* Searching Content */}
-              <div className="flex flex-col items-center gap-3" style={{ padding: '30px 16px 16px' }}>
-                {/* Player Avatars Row */}
-                <div className="flex items-center justify-center gap-4" style={{ width: '100%' }}>
-                  {/* Player (left) */}
-                  <div className="flex flex-col items-center gap-1">
-                    <motion.div
-                      className="flex items-center justify-center rounded-full"
-                      style={{
-                        width: 56, height: 56,
-                        background: 'linear-gradient(135deg, #00E676, #00C853)',
-                        border: '2px solid rgba(255,255,255,0.3)',
-                        fontSize: 28,
-                      }}
-                    >
-                      {playerAvatar || '😎'}
-                    </motion.div>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: '#FFFFFF', maxWidth: 64, textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {playerName || 'You'}
-                    </span>
-                  </div>
-
-                  {/* VS Text */}
-                  <div className="flex flex-col items-center">
-                    <motion.span
-                      animate={searchingFound ? { scale: [1, 1.3, 1] } : {}}
-                      transition={{ duration: 0.3 }}
-                      style={{
-                        fontSize: 24,
-                        fontWeight: 900,
-                        color: '#EDC22E',
-                        animation: searchingFound ? 'none' : 'vsGlow 1.5s infinite',
-                      }}
-                    >
-                      VS
-                    </motion.span>
-                  </div>
-
-                  {/* Opponent (right) - cycling or found */}
-                  <div className="flex flex-col items-center gap-1">
-                    <motion.div
-                      key={searchingFound ? 'found' : currentSearchingOpponent.avatar}
-                      initial={!searchingFound ? { scale: 0.8, opacity: 0.5 } : { scale: 1.5 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={!searchingFound ? { duration: 0.15 } : { type: 'spring', stiffness: 300 }}
-                      className="flex items-center justify-center rounded-full"
-                      style={{
-                        width: 56, height: 56,
-                        background: searchingFound
-                          ? 'linear-gradient(135deg, #FF3D00, #FF6D00)'
-                          : 'linear-gradient(135deg, #333, #555)',
-                        border: searchingFound
-                          ? '2px solid rgba(255,255,255,0.5)'
-                          : '2px solid rgba(255,255,255,0.15)',
-                        fontSize: 28,
-                      }}
-                    >
-                      {currentSearchingOpponent.avatar}
-                    </motion.div>
-                    <span style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      color: searchingFound ? '#FFFFFF' : 'rgba(255,255,255,0.4)',
-                      maxWidth: 64,
-                      textAlign: 'center',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {searchingFound ? currentSearchingOpponent.name : '???'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Searching Text */}
-                <div className="flex flex-col items-center gap-1">
-                  <motion.p
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color: searchingFound ? '#00E676' : '#EDC22E',
-                    }}
-                    animate={searchingFound ? { scale: [1, 1.1, 1] } : {}}
-                    transition={{ duration: 0.3 }}
-                  >
-                    {searchingFound ? '⚔️ Opponent Found!' : 'Finding opponent...'}
-                  </motion.p>
-
-                  {/* Animated dots */}
-                  {!searchingFound && (
-                    <div className="flex gap-1">
-                      {[0, 1, 2].map(i => (
-                        <motion.span
-                          key={i}
-                          style={{ fontSize: 12, color: '#EDC22E' }}
-                          animate={{ opacity: [0.3, 1, 0.3] }}
-                          transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
-                        >
-                          ●
-                        </motion.span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Ad Banner - Bottom */}
-              <div style={{ position: 'absolute', bottom: 4, left: '50%', transform: 'translateX(-50%)', width: '90%' }}>
-                <AdsterraBanner320x50 />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         {/* Countdown overlay - 3-2-1 when entering battle mode */}
         <AnimatePresence>
-          {countdownOverlay && countdownOverlay.seconds > 0 && !searchingPhase && (
+          {countdownOverlay && countdownOverlay.seconds > 0 && (
             <motion.div
               key="countdown"
               initial={{ opacity: 0 }}
@@ -871,6 +647,8 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
           )}
         </AnimatePresence>
 
+        {/* Final countdown removed - no 5-4-3-2-1 overlay to waste user's time */}
+
         {/* Stuck overlay */}
         <AnimatePresence>
           {isStuck && lives > 0 && !gameOver && (
@@ -878,7 +656,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
               className="absolute inset-0 flex flex-col items-center justify-center rounded-xl overlay-content" style={{ backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 100 }}>
               <Heart className="w-8 h-8 mb-2" style={{ color: '#F65E3B' }} />
               <p className="text-lg font-bold mb-1" style={{ color: '#FFFFFF' }}>Stuck!</p>
-              <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>-1 ❤️ • {lives as number} lives left</p>
+              <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>-1 ❤️ • {lives} lives left</p>
               <button onClick={handleStuckContinue} onTouchStart={(e) => e.stopPropagation()} className="px-5 py-2 rounded-lg font-bold text-xs"
                 style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>Continue</button>
             </motion.div>
@@ -924,15 +702,15 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
                 <span className="text-lg font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>vs</span>
                 <div className="text-center">
                   <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.6)' }}>Opponent</p>
-                  <p className="text-xl font-extrabold" style={{ color: '#FFFFFF' }}>{(botOpponent as { finalScore?: number })?.finalScore}</p>
+                  <p className="text-xl font-extrabold" style={{ color: '#FFFFFF' }}>{botOpponent?.finalScore}</p>
                 </div>
               </div>
               {isCoinGame && (
                 <p className="text-[10px] font-bold mb-3" style={{ color: botBattleResult === 'win' ? '#FFD700' : 'rgba(255,255,255,0.6)' }}>
-                  {botBattleResult === 'win' ? `+${(coinEntryFee as number) * 2} coins! 🎉` : `-${coinEntryFee} coins`}
+                  {botBattleResult === 'win' ? `+${coinEntryFee * 2} coins! 🎉` : `-${coinEntryFee} coins`}
                 </p>
               )}
-              {(comboBonus as number) > 0 && (
+              {comboBonus > 0 && (
                 <div className="mb-3 px-3 py-1.5 rounded-lg text-center" style={{ backgroundColor: 'rgba(255,122,0,0.15)', border: '1px solid rgba(255,122,0,0.3)' }}>
                   <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.6)' }}>🔥 Combo Bonus</p>
                   <p className="text-sm font-extrabold" style={{ color: '#FF7A00' }}>+{comboBonus} pts</p>
@@ -941,8 +719,8 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
               {isTournament && (
                 <div className="mb-3 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
                   <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.6)' }}>Tournament Points</p>
-                  <p className="text-lg font-extrabold" style={{ color: '#00E676' }}>+{Math.floor((score + (tournamentCarryOver as number)) / 20)} pts</p>
-                  <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Total: {(tournamentPoints as number) + Math.floor((score + (tournamentCarryOver as number)) / 20)} pts</p>
+                  <p className="text-lg font-extrabold" style={{ color: '#00E676' }}>+{Math.floor((score + tournamentCarryOver) / 20)} pts</p>
+                  <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Total: {tournamentPoints + Math.floor((score + tournamentCarryOver) / 20)} pts</p>
                 </div>
               )}
               <div className="flex gap-3">
@@ -962,123 +740,13 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
         </AnimatePresence>
       </div>
 
-      {/* ============================================================ */}
-      {/* POWER-UPS ROW - Including ability buttons                     */}
-      {/* ============================================================ */}
+      {/* Power-ups row - BELOW the board */}
       <div className="flex items-center gap-2 py-1.5 flex-shrink-0">
-        <PowerUpBtn icon={<Hammer className="w-3.5 h-3.5" />} count={hammerCount as number} active={activePowerUp === 'hammer'} onClick={() => handlePowerUp('hammer')} color="#F59563" />
-        <PowerUpBtn icon={<Magnet className="w-3.5 h-3.5" />} count={magnetCount as number} active={activePowerUp === 'magnet'} onClick={() => handlePowerUp('magnet')} color="#00E676" />
-        <PowerUpBtn icon={<Bomb className="w-3.5 h-3.5" />} count={blastCount as number} active={false} onClick={() => handlePowerUp('blast')} color="#FF7A00" />
-        <PowerUpBtn icon={<Undo2 className="w-3.5 h-3.5" />} count={(undoTotal as number) - (undoCount as number)} active={false} onClick={undo} color="#8f7a66" disabled={!(canUndo as boolean) || (undoCount as number) >= (undoTotal as number)} />
-
-        {/* Separator between power-ups and abilities */}
-        {isBattleMode && (
-          <div style={{ width: 1, height: 24, backgroundColor: 'rgba(255,255,255,0.1)', margin: '0 2px' }} />
-        )}
-
-        {/* Ability: 5x Multiplier */}
-        {isBattleMode && (
-          <AbilityBtn
-            icon={<span style={{ fontSize: 14 }}>⚡</span>}
-            label="5x"
-            count={m5Count}
-            active={currentAbility === 'multiply5'}
-            timerSeconds={currentAbility === 'multiply5' ? currentAbilityTimer : 0}
-            onClick={activateMultiply5 as () => void}
-            color="#FF00FF"
-            disabled={m5Count <= 0 || !!currentAbility || !!countdownOverlay}
-          />
-        )}
-
-        {/* Ability: 2.5x Multiplier */}
-        {isBattleMode && (
-          <AbilityBtn
-            icon={<span style={{ fontSize: 14 }}>💫</span>}
-            label="2.5x"
-            count={m2_5Count}
-            active={currentAbility === 'multiply2_5'}
-            timerSeconds={currentAbility === 'multiply2_5' ? currentAbilityTimer : 0}
-            onClick={activateMultiply2_5 as () => void}
-            color="#00FFFF"
-            disabled={m2_5Count <= 0 || !!currentAbility || !!countdownOverlay}
-          />
-        )}
-
-        {/* Ability: Time Extend */}
-        {isBattleMode && (
-          <AbilityBtn
-            icon={<span style={{ fontSize: 14 }}>⏱️</span>}
-            label="+10s"
-            count={teCount}
-            active={false}
-            timerSeconds={0}
-            onClick={activateTimeExtend as () => void}
-            color="#00E676"
-            disabled={teCount <= 0 || !!countdownOverlay}
-          />
-        )}
+        <PowerUpBtn icon={<Hammer className="w-3.5 h-3.5" />} count={hammerCount} active={activePowerUp === 'hammer'} onClick={() => handlePowerUp('hammer')} color="#F59563" />
+        <PowerUpBtn icon={<Magnet className="w-3.5 h-3.5" />} count={magnetCount} active={activePowerUp === 'magnet'} onClick={() => handlePowerUp('magnet')} color="#00E676" />
+        <PowerUpBtn icon={<Bomb className="w-3.5 h-3.5" />} count={blastCount} active={false} onClick={() => handlePowerUp('blast')} color="#FF7A00" />
+        <PowerUpBtn icon={<Undo2 className="w-3.5 h-3.5" />} count={undoTotal - undoCount} active={false} onClick={undo} color="#8f7a66" disabled={!canUndo || undoCount >= undoTotal} />
       </div>
-
-      {/* ============================================================ */}
-      {/* ACTIVE ABILITY INDICATOR - Shows active multiplier + timer    */}
-      {/* ============================================================ */}
-      <AnimatePresence>
-        {currentAbility && currentAbilityTimer > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="flex flex-col items-center gap-1 flex-shrink-0"
-            style={{ padding: '0 12px' }}
-          >
-            <div
-              className="flex items-center gap-1.5 px-3 py-0.5 rounded-full"
-              style={{
-                backgroundColor: currentAbility === 'multiply5' ? 'rgba(255,0,255,0.15)' : 'rgba(0,255,255,0.15)',
-                border: `1px solid ${currentAbility === 'multiply5' ? 'rgba(255,0,255,0.3)' : 'rgba(0,255,255,0.3)'}`,
-              }}
-            >
-              <Zap className="w-2.5 h-2.5" style={{ color: currentAbility === 'multiply5' ? '#FF00FF' : '#00FFFF' }} />
-              <span style={{
-                fontSize: 9,
-                fontWeight: 800,
-                color: currentAbility === 'multiply5' ? '#FF00FF' : '#00FFFF',
-              }}>
-                {currentAbility === 'multiply5' ? '5x' : '2.5x'} MULTIPLIER
-              </span>
-              <span style={{
-                fontSize: 9,
-                fontWeight: 700,
-                color: '#FFFFFF',
-                fontFamily: 'monospace',
-              }}>
-                {currentAbilityTimer}s
-              </span>
-            </div>
-            {/* Progress bar for ability timer */}
-            <div style={{
-              width: 80,
-              height: 3,
-              backgroundColor: 'rgba(255,255,255,0.08)',
-              borderRadius: 2,
-              overflow: 'hidden',
-            }}>
-              <motion.div
-                initial={{ width: '100%' }}
-                animate={{ width: `${(currentAbilityTimer / 10) * 100}%` }}
-                transition={{ duration: 0.5 }}
-                style={{
-                  height: '100%',
-                  background: currentAbility === 'multiply5'
-                    ? 'linear-gradient(90deg, #FF00FF, #FF66FF)'
-                    : 'linear-gradient(90deg, #00FFFF, #66FFFF)',
-                  borderRadius: 2,
-                }}
-              />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Active Power-up indicator */}
       <AnimatePresence>
@@ -1106,14 +774,16 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
         ))}
       </div>
 
-      {/* ====== BOTTOM AD DURING GAMEPLAY ====== */}
+      {/* ====== BOTTOM AD DURING GAMEPLAY - always visible ====== */}
       <div className="flex-shrink-0 w-full" style={{ marginTop: 4 }}>
         <AdsterraBanner300x250 />
       </div>
 
+
+
       {/* Game Over Modal - for classic mode */}
       <AnimatePresence>
-        {showGameOverModal && gameOver && (lives as number) <= 0 && !isBattleMode && (
+        {showGameOverModal && gameOver && lives <= 0 && !isBattleMode && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[150] flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}>
             <motion.div initial={{ scale: 0.8, y: 30 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.8 }}
@@ -1191,6 +861,12 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
 
       {/* ============================================================ */}
       {/* BLINK CSS ANIMATION - Injected via useEffect                 */}
+      {/* @keyframes timerBlink {                                      */}
+      {/*   0% { opacity: 1; }                                        */}
+      {/*   50% { opacity: 0.4; }                                     */}
+      {/*   100% { opacity: 1; }                                      */}
+      {/* }                                                            */}
+      {/* EXACTLY like user's HTML reference                           */}
       {/* ============================================================ */}
     </div>
   )
@@ -1209,72 +885,6 @@ function PowerUpBtn({ icon, count, active, onClick, color, disabled }: {
       <div style={{ color: count > 0 ? color : 'rgba(255,255,255,0.15)' }}>{icon}</div>
       <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold"
         style={{ backgroundColor: count > 0 ? color : 'rgba(255,255,255,0.08)', color: '#FFFFFF' }}>{count}</div>
-    </motion.button>
-  )
-}
-
-// ============================================================
-// SUB-COMPONENT: AbilityBtn
-// Ability buttons for 5x, 2.5x multipliers and time extend
-// ============================================================
-function AbilityBtn({ icon, label, count, active, timerSeconds, onClick, color, disabled }: {
-  icon: React.ReactNode
-  label: string
-  count: number
-  active: boolean
-  timerSeconds: number
-  onClick: () => void
-  color: string
-  disabled?: boolean
-}) {
-  return (
-    <motion.button
-      onClick={onClick}
-      disabled={disabled}
-      className="relative flex flex-col items-center justify-center rounded-lg"
-      style={{
-        width: 36,
-        height: 36,
-        backgroundColor: active ? `${color}20` : 'rgba(255,255,255,0.04)',
-        border: active ? `1.5px solid ${color}` : '1px solid rgba(255,255,255,0.06)',
-        opacity: disabled ? 0.35 : 1,
-        boxShadow: active ? `0 0 12px ${color}40, 0 0 24px ${color}20` : 'none',
-        transition: 'box-shadow 0.3s, border-color 0.3s',
-      }}
-      whileTap={!disabled ? { scale: 0.9 } : {}}
-      animate={active ? { scale: [1, 1.08, 1] } : {}}
-      transition={{ duration: 0.6, repeat: active ? Infinity : 0 }}
-    >
-      <div style={{ color: count > 0 ? color : 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {icon}
-      </div>
-      <span style={{
-        fontSize: 6,
-        fontWeight: 900,
-        color: count > 0 ? color : 'rgba(255,255,255,0.15)',
-        lineHeight: 1,
-        marginTop: 1,
-        fontFamily: 'monospace',
-      }}>
-        {label}
-      </span>
-      {/* Count badge */}
-      <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold"
-        style={{ backgroundColor: count > 0 ? color : 'rgba(255,255,255,0.08)', color: '#FFFFFF' }}>
-        {count}
-      </div>
-      {/* Active timer indicator */}
-      {active && timerSeconds > 0 && (
-        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 px-1 rounded text-[6px] font-bold"
-          style={{
-            backgroundColor: color,
-            color: '#FFFFFF',
-            fontFamily: 'monospace',
-            lineHeight: 1,
-          }}>
-          {timerSeconds}s
-        </div>
-      )}
     </motion.button>
   )
 }
