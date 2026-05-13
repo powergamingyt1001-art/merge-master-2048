@@ -190,6 +190,9 @@ export default function Home() {
                 playerName={game.playerName}
                 playerAvatar={game.playerAvatar}
                 playerLevel={game.playerLevel}
+                playerId={game.playerId}
+                firebaseReferrals={game.firebaseReferrals}
+                firebaseCommissionPending={game.firebaseCommissionPending}
                 totalBattlesPlayed={game.totalBattlesPlayed}
                 totalBattlesWon={game.totalBattlesWon}
                 tournamentJoined={game.tournamentJoined}
@@ -209,6 +212,7 @@ export default function Home() {
                 onAddPowerUp={game.addPowerUp}
                 onAddUndos={game.addUndos}
                 onClaimCommission={game.claimCommission}
+                onClaimFirebaseCommission={game.claimFirebaseCommission}
                 onToggleAutoClaim={game.toggleAutoClaim}
                 onAddNotification={game.addNotification}
                 onMarkNotificationRead={game.markNotificationRead}

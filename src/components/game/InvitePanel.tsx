@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Copy, Share2, Users, Coins, Check, ToggleLeft, ToggleRight, Gift } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { InvitedUser } from '@/hooks/useGame'
+import type { FirebaseReferral } from '@/lib/firebase-service'
 
 interface InvitePanelProps {
   isOpen: boolean
@@ -15,18 +16,35 @@ interface InvitePanelProps {
   commissionClaimed: number
   autoClaimCommission: boolean
   onClaimCommission: () => void
+  onClaimFirebaseCommission: () => void
   onToggleAutoClaim: () => void
+  firebaseReferrals?: FirebaseReferral[]
+  firebaseCommissionPending?: number
 }
 
 export function InvitePanel({
   isOpen, onClose, inviteCode, invitedUsers,
   commissionBalance, commissionClaimed, autoClaimCommission,
-  onClaimCommission, onToggleAutoClaim,
+  onClaimCommission, onClaimFirebaseCommission, onToggleAutoClaim,
+  firebaseReferrals = [],
+  firebaseCommissionPending = 0,
 }: InvitePanelProps) {
   const [copied, setCopied] = useState(false)
   const [showUserList, setShowUserList] = useState(false)
 
   const inviteUrl = typeof window !== 'undefined' ? `${window.location.origin}?ref=${inviteCode}` : ''
+
+  // Use Firebase referrals if available, otherwise fall back to local
+  const activeReferrals = firebaseReferrals.length > 0
+    ? firebaseReferrals.map(r => ({
+        id: r.id,
+        name: r.name,
+        joinedAt: new Date(r.joinedAt).toISOString(),
+        commissionEarned: r.commissionEarned || 0,
+      }))
+    : invitedUsers
+
+  const totalCommissionPending = firebaseCommissionPending > 0 ? firebaseCommissionPending : commissionBalance
 
   const handleCopy = useCallback(() => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -45,6 +63,14 @@ export function InvitePanel({
       }).catch(() => {})
     }
   }, [inviteUrl])
+
+  const handleClaim = useCallback(() => {
+    if (firebaseCommissionPending > 0) {
+      onClaimFirebaseCommission()
+    } else {
+      onClaimCommission()
+    }
+  }, [firebaseCommissionPending, onClaimFirebaseCommission, onClaimCommission])
 
   return (
     <AnimatePresence>
@@ -70,6 +96,15 @@ export function InvitePanel({
                 <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
               </button>
             </div>
+
+            {/* Live indicator */}
+            {firebaseReferrals.length > 0 && (
+              <div className="mx-4 mb-2 flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#00E676' }} />
+                <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>LIVE</span>
+                <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>• Real-time tracking</span>
+              </div>
+            )}
 
             <div className="px-4 pb-4">
               {/* Reward info */}
@@ -133,14 +168,14 @@ export function InvitePanel({
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-lg font-extrabold" style={{ color: '#EDC22E' }}>
-                      {commissionBalance > 0 ? commissionBalance.toFixed(0) : 0} <span className="text-[8px] font-normal" style={{ color: 'rgba(255,255,255,0.4)' }}>pending</span>
+                      {totalCommissionPending > 0 ? totalCommissionPending.toFixed(0) : 0} <span className="text-[8px] font-normal" style={{ color: 'rgba(255,255,255,0.4)' }}>pending</span>
                     </p>
                     <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
                       Total claimed: {commissionClaimed}
                     </p>
                   </div>
-                  {!autoClaimCommission && commissionBalance > 0 && (
-                    <button onClick={onClaimCommission}
+                  {!autoClaimCommission && totalCommissionPending > 0 && (
+                    <button onClick={handleClaim}
                       className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95"
                       style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
                       CLAIM
@@ -157,7 +192,7 @@ export function InvitePanel({
                     <Users className="w-3.5 h-3.5" style={{ color: '#F65E3B' }} />
                     <span className="text-xs font-bold" style={{ color: '#FFFFFF' }}>Invited Users</span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(246,94,59,0.2)', color: '#F65E3B' }}>
-                      {invitedUsers.length}
+                      {activeReferrals.length}
                     </span>
                   </div>
                   <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
@@ -169,14 +204,14 @@ export function InvitePanel({
                   {showUserList && (
                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}>
                       <div className="px-3 pb-3 max-h-40 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
-                        {invitedUsers.length === 0 ? (
+                        {activeReferrals.length === 0 ? (
                           <div className="text-center py-3">
                             <Gift className="w-6 h-6 mx-auto mb-1" style={{ color: 'rgba(255,255,255,0.15)' }} />
                             <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No invited users yet</p>
                             <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.2)' }}>Share your link to start earning!</p>
                           </div>
                         ) : (
-                          invitedUsers.map((user) => (
+                          activeReferrals.map((user) => (
                             <div key={user.id} className="flex items-center justify-between py-1.5 px-2 rounded-lg mb-1" style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}>
                               <div className="flex items-center gap-2">
                                 <span className="text-sm">👤</span>

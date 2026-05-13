@@ -42,6 +42,9 @@ interface PlayDashboardProps {
   playerName: string
   playerAvatar: string
   playerLevel: number
+  playerId: string
+  firebaseReferrals: { id: string; name: string; avatar?: string; joinedAt: number; commissionEarned: number }[]
+  firebaseCommissionPending: number
   totalBattlesPlayed: number
   totalBattlesWon: number
   tournamentJoined: boolean
@@ -61,6 +64,7 @@ interface PlayDashboardProps {
   onAddPowerUp: (pu: PowerUp, count: number) => void
   onAddUndos: (count: number) => void
   onClaimCommission: () => void
+  onClaimFirebaseCommission: () => void
   onToggleAutoClaim: () => void
   onAddNotification: (title: string, message: string, type: Notification['type'], emoji: string) => void
   onMarkNotificationRead: (id: string) => void
@@ -88,12 +92,13 @@ export function PlayDashboard({
   hammerCount, magnetCount, blastCount, modBestScore, gamePoints, bestScore,
   inviteCode, invitedUsers, commissionBalance, commissionClaimed, autoClaimCommission,
   gamesPlayedToday, maxGamesPerDay, notifications,
-  playerName, playerAvatar, playerLevel, totalBattlesPlayed, totalBattlesWon,
+  playerName, playerAvatar, playerLevel, playerId, firebaseReferrals, firebaseCommissionPending,
+  totalBattlesPlayed, totalBattlesWon,
   tournamentJoined, tournamentPoints, tournamentCarryOver, tournamentGamesPlayed,
   onPlayClassic, onStartBotBattle, onStartCoinGame,
   onJoinTournament, onStartTournamentGame,
   onUseSpinTicket, onAddSpinTickets, onClaimWelcome, onClaimStreakDay,
-  onAddCoins, onAddPowerUp, onAddUndos, onClaimCommission, onToggleAutoClaim,
+  onAddCoins, onAddPowerUp, onAddUndos, onClaimCommission, onClaimFirebaseCommission, onToggleAutoClaim,
   onAddNotification, onMarkNotificationRead, onMarkAllNotificationsRead,
   onUpdatePlayerName, onUpdatePlayerAvatar,
   dailyTasks, onClaimDailyTask, onCompleteVisitWebsiteTask, onResetAllData,
@@ -504,7 +509,8 @@ export function PlayDashboard({
         streakClaimed={streakClaimed} onClaim={onClaimStreakDay} />
       <WelcomeGift isOpen={showWelcome} onClose={() => setShowWelcome(false)} onClaim={() => { onClaimWelcome(); setShowWelcome(false) }} />
       <Leaderboard isOpen={showLeaderboard} onClose={() => setShowLeaderboard(false)}
-        gamePoints={gamePoints} bestScore={bestScore} coins={coins} />
+        gamePoints={gamePoints} bestScore={bestScore} coins={coins}
+        playerName={playerName} playerAvatar={playerAvatar} playerId={playerId} tournamentPoints={tournamentPoints} />
       <Tournament isOpen={showTournament} onClose={() => setShowTournament(false)}
         coins={coins}
         tournamentJoined={tournamentJoined}
@@ -512,12 +518,15 @@ export function PlayDashboard({
         tournamentCarryOver={tournamentCarryOver}
         tournamentGamesPlayed={tournamentGamesPlayed}
         onJoinTournament={onJoinTournament}
-        onStartTournamentGame={onStartTournamentGame} />
+        onStartTournamentGame={onStartTournamentGame}
+        playerName={playerName} playerAvatar={playerAvatar} playerId={playerId} />
       <InvitePanel isOpen={showInvite} onClose={() => setShowInvite(false)}
         inviteCode={inviteCode} invitedUsers={invitedUsers}
         commissionBalance={commissionBalance} commissionClaimed={commissionClaimed}
         autoClaimCommission={autoClaimCommission} onClaimCommission={onClaimCommission}
-        onToggleAutoClaim={onToggleAutoClaim} />
+        onClaimFirebaseCommission={onClaimFirebaseCommission}
+        onToggleAutoClaim={onToggleAutoClaim}
+        firebaseReferrals={firebaseReferrals} firebaseCommissionPending={firebaseCommissionPending} />
       <ProfilePanel isOpen={showProfile} onClose={() => setShowProfile(false)}
         playerName={playerName} playerAvatar={playerAvatar} playerLevel={playerLevel}
         gamePoints={gamePoints} bestScore={bestScore} modBestScore={modBestScore}

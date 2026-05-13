@@ -173,4 +173,26 @@ Stage Summary:
 - Game: Timer pauses when user clicks "Get Free Life" and visits ad site
 - Welcome Back overlay appears when user returns, requires explicit "Continue" click to resume
 - AdOverlay: "CLICK TO PLAY" opens ad in new tab, shows "come back" message, auto-closes on return
-- All changes lint-clean
+- All changes lint-clean---
+Task ID: 1
+Agent: Main Agent
+Task: Firebase Realtime Database integration for referrals, leaderboard, and bot names
+
+Work Log:
+- Installed firebase@12.13.0 SDK
+- Created /src/lib/firebase.ts with Firebase RTDB config and initialization
+- Created /src/lib/firebase-service.ts with full service layer (syncPlayerToFirebase, processReferral, processCommissionForReferrer, onLeaderboardUpdate, onReferralsUpdate, etc.)
+- Updated useGame.ts: Added playerId, firebaseReferrals, firebaseCommissionPending to GameState; Added generatePlayerId() function; Added Firebase sync effects; Added claimFirebaseCommission callback; Fixed referral processing to work via Firebase
+- Updated BOT_NAMES to cool names (Aero 4, Blaze 7, Viper 9, etc. - 25 total)
+- Updated Leaderboard.tsx: Added Firebase real-time listener for bestScore/coins; Shows "LIVE" indicator; Falls back to fake data with new bot names
+- Updated Tournament.tsx: Added Firebase real-time listener for tournamentPoints; Shows "LIVE" indicator; Falls back to fake data with new bot names
+- Updated InvitePanel.tsx: Added firebaseReferrals and firebaseCommissionPending props; Shows real-time referral data from Firebase; Shows "LIVE" indicator
+- Updated PlayDashboard.tsx: Added playerId, firebaseReferrals, firebaseCommissionPending, onClaimFirebaseCommission props
+- Updated page.tsx: Added new props for Firebase-related fields to PlayDashboard
+
+Stage Summary:
+- Firebase RTDB fully integrated for real-time player data sync
+- Referral system now works: when user joins via ref link, processReferral() writes to Firebase, referrer sees them in real-time, commission tracks automatically
+- Leaderboard and Tournament now show real players from Firebase with LIVE indicator
+- Bot names updated to cool gaming-style names
+- All lint checks pass, dev server running successfully

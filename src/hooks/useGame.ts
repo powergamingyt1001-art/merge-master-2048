@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { syncPlayerToFirebase, processReferral, processCommissionForReferrer, getReferrals, onReferralsUpdate, getCommissionNotifications, claimCommissionNotification, type FirebaseReferral } from '@/lib/firebase-service'
 
 export type Direction = 'up' | 'down' | 'left' | 'right'
 export type PowerUp = 'hammer' | 'magnet' | 'blast'
@@ -118,9 +119,13 @@ export interface GameState {
   coinEntryFee: number
   coinGameWon: boolean | null
   // Player profile
+  playerId: string // Unique ID for Firebase
   playerName: string
   playerAvatar: string
   playerLevel: number
+  // Referral tracking from Firebase
+  firebaseReferrals: FirebaseReferral[]
+  firebaseCommissionPending: number
   // Win/loss tracking for percentage
   totalBattlesPlayed: number
   totalBattlesWon: number
@@ -139,16 +144,31 @@ export interface GameState {
 }
 
 const BOT_NAMES = [
-  { name: 'Rahul Pro', avatar: '🦁' },
-  { name: 'Pooja Queen', avatar: '👸' },
-  { name: 'Amit King', avatar: '👑' },
-  { name: 'Sneha Star', avatar: '⭐' },
-  { name: 'Vikram Boss', avatar: '🔥' },
-  { name: 'Anjali Ace', avatar: '💎' },
-  { name: 'Ravi Master', avatar: '🏆' },
-  { name: 'Priya Legend', avatar: '🌟' },
-  { name: 'Karan Beast', avatar: '💪' },
-  { name: 'Neha Champ', avatar: '🎯' },
+  { name: 'Aero 4', avatar: '🦅' },
+  { name: 'Blaze 7', avatar: '🔥' },
+  { name: 'Viper 9', avatar: '🐍' },
+  { name: 'Nova 3', avatar: '💫' },
+  { name: 'Storm 6', avatar: '⚡' },
+  { name: 'Raze 2', avatar: '💥' },
+  { name: 'Fang 8', avatar: '🐺' },
+  { name: 'Drift 5', avatar: '🌪️' },
+  { name: 'Apex 1', avatar: '🏆' },
+  { name: 'Volt 11', avatar: '⚡' },
+  { name: 'Shadow 3', avatar: '🌑' },
+  { name: 'Phantom 7', avatar: '👻' },
+  { name: 'Titan 5', avatar: '🗿' },
+  { name: 'Echo 9', avatar: '🔊' },
+  { name: 'Fury 4', avatar: '😡' },
+  { name: 'Onyx 2', avatar: '🖤' },
+  { name: 'Nexus 6', avatar: '🔮' },
+  { name: 'Zenith 8', avatar: '🏔️' },
+  { name: 'Cipher 3', avatar: '🔐' },
+  { name: 'Rogue 7', avatar: '🗡️' },
+  { name: 'Flux 10', avatar: '🌊' },
+  { name: 'Saber 4', avatar: '⚔️' },
+  { name: 'Blitz 6', avatar: '💥' },
+  { name: 'Omega 1', avatar: '🅾️' },
+  { name: 'Spark 5', avatar: '✨' },
 ]
 
 export const PLAYER_AVATARS = ['😎', '🦊', '🐺', '🦅', '🐉', '🦁', '👑', '🔥', '💎', '⚡']
@@ -166,6 +186,15 @@ function generateInviteCode(): string {
     code += chars[Math.floor(Math.random() * chars.length)]
   }
   return code
+}
+
+function generatePlayerId(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  let id = 'p_'
+  for (let i = 0; i < 12; i++) {
+    id += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return id
 }
 
 function getEmptyCells(tiles: Tile[]): [number, number][] {
@@ -588,6 +617,9 @@ export function useGame() {
       playerName: 'Player',
       playerAvatar: '😎',
       playerLevel: 1,
+      playerId: '',
+      firebaseReferrals: [],
+      firebaseCommissionPending: 0,
       totalBattlesPlayed: 0,
       totalBattlesWon: 0,
       tournamentJoined: false,
@@ -691,6 +723,9 @@ export function useGame() {
       playerName: saved.playerName || 'Player',
       playerAvatar: saved.playerAvatar || '😎',
       playerLevel: calculateLevel(levelXP),
+      playerId: saved.playerId || generatePlayerId(),
+      firebaseReferrals: [],
+      firebaseCommissionPending: 0,
       totalBattlesPlayed: saved.totalBattlesPlayed || 0,
       totalBattlesWon: saved.totalBattlesWon || 0,
       tournamentJoined,
@@ -746,6 +781,7 @@ export function useGame() {
       playerName: state.playerName,
       playerAvatar: state.playerAvatar,
       playerLevel: state.playerLevel,
+      playerId: state.playerId,
       totalBattlesPlayed: state.totalBattlesPlayed,
       totalBattlesWon: state.totalBattlesWon,
       tournamentJoined: state.tournamentJoined,
@@ -759,7 +795,57 @@ export function useGame() {
       dailyTasks: state.dailyTasks,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks])
+
+  // ============================================================
+  // FIREBASE SYNC - Sync player data to Firebase RTDB
+  // ============================================================
+  const firebaseSyncedRef = useRef(false)
+
+  // Sync player data to Firebase whenever key stats change
+  useEffect(() => {
+    if (!state.playerId || state.playerId === '') return
+    // Debounce - don't sync too frequently
+    const timer = setTimeout(() => {
+      syncPlayerToFirebase({
+        id: state.playerId,
+        name: state.playerName,
+        avatar: state.playerAvatar,
+        inviteCode: state.inviteCode,
+        tournamentPoints: state.tournamentPoints,
+        levelXP: state.levelXP,
+        bestScore: state.bestScore,
+        coins: state.coins,
+        level: state.playerLevel,
+      }).catch(() => {/* silent fail */})
+    }, 2000) // 2 second debounce
+    return () => clearTimeout(timer)
+  }, [state.playerId, state.playerName, state.playerAvatar, state.inviteCode, state.tournamentPoints, state.levelXP, state.bestScore, state.coins, state.playerLevel])
+
+  // Listen to referrals in real-time (people who used MY invite code)
+  useEffect(() => {
+    if (!state.playerId) return
+    const unsubscribe = onReferralsUpdate(state.playerId, (referrals) => {
+      setState(prev => {
+        const newReferrals = referrals
+        // Calculate total pending commission
+        const totalCommission = referrals.reduce((sum, r) => sum + (r.commissionEarned || 0), 0)
+        return {
+          ...prev,
+          firebaseReferrals: newReferrals,
+          firebaseCommissionPending: totalCommission - prev.commissionClaimed,
+        }
+      })
+    })
+    return unsubscribe
+  }, [state.playerId])
+
+  // Process commission for referrer when player earns in tournament
+  useEffect(() => {
+    if (!state.playerId || state.tournamentPoints <= 0) return
+    // Only process after a game ends (tournamentPoints just changed)
+    processCommissionForReferrer(state.playerId, state.tournamentPoints).catch(() => {/* silent */})
+  }, [state.tournamentPoints, state.playerId])
 
   // Clear flash
   useEffect(() => {
@@ -786,6 +872,27 @@ export function useGame() {
       notifications: [notif, ...prev.notifications].slice(0, 50),
     }))
   }, [])
+
+  // Process referral on first load when invitedBy is set (after addNotification is declared)
+  useEffect(() => {
+    if (!state.invitedBy || !state.playerId || firebaseSyncedRef.current) return
+    firebaseSyncedRef.current = true
+    processReferral(state.playerId, state.playerName, state.playerAvatar, state.invitedBy)
+      .then((result) => {
+        if (result.success) {
+          // Auto-claim invite reward
+          setState(prev => ({
+            ...prev,
+            coins: prev.coins + 500,
+            spinTickets: prev.spinTickets + 2,
+            magnetCount: prev.magnetCount + 2,
+            invitedBy: null, // Clear so it doesn't reprocess
+          }))
+          addNotification('Invite Reward! 🎉', `You got 500 coins + 2 spins for joining! Invited by ${result.referrerName || 'a friend'}`, 'reward', '🎁')
+        }
+      })
+      .catch(() => {/* silent fail */})
+  }, [state.invitedBy, state.playerId, state.playerName, state.playerAvatar, addNotification])
 
   const markNotificationRead = useCallback((id: string) => {
     setState(prev => ({
@@ -1600,6 +1707,9 @@ export function useGame() {
       playerName: 'Player',
       playerAvatar: '😎',
       playerLevel: 1,
+      playerId: '',
+      firebaseReferrals: [],
+      firebaseCommissionPending: 0,
       totalBattlesPlayed: 0,
       totalBattlesWon: 0,
       tournamentJoined: false,
@@ -1643,6 +1753,18 @@ export function useGame() {
     addCommission,
     claimCommission,
     toggleAutoClaim,
+    claimFirebaseCommission: useCallback(() => {
+      setState(prev => {
+        const amount = prev.firebaseCommissionPending
+        if (amount <= 0) return prev
+        return {
+          ...prev,
+          coins: prev.coins + amount,
+          commissionClaimed: prev.commissionClaimed + amount,
+          firebaseCommissionPending: 0,
+        }
+      })
+    }, []),
     addNotification,
     markNotificationRead,
     markAllNotificationsRead,

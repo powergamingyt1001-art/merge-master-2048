@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Crown, Medal, Star, Trophy, Swords, Coins, Wifi, WifiOff, Target, ChevronRight } from 'lucide-react'
+import { getLeaderboardPlayers, onLeaderboardUpdate, type FirebasePlayer } from '@/lib/firebase-service'
 
 interface LeaderboardProps {
   isOpen: boolean
@@ -10,6 +11,10 @@ interface LeaderboardProps {
   gamePoints: number
   bestScore: number
   coins: number
+  playerName: string
+  playerAvatar: string
+  playerId: string
+  tournamentPoints: number
 }
 
 type TabType = 'modesScore' | 'coinsRank' | 'offlineRank'
@@ -22,32 +27,31 @@ interface LeaderboardEntry {
   isPlayer: boolean
 }
 
-// Fake players for Modes Best Score ranking
+// Fake players for fallback when Firebase is unavailable
 const FAKE_PLAYERS_MODES = [
-  { name: 'Rahul Pro', avatar: '🦁', score: 15000 },
-  { name: 'Vikram Boss', avatar: '🔥', score: 12500 },
-  { name: 'Sneha Star', avatar: '⭐', score: 10200 },
-  { name: 'Amit King', avatar: '👑', score: 8500 },
-  { name: 'Pooja Queen', avatar: '👸', score: 7200 },
-  { name: 'Anjali Ace', avatar: '💎', score: 5800 },
-  { name: 'Priya Legend', avatar: '🌟', score: 4100 },
-  { name: 'Ravi Master', avatar: '🏆', score: 3200 },
-  { name: 'Karan Beast', avatar: '💪', score: 2500 },
-  { name: 'Neha Champ', avatar: '🎯', score: 1800 },
+  { name: 'Aero 4', avatar: '🦅', score: 15000 },
+  { name: 'Blaze 7', avatar: '🔥', score: 12500 },
+  { name: 'Viper 9', avatar: '🐍', score: 10200 },
+  { name: 'Nova 3', avatar: '💫', score: 8500 },
+  { name: 'Storm 6', avatar: '⚡', score: 7200 },
+  { name: 'Raze 2', avatar: '💥', score: 5800 },
+  { name: 'Fang 8', avatar: '🐺', score: 4100 },
+  { name: 'Drift 5', avatar: '🌪️', score: 3200 },
+  { name: 'Apex 1', avatar: '🏆', score: 2500 },
+  { name: 'Volt 11', avatar: '⚡', score: 1800 },
 ]
 
-// Fake players for Coins Rank
 const FAKE_PLAYERS_COINS = [
-  { name: 'Vikram Boss', avatar: '🔥', coins: 25000 },
-  { name: 'Rahul Pro', avatar: '🦁', coins: 18500 },
-  { name: 'Pooja Queen', avatar: '👸', coins: 12000 },
-  { name: 'Sneha Star', avatar: '⭐', coins: 8500 },
-  { name: 'Amit King', avatar: '👑', coins: 6200 },
-  { name: 'Anjali Ace', avatar: '💎', coins: 4100 },
-  { name: 'Priya Legend', avatar: '🌟', coins: 2800 },
-  { name: 'Ravi Master', avatar: '🏆', score: 1500 },
-  { name: 'Karan Beast', avatar: '💪', coins: 800 },
-  { name: 'Neha Champ', avatar: '🎯', coins: 300 },
+  { name: 'Blaze 7', avatar: '🔥', coins: 25000 },
+  { name: 'Aero 4', avatar: '🦅', coins: 18500 },
+  { name: 'Storm 6', avatar: '⚡', coins: 12000 },
+  { name: 'Viper 9', avatar: '🐍', coins: 8500 },
+  { name: 'Nova 3', avatar: '💫', coins: 6200 },
+  { name: 'Raze 2', avatar: '💥', coins: 4100 },
+  { name: 'Fang 8', avatar: '🐺', coins: 2800 },
+  { name: 'Drift 5', avatar: '🌪️', coins: 1500 },
+  { name: 'Apex 1', avatar: '🏆', coins: 800 },
+  { name: 'Volt 11', avatar: '⚡', coins: 300 },
 ]
 
 // Offline rank players - progressive, beat one to advance
@@ -64,19 +68,41 @@ const OFFLINE_RANKS = [
   { name: 'Godlike Guru', avatar: '🌟', targetScore: 15000 },
 ]
 
-function buildModesLeaderboard(playerBestScore: number): LeaderboardEntry[] {
+function buildModesLeaderboard(playerBestScore: number, playerName: string, playerAvatar: string, firebasePlayers: FirebasePlayer[], playerId: string): LeaderboardEntry[] {
   const entries: LeaderboardEntry[] = []
-  FAKE_PLAYERS_MODES.forEach(p => entries.push({ rank: 0, name: p.name, avatar: p.avatar, value: p.score, isPlayer: false }))
-  entries.push({ rank: 0, name: 'You', avatar: '😎', value: playerBestScore, isPlayer: true })
+
+  if (firebasePlayers.length > 0) {
+    // Use real Firebase data
+    firebasePlayers.forEach(p => {
+      if (p.id !== playerId) {
+        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.bestScore || 0, isPlayer: false })
+      }
+    })
+  } else {
+    // Fallback to fake data
+    FAKE_PLAYERS_MODES.forEach(p => entries.push({ rank: 0, name: p.name, avatar: p.avatar, value: p.score, isPlayer: false }))
+  }
+
+  entries.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', value: playerBestScore, isPlayer: true })
   entries.sort((a, b) => b.value - a.value)
   entries.forEach((e, i) => { e.rank = i + 1 })
   return entries
 }
 
-function buildCoinsLeaderboard(playerCoins: number): LeaderboardEntry[] {
+function buildCoinsLeaderboard(playerCoins: number, playerName: string, playerAvatar: string, firebasePlayers: FirebasePlayer[], playerId: string): LeaderboardEntry[] {
   const entries: LeaderboardEntry[] = []
-  FAKE_PLAYERS_COINS.forEach(p => entries.push({ rank: 0, name: p.name, avatar: p.avatar, value: (p as any).coins || (p as any).score || 0, isPlayer: false }))
-  entries.push({ rank: 0, name: 'You', avatar: '😎', value: playerCoins, isPlayer: true })
+
+  if (firebasePlayers.length > 0) {
+    firebasePlayers.forEach(p => {
+      if (p.id !== playerId) {
+        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.coins || 0, isPlayer: false })
+      }
+    })
+  } else {
+    FAKE_PLAYERS_COINS.forEach(p => entries.push({ rank: 0, name: p.name, avatar: p.avatar, value: p.coins || 0, isPlayer: false }))
+  }
+
+  entries.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', value: playerCoins, isPlayer: true })
   entries.sort((a, b) => b.value - a.value)
   entries.forEach((e, i) => { e.rank = i + 1 })
   return entries
@@ -98,11 +124,20 @@ function getOfflineRank(playerBestScore: number): { currentRank: number; nextTar
   }
 }
 
-export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins }: LeaderboardProps) {
+export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, playerName, playerAvatar, playerId, tournamentPoints }: LeaderboardProps) {
   const [tab, setTab] = useState<TabType>('modesScore')
+  const [firebasePlayers, setFirebasePlayers] = useState<FirebasePlayer[]>([])
 
-  const modesEntries = buildModesLeaderboard(bestScore)
-  const coinsEntries = buildCoinsLeaderboard(coins)
+  // Listen to Firebase leaderboard in real-time
+  useEffect(() => {
+    const unsubscribe = onLeaderboardUpdate('bestScore', 50, (players) => {
+      setFirebasePlayers(players)
+    })
+    return unsubscribe
+  }, [])
+
+  const modesEntries = buildModesLeaderboard(bestScore, playerName, playerAvatar, firebasePlayers, playerId)
+  const coinsEntries = buildCoinsLeaderboard(coins, playerName, playerAvatar, firebasePlayers, playerId)
   const { currentRank, nextTarget, beatenRanks } = getOfflineRank(bestScore)
 
   return (
@@ -121,6 +156,15 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins }: L
                 <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
               </button>
             </div>
+
+            {/* Live indicator */}
+            {firebasePlayers.length > 0 && (
+              <div className="mx-4 mb-2 flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#00E676' }} />
+                <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>LIVE</span>
+                <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>• {firebasePlayers.length} players online</span>
+              </div>
+            )}
 
             {/* Tab Switch - 3 sections */}
             <div className="flex mx-4 mb-3 rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -277,7 +321,6 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins }: L
 
 function PodiumSlot({ entry, place }: { entry: LeaderboardEntry; place: 1 | 2 | 3 }) {
   const medalColor = place === 1 ? '#FFD700' : place === 2 ? '#C0C0C0' : '#CD7F32'
-  const medalEmoji = place === 1 ? '🥇' : place === 2 ? '🥈' : '🥉'
   const bgColor = entry.isPlayer ? 'rgba(237,194,46,0.2)' : place === 1 ? 'rgba(255,215,0,0.12)' : place === 2 ? 'rgba(192,192,192,0.12)' : 'rgba(205,127,50,0.12)'
   const borderColor = entry.isPlayer ? 'rgba(237,194,46,0.3)' : `${medalColor}30`
   const height = place === 1 ? 'py-2.5' : 'py-1.5'
@@ -294,7 +337,7 @@ function PodiumSlot({ entry, place }: { entry: LeaderboardEntry; place: 1 | 2 | 
         ) : (
           <Star className="w-3 h-3 mx-auto mb-0.5" style={{ color: '#CD7F32' }} />
         )}
-        <p className={`text-[${place === 1 ? 9 : 8}px] font-bold truncate px-1`} style={{ color: entry.isPlayer ? '#EDC22E' : medalColor }}>
+        <p className="text-[9px] font-bold truncate px-1" style={{ color: entry.isPlayer ? '#EDC22E' : medalColor }}>
           {entry.name}
         </p>
         <p className="text-[7px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>

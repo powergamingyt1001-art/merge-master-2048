@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Crown, Medal, Star, Trophy, Clock, Info, Coins, Users, Lock, Zap, Play, Timer, Target, TrendingUp } from 'lucide-react'
+import { getLeaderboardPlayers, onLeaderboardUpdate, type FirebasePlayer } from '@/lib/firebase-service'
 
 interface TournamentProps {
   isOpen: boolean
@@ -14,6 +15,9 @@ interface TournamentProps {
   tournamentGamesPlayed: number
   onJoinTournament: () => void
   onStartTournamentGame: () => void
+  playerName: string
+  playerAvatar: string
+  playerId: string
 }
 
 type TabType = 'play' | 'prize' | 'rankings'
@@ -27,22 +31,19 @@ interface TournamentPlayer {
 }
 
 const FAKE_TOURNAMENT_PLAYERS = [
-  { name: 'Vikram Boss', avatar: '🔥', score: 520 },
-  { name: 'Rahul Pro', avatar: '🦁', score: 480 },
-  { name: 'Sneha Star', avatar: '⭐', score: 390 },
-  { name: 'Amit King', avatar: '👑', score: 350 },
-  { name: 'Pooja Queen', avatar: '👸', score: 280 },
-  { name: 'Anjali Ace', avatar: '💎', score: 220 },
-  { name: 'Priya Legend', avatar: '🌟', score: 160 },
-  { name: 'Ravi Master', avatar: '🏆', score: 120 },
-  { name: 'Karan Beast', avatar: '💪', score: 80 },
-  { name: 'Neha Champ', avatar: '🎯', score: 40 },
+  { name: 'Blaze 7', avatar: '🔥', score: 520 },
+  { name: 'Aero 4', avatar: '🦅', score: 480 },
+  { name: 'Viper 9', avatar: '🐍', score: 390 },
+  { name: 'Nova 3', avatar: '💫', score: 350 },
+  { name: 'Storm 6', avatar: '⚡', score: 280 },
+  { name: 'Raze 2', avatar: '💥', score: 220 },
+  { name: 'Fang 8', avatar: '🐺', score: 160 },
+  { name: 'Drift 5', avatar: '🌪️', score: 120 },
+  { name: 'Apex 1', avatar: '🏆', score: 80 },
+  { name: 'Volt 11', avatar: '⚡', score: 40 },
 ]
 
 // Week 1-3 prizes (7K budget)
-// 1st: 700, 2nd: 400, 3rd: 250, 4th: 150, 5th: 100
-// 6th+: 50 + 2 spins each (until 7K pool exhausted)
-// Non-ranked: 3 spins each
 const WEEK_PRIZES_EARLY = [
   { rank: 1, coins: 700, spins: 0, label: '1st' },
   { rank: 2, coins: 400, spins: 0, label: '2nd' },
@@ -51,18 +52,7 @@ const WEEK_PRIZES_EARLY = [
   { rank: 5, coins: 100, spins: 0, label: '5th' },
 ]
 
-// Week 4+ prizes (15K budget) - entry fee 100
-const WEEK_PRIZES_LATE = [
-  { rank: 1, coins: 1500, spins: 0, label: '1st' },
-  { rank: 2, coins: 1000, spins: 0, label: '2nd' },
-  { rank: 3, coins: 700, spins: 0, label: '3rd' },
-  { rank: 4, coins: 400, spins: 0, label: '4th' },
-  { rank: 5, coins: 200, spins: 2, label: '5th' },
-  { rank: 6, coins: 50, spins: 2, label: '6th' },
-]
-
 const ENTRY_FEE_EARLY = 50
-const ENTRY_FEE_LATE = 100
 
 function getWeekNumber(): number {
   const start = new Date(2025, 0, 6)
@@ -89,20 +79,16 @@ function getEarlyPoolRemaining(): number {
   return 7000 - used
 }
 
-function getLatePoolRemaining(): number {
-  const used = WEEK_PRIZES_LATE.reduce((s, p) => s + p.coins, 0)
-  return 15000 - used
-}
-
 export function Tournament({
   isOpen, onClose, coins,
   tournamentJoined, tournamentPoints, tournamentCarryOver, tournamentGamesPlayed,
   onJoinTournament, onStartTournamentGame,
+  playerName, playerAvatar, playerId,
 }: TournamentProps) {
   const [tab, setTab] = useState<TabType>('play')
+  const [firebasePlayers, setFirebasePlayers] = useState<FirebasePlayer[]>([])
   const weekNum = getWeekNumber()
   const timeLeft = getTimeLeftInWeek()
-  // Always use 7K pool as per user request
   const prizes = WEEK_PRIZES_EARLY
   const totalPool = 7000
   const entryFee = ENTRY_FEE_EARLY
@@ -112,17 +98,42 @@ export function Tournament({
   const noCoinSpins = 3
   const canJoin = coins >= entryFee
 
-  // Build rankings based on tournament points
-  const players: TournamentPlayer[] = FAKE_TOURNAMENT_PLAYERS.map(p => ({
-    rank: 0, name: p.name, avatar: p.avatar, score: p.score, isPlayer: false,
-  }))
-  players.push({ rank: 0, name: 'You', avatar: '😎', score: tournamentPoints, isPlayer: true })
+  // Listen to Firebase tournament rankings in real-time
+  useEffect(() => {
+    const unsubscribe = onLeaderboardUpdate('tournamentPoints', 50, (players) => {
+      setFirebasePlayers(players)
+    })
+    return unsubscribe
+  }, [])
+
+  // Build rankings based on tournament points (Firebase + player)
+  const players: TournamentPlayer[] = []
+
+  if (firebasePlayers.length > 0) {
+    firebasePlayers.forEach(p => {
+      if (p.id !== playerId) {
+        players.push({
+          rank: 0,
+          name: p.name || 'Player',
+          avatar: p.avatar || '😎',
+          score: p.tournamentPoints || 0,
+          isPlayer: false,
+        })
+      }
+    })
+  } else {
+    FAKE_TOURNAMENT_PLAYERS.forEach(p => {
+      players.push({ rank: 0, name: p.name, avatar: p.avatar, score: p.score, isPlayer: false })
+    })
+  }
+
+  players.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', score: tournamentPoints, isPlayer: true })
   players.sort((a, b) => b.score - a.score)
   players.forEach((p, i) => { p.rank = i + 1 })
 
   const handlePlay = () => {
     onStartTournamentGame()
-    onClose() // close tournament panel, game board will show
+    onClose()
   }
 
   const handleJoin = () => {
@@ -160,6 +171,15 @@ export function Tournament({
               </button>
             </div>
 
+            {/* Live indicator */}
+            {firebasePlayers.length > 0 && (
+              <div className="mx-4 mb-2 flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: '#00E676' }} />
+                <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>LIVE</span>
+                <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>• {firebasePlayers.length} players</span>
+              </div>
+            )}
+
             {/* Timer bar */}
             <div className="mx-4 mb-2 p-2 rounded-lg flex items-center justify-between" style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.15)' }}>
               <div className="flex items-center gap-1.5">
@@ -187,7 +207,7 @@ export function Tournament({
               )}
             </div>
 
-            {/* Join button or PLAY button (replaces Join after joining) */}
+            {/* Join button or PLAY button */}
             {!tournamentJoined ? (
               <div className="mx-4 mb-3">
                 <button
@@ -205,7 +225,6 @@ export function Tournament({
               </div>
             ) : (
               <div className="mx-4 mb-2">
-                {/* Tournament Stats - compact */}
                 <div className="flex gap-2 mb-2">
                   <div className="flex-1 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
                     <p className="text-xs font-extrabold" style={{ color: '#00E676' }}>{tournamentPoints}</p>
@@ -221,7 +240,6 @@ export function Tournament({
                   </div>
                 </div>
 
-                {/* PLAY BUTTON - replaces Join button */}
                 <button
                   onClick={handlePlay}
                   className="w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] active:scale-95"
@@ -298,7 +316,6 @@ export function Tournament({
 
               {tab === 'prize' && (
                 <div className="space-y-1.5">
-                  {/* Top prizes */}
                   {prizes.map((prize) => (
                     <div key={prize.rank} className="flex items-center justify-between p-2.5 rounded-xl"
                       style={{
@@ -320,7 +337,6 @@ export function Tournament({
                     </div>
                   ))}
 
-                  {/* Remaining ranks with 50 coins */}
                   <div className="p-2.5 rounded-xl" style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.1)' }}>
                     <p className="text-[10px] font-bold mb-1" style={{ color: '#00E676' }}>
                       #{prizes.length + 1} to #{prizes.length + coinRanksCount} — 50 coins + {coinRankSpins} spins each
@@ -330,7 +346,6 @@ export function Tournament({
                     </p>
                   </div>
 
-                  {/* No coin ranks - everyone gets spins */}
                   <div className="p-2.5 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
                     <p className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
                       All other players: {noCoinSpins} spins each 🎫
@@ -341,9 +356,7 @@ export function Tournament({
 
               {tab === 'rankings' && (
                 <div>
-                  {/* Top 3 Podium with Medals */}
                   <div className="flex items-end justify-center gap-2 mb-3">
-                    {/* 2nd Place */}
                     {players[1] && (
                       <div className="flex flex-col items-center" style={{ minWidth: 68 }}>
                         <span className="text-2xl mb-0.5">{players[1].avatar}</span>
@@ -355,7 +368,6 @@ export function Tournament({
                         </div>
                       </div>
                     )}
-                    {/* 1st Place */}
                     {players[0] && (
                       <div className="flex flex-col items-center" style={{ minWidth: 80 }}>
                         <span className="text-3xl mb-0.5">{players[0].avatar}</span>
@@ -367,7 +379,6 @@ export function Tournament({
                         </div>
                       </div>
                     )}
-                    {/* 3rd Place */}
                     {players[2] && (
                       <div className="flex flex-col items-center" style={{ minWidth: 68 }}>
                         <span className="text-2xl mb-0.5">{players[2].avatar}</span>
@@ -381,7 +392,6 @@ export function Tournament({
                     )}
                   </div>
 
-                  {/* List below 3rd */}
                   <div className="max-h-48 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
                     {players.slice(3).map((entry) => (
                       <div key={entry.rank}
