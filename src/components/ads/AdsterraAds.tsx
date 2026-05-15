@@ -1,26 +1,112 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 
 // ============================================================
 // ADSTERRA AD COMPONENTS
 // All ad scripts provided by user for Adsterra integration
 // IMPORTANT: Each banner uses isolated scope to prevent
 // atOptions conflicts between multiple banners on same page
-// Popunder: 50% chance per session, 15s delay, 5min cooldown
-// Social Bar: 50% chance per session, 10s delay
 // CONTENT FILTERING: Added safe_content=1 to filter
 // inappropriate/dirty ads for family-friendly gaming
+//
+// AD CONDITIONS:
+// - Popunder: 50% chance per session, 15s delay, once per 5 min
+// - Social Bar: 50% chance per session, 10s delay
+// - Big banners (728x90, 300x250): Only ONE per page view (rotated)
+// - Small banners (320x50, 468x60): Always shown (small, non-intrusive)
 // ============================================================
 
-// ===== HELPER: Check if ad should show (50% chance per session) =====
-function shouldShowAd(sessionKey: string): boolean {
+// ============================================================
+// SESSION AD CONTROLLER - Controls which ads show per session
+// Uses sessionStorage so it resets on new tab/session
+// ============================================================
+function shouldShowAdThisSession(adKey: string, chancePercent: number): boolean {
   if (typeof window === 'undefined') return false
-  const stored = sessionStorage.getItem(sessionKey)
+  const stored = sessionStorage.getItem(`ad_show_${adKey}`)
   if (stored !== null) return stored === 'true'
-  const show = Math.random() < 0.5
-  sessionStorage.setItem(sessionKey, String(show))
-  return show
+  const result = Math.random() * 100 < chancePercent
+  sessionStorage.setItem(`ad_show_${adKey}`, String(result))
+  return result
+}
+
+function canShowPopunderNow(): boolean {
+  if (typeof window === 'undefined') return false
+  const lastTime = parseInt(localStorage.getItem('last_popunder_time') || '0', 10)
+  const now = Date.now()
+  // Minimum 5 minutes between popunders
+  return now - lastTime > 5 * 60 * 1000
+}
+
+function markPopunderShown(): void {
+  if (typeof window === 'undefined') return
+  localStorage.setItem('last_popunder_time', String(Date.now()))
+}
+
+// Decide which BIG banner to show on dashboard (only 1 per page)
+// Returns: 'top' | 'middle' | 'footer' | 'none'
+export function getDashboardBigBannerSlot(): string {
+  if (typeof window === 'undefined') return 'middle'
+  const stored = sessionStorage.getItem('dash_big_banner_slot')
+  if (stored) return stored
+  const slots = ['top', 'middle', 'footer']
+  const chosen = slots[Math.floor(Math.random() * slots.length)]
+  sessionStorage.setItem('dash_big_banner_slot', chosen)
+  return chosen
+}
+
+// --- Popunder Ad (Global - with conditions) ---
+// 50% chance per session, 15s delay, once per 5 minutes
+export function AdsterraPopunder() {
+  useEffect(() => {
+    // Check session chance
+    if (!shouldShowAdThisSession('popunder', 50)) return
+
+    const existing = document.getElementById('adsterra-popunder')
+    if (existing) return
+
+    // 15 second delay after page load - prevents redirect on page open
+    const timer = setTimeout(() => {
+      // Check if we can show popunder now (5 min cooldown)
+      if (!canShowPopunderNow()) return
+
+      const script = document.createElement('script')
+      script.id = 'adsterra-popunder'
+      script.src = 'https://pl29392034.profitablecpmratenetwork.com/40/9d/aa/409daa8e988b716a6a40b571e679667a.js'
+      script.async = true
+      document.body.appendChild(script)
+      markPopunderShown()
+    }, 15000) // 15 second delay
+
+    return () => clearTimeout(timer)
+  }, [])
+
+  return null
+}
+
+// --- Social Bar Ad (Global - with conditions) ---
+// 50% chance per session, 10s delay
+export function AdsterraSocialBar() {
+  useEffect(() => {
+    // Check session chance
+    if (!shouldShowAdThisSession('socialbar', 50)) return
+
+    const existing = document.getElementById('adsterra-socialbar')
+    if (existing) return
+
+    // 10 second delay after page load
+    const timer = setTimeout(() => {
+      const script = document.createElement('script')
+      script.id = 'adsterra-socialbar'
+      script.src = 'https://pl29392035.profitablecpmratenetwork.com/b7/40/ba/b740ba65f24e56491e9bd88c482e6b7f.js'
+      script.async = true
+      document.body.appendChild(script)
+    }, 10000) // 10 second delay
+
+    return () => clearTimeout(timer)
+  }, [])
+
+  return null
 }
 
 // --- Native Banner Ad ---
@@ -170,61 +256,4 @@ export function AdsterraBanner320x50() {
   return (
     <div ref={containerRef} className="w-full flex justify-center" style={{ minHeight: 50 }} />
   )
-}
-
-// ============================================================
-// POPUNDER AD - 50% chance per session, 15s delay, 5min cooldown
-// Only triggers once per session to avoid annoying users
-// ============================================================
-export function AdsterraPopunder() {
-  const [shouldShow, setShouldShow] = useState(() => shouldShowAd('adsterra_popunder'))
-
-  useEffect(() => {
-    if (!shouldShow) return
-
-    const timer = setTimeout(() => {
-      // Check 5-minute cooldown
-      const lastPop = localStorage.getItem('adsterra_popunder_last')
-      const now = Date.now()
-      if (lastPop && now - parseInt(lastPop) < 5 * 60 * 1000) return
-
-      // Load popunder script
-      const script = document.createElement('script')
-      script.src = 'https://www.highperformanceformat.com/ce3de5cebae6e3a4b6c7f4a8e5e3e3a2/invoke.js'
-      script.async = true
-      script.setAttribute('data-cfasync', 'false')
-      document.body.appendChild(script)
-      localStorage.setItem('adsterra_popunder_last', String(now))
-    }, 15000)
-
-    return () => clearTimeout(timer)
-  }, [shouldShow])
-
-  if (!shouldShow) return null
-  return <div id="container-popunder" className="hidden" />
-}
-
-// ============================================================
-// SOCIAL BAR AD - 50% chance per session, 10s delay
-// Shows a small floating social bar at bottom of page
-// ============================================================
-export function AdsterraSocialBar() {
-  const [shouldShow, setShouldShow] = useState(() => shouldShowAd('adsterra_socialbar'))
-
-  useEffect(() => {
-    if (!shouldShow) return
-
-    const timer = setTimeout(() => {
-      const script = document.createElement('script')
-      script.src = 'https://www.highperformanceformat.com/1cfe0cebae6e3a4b6c7f4a8e5e3e3a2/invoke.js'
-      script.async = true
-      script.setAttribute('data-cfasync', 'false')
-      document.body.appendChild(script)
-    }, 10000)
-
-    return () => clearTimeout(timer)
-  }, [shouldShow])
-
-  if (!shouldShow) return null
-  return <div id="container-social-bar" className="hidden" />
 }
