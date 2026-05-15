@@ -15,6 +15,8 @@ import {
   AdsterraNativeBanner,
   AdsterraBanner728x90,
   AdsterraBanner300x250,
+  AdsterraBanner320x50,
+  getDashboardBigBannerSlot,
 } from '@/components/ads/AdsterraAds'
 import { PowerUp, Notification, DailyTask, getLevelInfo } from '@/hooks/useGame'
 import { getRandomLink } from '@/components/ads/AdOverlay'
@@ -118,6 +120,8 @@ export function PlayDashboard({
   const [showAbout, setShowAbout] = useState(false)
   const [showContact, setShowContact] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
+  // Decide which big banner to show (only 1 per session) - lazy init
+  const [bigBannerSlot] = useState<string>(() => getDashboardBigBannerSlot())
 
   const unreadNotifications = notifications.filter(n => !n.read).length
   const gamesLeft = maxGamesPerDay - gamesPlayedToday
@@ -180,9 +184,9 @@ export function PlayDashboard({
       <div className="absolute top-1/4 left-1/3 w-48 h-48 rounded-full opacity-20 pointer-events-none" style={{ background: 'radial-gradient(circle, #EDC22E, transparent)', filter: 'blur(60px)' }} />
       <div className="absolute bottom-1/4 right-1/3 w-56 h-56 rounded-full opacity-15 pointer-events-none" style={{ background: 'radial-gradient(circle, #FF7A00, transparent)', filter: 'blur(70px)' }} />
 
-      {/* ====== HEADER AD - 728x90 banner pinned at top ====== */}
+      {/* ====== HEADER AD - Only big banner if 'top' slot chosen ====== */}
       <div className="flex-shrink-0 relative z-10 w-full">
-        <AdsterraBanner728x90 />
+        {bigBannerSlot === 'top' ? <AdsterraBanner728x90 /> : <AdsterraBanner320x50 />}
       </div>
 
       {/* Scrollable content */}
@@ -407,10 +411,12 @@ export function PlayDashboard({
             </button>
           </div>
 
-          {/* 300x250 Banner Ad */}
-          <div className="w-full">
-            <AdsterraBanner300x250 />
-          </div>
+          {/* Big Banner Ad - Only shown if 'middle' slot chosen */}
+          {bigBannerSlot === 'middle' && (
+            <div className="w-full">
+              <AdsterraBanner300x250 />
+            </div>
+          )}
 
           {/* Daily Tasks */}
           {dailyTasks && dailyTasks.length > 0 && (
@@ -497,9 +503,9 @@ export function PlayDashboard({
         </div>
       </div>
 
-      {/* ====== FOOTER AD - bigger banner for more revenue ====== */}
+      {/* ====== FOOTER AD - Only big banner if 'footer' slot chosen ====== */}
       <div className="flex-shrink-0 relative z-10 w-full">
-        <AdsterraBanner728x90 />
+        {bigBannerSlot === 'footer' ? <AdsterraBanner728x90 /> : <AdsterraBanner320x50 />}
       </div>
 
       {/* Modals */}
