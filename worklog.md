@@ -196,3 +196,26 @@ Stage Summary:
 - Leaderboard and Tournament now show real players from Firebase with LIVE indicator
 - Bot names updated to cool gaming-style names
 - All lint checks pass, dev server running successfully
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Add Popunder + Social Bar ads with smart conditions, banner rotation (one big per page)
+
+Work Log:
+- Fixed git conflict state (rm index, git reset --hard origin/main)
+- Added shouldShowAd() helper for 50% chance per session
+- Added AdsterraPopunder component (50% chance, 15s delay, 5min cooldown)
+- Added AdsterraSocialBar component (50% chance, 10s delay)
+- Added banner rotation in PlayDashboard.tsx (getDashboardBigBannerSlot)
+- Header: big (728x90) if 'top' slot, else small (320x50)
+- Middle: 300x250 only if 'middle' slot
+- Footer: big (728x90) if 'footer' slot, else small (320x50)
+- Added Popunder + Social Bar imports in page.tsx
+- Resolved merge conflicts from GLM5's concurrent changes
+- Successfully pushed to GitHub (commit 616a80b)
+
+Stage Summary:
+- All ad changes implemented and pushed
+- Vercel will auto-deploy from GitHub
+- Pending: Itch.io dummy HTML file
