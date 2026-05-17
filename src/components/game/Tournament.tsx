@@ -131,6 +131,11 @@ export function Tournament({
   players.sort((a, b) => b.score - a.score)
   players.forEach((p, i) => { p.rank = i + 1 })
 
+  // Find the player ranked just above the current user (next player to beat)
+  const playerEntry = players.find(p => p.isPlayer)
+  const playerRank = playerEntry?.rank ?? 0
+  const nextPlayerAbove = playerRank > 1 ? players.find(p => p.rank === playerRank - 1) : null
+
   const handlePlay = () => {
     onStartTournamentGame()
     onClose()
@@ -239,6 +244,20 @@ export function Tournament({
                     <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Games</p>
                   </div>
                 </div>
+
+                {/* Next player to beat */}
+                {playerRank > 1 && nextPlayerAbove && (
+                  <div className="mb-2 p-2 rounded-lg flex items-center gap-2"
+                    style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)' }}>
+                    <span className="text-lg">{nextPlayerAbove.avatar}</span>
+                    <div className="flex-1">
+                      <p className="text-[9px] font-bold" style={{ color: '#F65E3B' }}>Beat to advance!</p>
+                      <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>{nextPlayerAbove.name}</p>
+                      <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{nextPlayerAbove.score} pts</p>
+                    </div>
+                    <TrendingUp className="w-4 h-4" style={{ color: '#F65E3B' }} />
+                  </div>
+                )}
 
                 <button
                   onClick={handlePlay}

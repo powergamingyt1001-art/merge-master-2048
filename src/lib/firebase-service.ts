@@ -286,44 +286,77 @@ export async function getInvitedBy(
 }
 
 // ============================================================
-// COMMISSION SYSTEM - When invitee earns, referrer gets 5%
+// COMMISSION SYSTEM - When invitee earns, referrer gets:
+//   30% for direct referrals (first level)
+//   10% for second-level referrals (referrals of referrals)
 // ============================================================
 
 // Call this when a player earns tournament points or coins
-// It will calculate and add 5% commission to the referrer
+// It will calculate and add 30% (direct) or 10% (second level) commission
 export async function processCommissionForReferrer(
   playerId: string,
   amountEarned: number
 ): Promise<void> {
   try {
-    // Find who invited this player
+    // Find who invited this player (direct referrer)
     const invitedByRef = ref(db, `invitedBy/${playerId}`)
     const snapshot = await get(invitedByRef)
     if (!snapshot.exists()) return
 
-    const referrerId = snapshot.val()
-    const commissionAmount = Math.floor(amountEarned * 0.05) // 5% commission
+    const directReferrerId = snapshot.val()
+    const directCommission = Math.floor(amountEarned * 0.30) // 30% direct commission
 
-    if (commissionAmount <= 0) return
+    if (directCommission > 0) {
+      // Update the referral record with total commission
+      const referralRef = ref(db, `referrals/${directReferrerId}/${playerId}`)
+      const referralSnapshot = await get(referralRef)
+      if (referralSnapshot.exists()) {
+        const currentData = referralSnapshot.val()
+        const newTotal = (currentData.commissionEarned || 0) + directCommission
+        await update(referralRef, { commissionEarned: newTotal })
+      }
 
-    // Update the referral record with total commission
-    const referralRef = ref(db, `referrals/${referrerId}/${playerId}`)
-    const referralSnapshot = await get(referralRef)
-    if (referralSnapshot.exists()) {
-      const currentData = referralSnapshot.val()
-      const newTotal = (currentData.commissionEarned || 0) + commissionAmount
-      await update(referralRef, { commissionEarned: newTotal })
+      // Add commission notification for direct referrer
+      const notificationRef = push(ref(db, `notifications/${directReferrerId}`))
+      await set(notificationRef, {
+        type: 'commission',
+        amount: directCommission,
+        fromPlayerId: playerId,
+        level: 1,
+        timestamp: Date.now(),
+        claimed: false,
+      })
     }
 
-    // Add commission notification for referrer
-    const notificationRef = push(ref(db, `notifications/${referrerId}`))
-    await set(notificationRef, {
-      type: 'commission',
-      amount: commissionAmount,
-      fromPlayerId: playerId,
-      timestamp: Date.now(),
-      claimed: false,
-    })
+    // Check for second-level referrer (who invited the direct referrer)
+    const secondLevelRef = ref(db, `invitedBy/${directReferrerId}`)
+    const secondLevelSnapshot = await get(secondLevelRef)
+    if (secondLevelSnapshot.exists()) {
+      const secondLevelReferrerId = secondLevelSnapshot.val()
+      const secondLevelCommission = Math.floor(amountEarned * 0.10) // 10% second-level commission
+
+      if (secondLevelCommission > 0) {
+        // Update the referral record for second level
+        const referralRef2 = ref(db, `referrals/${secondLevelReferrerId}/${directReferrerId}`)
+        const referralSnapshot2 = await get(referralRef2)
+        if (referralSnapshot2.exists()) {
+          const currentData = referralSnapshot2.val()
+          const newTotal = (currentData.commissionEarned || 0) + secondLevelCommission
+          await update(referralRef2, { commissionEarned: newTotal })
+        }
+
+        // Add commission notification for second-level referrer
+        const notificationRef2 = push(ref(db, `notifications/${secondLevelReferrerId}`))
+        await set(notificationRef2, {
+          type: 'commission',
+          amount: secondLevelCommission,
+          fromPlayerId: directReferrerId,
+          level: 2,
+          timestamp: Date.now(),
+          claimed: false,
+        })
+      }
+    }
   } catch (err) {
     console.warn('Firebase processCommissionForReferrer failed:', err)
   }

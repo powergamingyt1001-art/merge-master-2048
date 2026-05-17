@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Crown, Medal, Star, Trophy, Swords, Coins, Wifi, WifiOff, Target, ChevronRight } from 'lucide-react'
 import { getLeaderboardPlayers, onLeaderboardUpdate, type FirebasePlayer } from '@/lib/firebase-service'
@@ -25,6 +25,7 @@ interface LeaderboardEntry {
   avatar: string
   value: number
   isPlayer: boolean
+  isOnline: boolean
 }
 
 // Fake players for fallback when Firebase is unavailable
@@ -68,6 +69,56 @@ const OFFLINE_RANKS = [
   { name: 'Godlike Guru', avatar: '🌟', targetScore: 15000 },
 ]
 
+// Seeded random for consistent fake player online status per session
+const fakeOnlineStatuses = new Map<string, boolean>()
+function isFakePlayerOnline(name: string): boolean {
+  if (!fakeOnlineStatuses.has(name)) {
+    fakeOnlineStatuses.set(name, Math.random() > 0.5)
+  }
+  return fakeOnlineStatuses.get(name)!
+}
+
+function isFirebasePlayerOnline(lastActive: number | undefined): boolean {
+  if (!lastActive) return false
+  return Date.now() - lastActive < 5 * 60 * 1000 // 5 minutes
+}
+
+function deduplicateAndEnsureUniqueTop3(entries: LeaderboardEntry[]): LeaderboardEntry[] {
+  // Step 1: Deduplicate same name + same value entries
+  const seen = new Set<string>()
+  const deduped: LeaderboardEntry[] = []
+  for (const entry of entries) {
+    const key = `${entry.name.toLowerCase()}_${entry.value}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      deduped.push(entry)
+    }
+  }
+
+  // Step 2: Ensure top 3 have unique names (no duplicate names in top 3)
+  const top3: LeaderboardEntry[] = []
+  const rest: LeaderboardEntry[] = []
+  const top3Names = new Set<string>()
+
+  for (const entry of deduped) {
+    if (top3.length < 3) {
+      if (entry.isPlayer || !top3Names.has(entry.name.toLowerCase())) {
+        top3.push(entry)
+        top3Names.add(entry.name.toLowerCase())
+      } else {
+        rest.push(entry)
+      }
+    } else {
+      rest.push(entry)
+    }
+  }
+
+  // Recombine and re-rank
+  const result = [...top3, ...rest]
+  result.forEach((e, i) => { e.rank = i + 1 })
+  return result
+}
+
 function buildModesLeaderboard(playerBestScore: number, playerName: string, playerAvatar: string, firebasePlayers: FirebasePlayer[], playerId: string): LeaderboardEntry[] {
   const entries: LeaderboardEntry[] = []
 
@@ -75,18 +126,25 @@ function buildModesLeaderboard(playerBestScore: number, playerName: string, play
     // Use real Firebase data
     firebasePlayers.forEach(p => {
       if (p.id !== playerId) {
-        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.bestScore || 0, isPlayer: false })
+        entries.push({
+          rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎',
+          value: p.bestScore || 0, isPlayer: false,
+          isOnline: isFirebasePlayerOnline(p.lastActive),
+        })
       }
     })
   } else {
     // Fallback to fake data
-    FAKE_PLAYERS_MODES.forEach(p => entries.push({ rank: 0, name: p.name, avatar: p.avatar, value: p.score, isPlayer: false }))
+    FAKE_PLAYERS_MODES.forEach(p => entries.push({
+      rank: 0, name: p.name, avatar: p.avatar, value: p.score,
+      isPlayer: false, isOnline: isFakePlayerOnline(p.name),
+    }))
   }
 
-  entries.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', value: playerBestScore, isPlayer: true })
+  entries.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', value: playerBestScore, isPlayer: true, isOnline: true })
   entries.sort((a, b) => b.value - a.value)
   entries.forEach((e, i) => { e.rank = i + 1 })
-  return entries
+  return deduplicateAndEnsureUniqueTop3(entries)
 }
 
 function buildCoinsLeaderboard(playerCoins: number, playerName: string, playerAvatar: string, firebasePlayers: FirebasePlayer[], playerId: string): LeaderboardEntry[] {
@@ -95,17 +153,24 @@ function buildCoinsLeaderboard(playerCoins: number, playerName: string, playerAv
   if (firebasePlayers.length > 0) {
     firebasePlayers.forEach(p => {
       if (p.id !== playerId) {
-        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.coins || 0, isPlayer: false })
+        entries.push({
+          rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎',
+          value: p.coins || 0, isPlayer: false,
+          isOnline: isFirebasePlayerOnline(p.lastActive),
+        })
       }
     })
   } else {
-    FAKE_PLAYERS_COINS.forEach(p => entries.push({ rank: 0, name: p.name, avatar: p.avatar, value: p.coins || 0, isPlayer: false }))
+    FAKE_PLAYERS_COINS.forEach(p => entries.push({
+      rank: 0, name: p.name, avatar: p.avatar, value: p.coins || 0,
+      isPlayer: false, isOnline: isFakePlayerOnline(p.name),
+    }))
   }
 
-  entries.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', value: playerCoins, isPlayer: true })
+  entries.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', value: playerCoins, isPlayer: true, isOnline: true })
   entries.sort((a, b) => b.value - a.value)
   entries.forEach((e, i) => { e.rank = i + 1 })
-  return entries
+  return deduplicateAndEnsureUniqueTop3(entries)
 }
 
 function getOfflineRank(playerBestScore: number): { currentRank: number; nextTarget: typeof OFFLINE_RANKS[0] | null; beatenRanks: number } {
@@ -136,9 +201,9 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
     return unsubscribe
   }, [])
 
-  const modesEntries = buildModesLeaderboard(bestScore, playerName, playerAvatar, firebasePlayers, playerId)
-  const coinsEntries = buildCoinsLeaderboard(coins, playerName, playerAvatar, firebasePlayers, playerId)
-  const { currentRank, nextTarget, beatenRanks } = getOfflineRank(bestScore)
+  const modesEntries = useMemo(() => buildModesLeaderboard(bestScore, playerName, playerAvatar, firebasePlayers, playerId), [bestScore, playerName, playerAvatar, firebasePlayers, playerId])
+  const coinsEntries = useMemo(() => buildCoinsLeaderboard(coins, playerName, playerAvatar, firebasePlayers, playerId), [coins, playerName, playerAvatar, firebasePlayers, playerId])
+  const { currentRank, nextTarget, beatenRanks } = useMemo(() => getOfflineRank(bestScore), [bestScore])
 
   return (
     <AnimatePresence>
@@ -155,6 +220,18 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
               <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
                 <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
               </button>
+            </div>
+
+            {/* Online/Offline Legend */}
+            <div className="mx-4 mb-1.5 flex items-center gap-3">
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#00E676' }} />
+                <span className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Online</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#F65E3B' }} />
+                <span className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Offline</span>
+              </div>
             </div>
 
             {/* Live indicator */}
@@ -203,7 +280,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
                   {/* List below */}
                   <div className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
                     {modesEntries.slice(3).map((entry) => (
-                      <RankRow key={entry.rank} entry={entry} color="#F65E3B" />
+                      <RankRow key={`${entry.rank}-${entry.name}`} entry={entry} color="#F65E3B" />
                     ))}
                   </div>
                 </div>
@@ -222,7 +299,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
                   {/* List below */}
                   <div className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
                     {coinsEntries.slice(3).map((entry) => (
-                      <RankRow key={entry.rank} entry={entry} color="#EDC22E" />
+                      <RankRow key={`${entry.rank}-${entry.name}`} entry={entry} color="#EDC22E" />
                     ))}
                   </div>
                 </div>
@@ -328,7 +405,15 @@ function PodiumSlot({ entry, place }: { entry: LeaderboardEntry; place: 1 | 2 | 
 
   return (
     <div className="flex flex-col items-center" style={{ minWidth: place === 1 ? 80 : 68 }}>
-      <span className={`${avatarSize} mb-0.5`}>{entry.avatar}</span>
+      <div className="relative mb-0.5">
+        <span className={`${avatarSize}`}>{entry.avatar}</span>
+        {/* Online dot on avatar */}
+        <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
+          style={{
+            backgroundColor: entry.isOnline ? '#00E676' : '#F65E3B',
+            border: '1.5px solid #1a0533',
+          }} />
+      </div>
       <div className={`w-full ${height} rounded-t-lg text-center`} style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}` }}>
         {place === 1 ? (
           <Crown className="w-4 h-4 mx-auto mb-0.5" style={{ color: '#FFD700' }} />
@@ -355,6 +440,9 @@ function RankRow({ entry, color }: { entry: LeaderboardEntry; color: string }) {
       style={{ backgroundColor: entry.isPlayer ? 'rgba(237,194,46,0.12)' : 'rgba(255,255,255,0.03)', border: entry.isPlayer ? '1px solid rgba(237,194,46,0.2)' : '1px solid transparent' }}>
       <span className="text-[10px] font-bold w-5 text-center" style={{ color: 'rgba(255,255,255,0.4)' }}>#{entry.rank}</span>
       <span className="text-sm">{entry.avatar}</span>
+      {/* Online/Offline dot */}
+      <div className="w-2 h-2 rounded-full flex-shrink-0"
+        style={{ backgroundColor: entry.isOnline ? '#00E676' : '#F65E3B' }} />
       <span className="text-[10px] font-semibold flex-1 truncate" style={{ color: entry.isPlayer ? '#EDC22E' : 'rgba(255,255,255,0.7)' }}>
         {entry.name} {entry.isPlayer && '(You)'}
       </span>

@@ -219,3 +219,309 @@ Stage Summary:
 - All ad changes implemented and pushed
 - Vercel will auto-deploy from GitHub
 - Pending: Itch.io dummy HTML file
+
+---
+Task ID: 1
+Agent: Game Systems Overhaul Agent
+Task: Major useGame.ts overhaul - Level system, point conversion, abilities, coupons, commission
+
+Work Log:
+- **1. NEW LEVEL SYSTEM**: Replaced entire level system
+  - MAX_LEVEL changed from 1000 to 200
+  - Replaced piecewise power-law `getLevelThreshold()` with exact XP lookup table for levels 1-100
+  - Formula for levels 101-200: `threshold = 25000 + (n-100) * 2500 + (n-100)^2 * 50`
+  - Updated `getLevelTitle()`, `getLevelIcon()`, `getLevelColor()` for 200 max level
+  - Removed unused level ranges (201-500, 501-1000)
+
+- **2. POINT CONVERSION SYSTEM**: New score-to-XP pipeline
+  - 50 score = 1.5 tournament points (was 20 score = 1 point)
+  - 3 tournament points = 1 XP (NEW conversion)
+  - Effectively: 100 score → 3 points → 1 XP
+  - Added `scorePoints` and `scorePointsCarryOver` state fields for fractional point precision
+  - Added `convertScoreToXPAndTournamentPoints()` helper function
+  - Updated `calculateTournamentPoints()` and `tickBattleTimer()` tournament section
+
+- **3. TIMER PAUSE ON TAB SWITCH**: Added visibility detection
+  - Added `timerPausedByVisibility` state field
+  - Added `document.visibilitychange` listener in useEffect
+  - When tab becomes hidden during battle: sets `timerPausedByVisibility=true` and `timerPaused=true`
+  - When tab becomes visible and was paused by visibility (not by lives=0): resumes timer
+  - Does not interfere with ad-revive pause (lives=0)
+
+- **4. ABILITY SYSTEM**: Added 3 new abilities
+  - `multiply5`: 5x score multiplier for 10 seconds (limited uses)
+  - `multiply2_5`: 2.5x score multiplier for 10 seconds (limited uses)
+  - `timeExtend`: Adds 10 seconds to battle timer (limited uses)
+  - New state fields: `multiply5Count`, `multiply2_5Count`, `timeExtendCount`, `activeAbility`, `abilityTimer`
+  - Added `tickAbilityTimer()`, `activateMultiply5()`, `activateMultiply2_5()`, `activateTimeExtend()`, `addAbility()`
+  - Score multiplier applied in `handleMove()` - multiplies `scoreGain + comboExtra`
+  - Abilities cleared on game start, reset, and back-to-dashboard
+
+- **5. FAIR BOT GAMEPLAY**: Fixed tie-breaking
+  - Changed all `>` comparisons to `>=` for bot score vs player score
+  - Ties now count as player wins, balancing the 50/50 win rate
+  - Applied in `handleMove()` (bot/coins/tournament checks) and `tickBattleTimer()`
+
+- **6. COUPON CODE SYSTEM**: Added daily coupon codes
+  - New state fields: `couponCodes` (array), `lastCouponRefresh`
+  - Added `CouponCode` interface
+  - Special codes: '100Boom' (100 blast), '10kCoin' (10000 coins)
+  - Regular codes: random rewards (coins, power-ups)
+  - Day coupon active 12PM-11:59PM IST, Night coupon 12AM-11:59AM IST
+  - Added `validateCouponCode()`, `claimCouponCode()`, `generateCoupons()`
+  - `generateDailyCoupons()` helper with IST timezone awareness
+
+- **7. COMMISSION SYSTEM UPDATE**: Changed from 5% flat to tiered
+  - 30% for direct referrals (first level) - was 5%
+  - 10% for second-level referrals (referrals of referrals) - NEW
+  - Updated `processCommissionForReferrer()` in firebase-service.ts
+  - Added second-level referrer lookup and commission notification
+
+- **8. MORE COIN GAME MODES**: Added higher-stakes modes
+  - Added: 2000→4000, 3000→6000, 4000→8000, 5000→10000
+  - Now 9 total coin game modes (was 5)
+
+- **9. LEVEL COMPLETION REWARDS**: Added coin rewards for leveling up
+  - 100 coins per level completion (added silently)
+  - Every 5 levels (5, 10, 15, 20...): bonus 200 + 100 extra = total 400 coins
+  - Added `pendingLevelUpCoins` state field
+  - `calculateLevelUpCoins()` helper computes coins between old and new level
+  - Level-up coins automatically added to player balance in tournament point conversion
+
+- **Backward Compatibility**: All new state fields use `??` fallbacks when loading saved data
+- All new fields saved to localStorage in the save effect
+- Build succeeds, lint passes with zero errors
+
+Stage Summary:
+- Complete game systems overhaul: 9 major changes to useGame.ts
+- Level system: 200 levels with exact XP table (1-100) and formula (101-200)
+- Score conversion: 50 score → 1.5 points → 3 points → 1 XP
+- 3 new abilities: 5x multiplier, 2.5x multiplier, time extend
+- Timer pauses on tab switch, resumes on return
+- Fair bot: ties = player wins
+- Coupon code system with IST-timezone daily codes
+- Commission: 30% direct + 10% second-level
+- 9 coin game modes (up to ₹5000 entry)
+- Level-up coin rewards (100 per level, 400 every 5th level)
+
+---
+Task ID: 3-4
+Agent: GameBoard Agent
+Task: Add searching/matchmaking animation + ability icons to GameBoard.tsx
+
+Work Log:
+- Added searching/matchmaking animation BEFORE the 3-2-1 countdown for battle modes
+  - When a battle (bot/coins/tournament) starts, a "Searching for opponent" overlay appears
+  - Player's avatar (left, fixed) vs cycling opponent avatars (right, every 200ms)
+  - "VS" text in center with glowing animation
+  - "Finding opponent..." text with animated bouncing dots
+  - After 2.5s, opponent stops cycling and "Opponent Found!" appears with spring animation
+  - After 0.5s more, searching overlay fades out and 3-2-1 countdown begins
+  - Ad banners (320x50) placed ABOVE and BELOW the searching box
+  - Only shows for battle modes (not classic)
+  - Used `searchingStartedRef` to prevent re-triggering and `requestAnimationFrame` to avoid lint error with setState in effect
+
+- Added 3 ability buttons to power-ups row (after bomb, with separator)
+  - 5x Multiplier: ⚡ icon with "5x" label, magenta (#FF00FF) color
+  - 2.5x Multiplier: 💫 icon with "2.5x" label, cyan (#00FFFF) color
+  - Time Extend: ⏱️ icon with "+10s" label, green (#00E676) color
+  - Each shows count badge like other power-ups
+  - Active abilities show glowing border + countdown timer on button
+  - Disabled during countdown or when count is 0
+  - Only visible in battle modes
+  - Created new `AbilityBtn` sub-component with timer display support
+
+- Added activeAbility indicator below power-ups row
+  - Shows which multiplier is active (5x or 2.5x) with colored text
+  - Shows remaining seconds countdown
+  - Progress bar showing 10-second duration remaining
+  - Magenta gradient for 5x, cyan gradient for 2.5x
+  - Uses AnimatePresence for smooth enter/exit
+
+- Added multiplier indicator next to score in header
+  - Shows "5x" or "2.5x" in magenta/cyan when ability is active
+
+- Added `tickAbilityTimer` effect (every second when abilityTimer > 0)
+  - Calls tickAbilityTimer from useGame hook
+  - Cleans up interval on unmount or when ability expires
+
+- Extracted ability-related fields from GameContext (multiply5Count, multiply2_5Count, timeExtendCount, activeAbility, abilityTimer, etc.)
+  - Used type assertion since GameContext is typed as `unknown`
+
+- Added CSS animations: searchPulse, vsGlow, dotBounce (injected via useEffect)
+
+- Lint check passes with zero errors
+- Dev server running on port 3000
+
+Stage Summary:
+- Searching animation: Player avatar vs cycling opponents → "Found!" → countdown → game start
+- 3 ability buttons in power-ups row (5x, 2.5x, time extend) for battle modes only
+- Active ability indicator with timer + progress bar
+- Ability timer tick effect integrated
+- All changes lint-clean
+
+---
+Task ID: 10-11-14
+Agent: Main Agent
+Task: Fix ProfilePanel level progress, update Leaderboard rank system, add Tournament next-player-to-beat
+
+Work Log:
+- **1. FIXED ProfilePanel.tsx - Level Progress using levelXP**
+  - Changed import: replaced `getNextLevelPoints`/`getCurrentLevelPoints` with `getLevelThreshold`
+  - Added `levelXP: number` prop to ProfilePanelProps
+  - Updated progress calculation: `progressPct = (levelXP - currentLevelThreshold) / (nextLevelThreshold - currentLevelThreshold) * 100`
+  - Uses `getLevelThreshold(playerLevel)` for current and `getLevelThreshold(playerLevel + 1)` for next
+  - Updated progress bar label from `pts` to `XP`
+  - Updated "more points to Level X" to "more XP to Level X"
+  - Changed stats grid: "Game Points" → "Level XP" showing `levelXP / nextLevelThreshold`
+  - Updated "How Points Work" section with new conversion system:
+    - 50 score = 1.5 points from merges
+    - 3 points = 1 XP
+    - XP determines your level
+    - 100 coins per level completion
+    - Bonus 400 coins every 5 levels
+    - Daily limit info preserved
+
+- **2. UPDATED PlayDashboard.tsx - Added levelXP prop**
+  - Added `levelXP: number` to PlayDashboardProps interface
+  - Passed `levelXP={levelXP}` to ProfilePanel component
+
+- **3. UPDATED page.tsx - Pass levelXP from game state**
+  - Added `levelXP={game.levelXP}` to PlayDashboard props
+
+- **4. UPDATED Leaderboard.tsx - Rank System Fixes**
+  - **Deduplication**: Added `deduplicateAndEnsureUniqueTop3()` function that:
+    - Merges entries with same name AND same value into one
+    - Ensures top 3 positions have unique names (no duplicate name in top 3)
+  - **Online/Offline indicator dots**:
+    - Added `isOnline: boolean` field to `LeaderboardEntry` interface
+    - For Firebase players: checks `lastActive` timestamp, green if within 5 minutes
+    - For fake/fallback players: randomly assigns online/offline status (consistent per session via Map)
+    - Player (You) always shown as online
+    - Added green dot (#00E676) on PodiumSlot avatar corner
+    - Added green/red dot before player name in RankRow
+    - Added legend at top: "🟢 Online  🔴 Offline"
+  - Used `useMemo` for entries computation to avoid unnecessary recalculations
+  - Updated list keys to use `${entry.rank}-${entry.name}` for uniqueness
+
+- **5. UPDATED Tournament.tsx - Next Player to Beat**
+  - After building player rankings, finds the player ranked one position above current user
+  - Added `nextPlayerAbove` variable: `playerRank > 1 ? players.find(p => p.rank === playerRank - 1) : null`
+  - Added new section between stats row and PLAY button:
+    - Shows next player's avatar, name, and points
+    - "Beat to advance!" label in #F65E3B color
+    - TrendingUp icon for visual emphasis
+    - Styled with orange-tinted background matching game theme
+    - Only shown when `playerRank > 1` (not already #1)
+
+- Lint check passes with zero errors (`bun run lint` ✅)
+
+Stage Summary:
+- ProfilePanel: Level progress now uses levelXP with getLevelThreshold() instead of gamePoints
+- ProfilePanel: Stats show "Level XP" with current/target XP display
+- ProfilePanel: "How Points Work" explains new XP conversion system
+- Leaderboard: Same name+score entries are deduplicated into one
+- Leaderboard: Top 3 positions have unique names
+- Leaderboard: Green/red online/offline dots next to each player name
+- Tournament: "Beat to advance!" section shows next player to beat for ladder progression
+- All changes backward compatible with existing Firebase integration
+
+---
+Task ID: 5-7-12
+Agent: Dashboard Update Agent
+Task: Add CouponPanel, update SpinWheel with rare items, premium LoginStreak UI, ability inventory, commission display
+
+Work Log:
+
+- **1. CREATED CouponPanel.tsx** (`/src/components/game/CouponPanel.tsx`)
+  - New component for coupon code claiming
+  - Shows daily Day Coupon (12PM-11:59PM IST) and Night Coupon (12AM-11:59AM IST)
+  - Input field for special codes like "100Boom" and "10kCoin"
+  - Quick-tap buttons to auto-fill special codes
+  - Recently claimed coupons list
+  - Info section about IST refresh times
+  - Same dark theme as other panels (linear-gradient(135deg, #1a0533, #0d1b3e))
+  - Props: couponCodes, onValidateCoupon, onClaimCoupon, onAddNotification
+
+- **2. UPDATED SpinWheel.tsx - 3 Rare Prize Items**
+  - Added 3 new rare items to PRIZE_POOL (now 11 total, was 8):
+    - 5x Ability (⚡, #FF00FF) - weight 0.5 (rarest)
+    - 2.5x Ability (💫, #00FFFF) - weight 1.0
+    - +10s Timer (⏱️, #00E676) - weight 1.5
+  - Updated SpinPrize type to include 'multiply5' | 'multiply2_5' | 'timeExtend'
+  - Adjusted SVG text sizes (fontSize 12→10, 5→4) for 11-segment layout
+  - Wheel auto-adjusts sliceAngle via `360 / PRIZE_POOL.length`
+
+- **3. UPDATED LoginStreak.tsx - Premium UI + Ability Rewards**
+  - Added shimmer/glow animation on current day's card:
+    - Framer Motion boxShadow pulsing animation (2s infinite)
+    - Shimmer overlay sweeping across card (linear-gradient 110deg)
+  - Day 7 gets special golden shimmer even when not current
+  - Added ability badges on reward cards:
+    - Day 3: 💫 2.5x Ability badge
+    - Day 5: ⏱️ +10s Timer badge
+    - Day 7: ⚡ 5x + 💫 2.5x + ⏱️ +10s badges (BIG reward!)
+  - Color-coded ability badges (magenta for 5x, cyan for 2.5x, green for timer)
+  - Updated STREAK_REWARDS with abilities array for each day
+  - Claim card also shows ability badges when applicable
+
+- **4. UPDATED useGame.ts - Abilities in Streak Rewards**
+  - Updated `claimStreakDay()` to grant abilities:
+    - Day 3 (index 2): +1 multiply2_5
+    - Day 5 (index 4): +1 timeExtend
+    - Day 7 (index 6): +1 multiply5, +1 multiply2_5, +1 timeExtend
+  - Added `addMultiply5`, `addMultiply2_5`, `addTimeExtend` variables in switch statement
+
+- **5. UPDATED PlayDashboard.tsx - Multiple Changes**
+  - a) Replaced "Tour" button with "Coupon" button:
+    - Changed icon from Trophy to Ticket (imported from lucide-react)
+    - Opens CouponPanel instead of Tournament
+  - b) Updated COIN_GAME_MODES with new colors:
+    - ₹2000: #FF00FF (was #FF4500)
+    - ₹3000: #9C27B0 (was #DC143C)
+    - ₹4000: #E91E63 (was #8B0000)
+    - ₹5000: #F44336 (was #4B0082)
+  - c) Changed coin game grid from `grid-cols-5` to `grid-cols-3`
+  - d) Changed commission display from "5%" to "30%"
+  - e) Added ability counts to inventory bar (after bomb):
+    - ⚡ multiply5Count (#FF00FF)
+    - 💫 multiply2_5Count (#00FFFF)
+    - ⏱️ timeExtendCount (#00E676)
+  - f) Added "Coupon" button to Quick Actions grid (now 5 columns instead of 4):
+    - 🎫 Coupon button with magenta theme (#FF00FF)
+    - Grid changed from `grid-cols-4` to `grid-cols-5`
+  - g) Updated handleSpinPrize to handle new prize types:
+    - multiply5: calls onAddAbility('multiply5', count)
+    - multiply2_5: calls onAddAbility('multiply2_5', count)
+    - timeExtend: calls onAddAbility('timeExtend', count)
+  - h) Added CouponPanel modal to modals section
+  - i) Added new props to PlayDashboardProps:
+    - multiply5Count, multiply2_5Count, timeExtendCount (numbers)
+    - onAddAbility (callback)
+    - couponCodes (CouponCode[])
+    - onValidateCoupon (callback)
+    - onClaimCouponCode (callback)
+  - j) Imported CouponCode, AbilityType from useGame
+  - k) Imported CouponPanel component
+  - l) Added showCoupon state
+  - m) Fixed levelXP destructuring (was in interface but not destructured)
+
+- **6. UPDATED page.tsx - New Props and Handlers**
+  - Added new props to PlayDashboard:
+    - multiply5Count={game.multiply5Count}
+    - multiply2_5Count={game.multiply2_5Count}
+    - timeExtendCount={game.timeExtendCount}
+    - onAddAbility={game.addAbility}
+    - couponCodes={game.couponCodes}
+    - onValidateCoupon={game.validateCouponCode}
+    - onClaimCouponCode={game.claimCouponCode}
+
+- **Build & Lint**: Both pass with zero errors (`bun run lint` ✅, `next build` ✅)
+
+Stage Summary:
+- CouponPanel: Full coupon code UI with daily codes, special code input, claimed history
+- SpinWheel: 11 prizes now (3 rare abilities added with very low weights)
+- LoginStreak: Premium shimmer/glow animations, ability rewards on days 3/5/7
+- PlayDashboard: Coupon button replaces Tour, abilities in inventory, 30% commission, 3-col coin grid, Coupon quick action
+- useGame: Streak rewards now grant abilities (2.5x on Day 3, +10s on Day 5, all 3 on Day 7)
+- page.tsx: All new props wired up correctly

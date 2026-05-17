@@ -204,6 +204,7 @@ export default function Home() {
                 tournamentPoints={game.tournamentPoints}
                 tournamentCarryOver={game.tournamentCarryOver}
                 tournamentGamesPlayed={game.tournamentGamesPlayed}
+                levelXP={game.levelXP}
                 onPlayClassic={handlePlayClassic}
                 onStartBotBattle={handleStartBotBattle}
                 onStartCoinGame={handleStartCoinGame}
@@ -230,6 +231,13 @@ export default function Home() {
                 onResetAllData={game.resetAllData}
                 weeklyBonusClaimed={game.weeklyBonusClaimed}
                 onClaimWeeklyBonus={game.claimWeeklyBonus}
+                multiply5Count={game.multiply5Count}
+                multiply2_5Count={game.multiply2_5Count}
+                timeExtendCount={game.timeExtendCount}
+                onAddAbility={game.addAbility}
+                couponCodes={game.couponCodes}
+                onValidateCoupon={game.validateCouponCode}
+                onClaimCouponCode={game.claimCouponCode}
               />
             )}
             {phase === 'game' && <GameBoard key="game" onBackToDashboard={handleBackToDashboard} onPlayAgain={handlePlayAgain} />}

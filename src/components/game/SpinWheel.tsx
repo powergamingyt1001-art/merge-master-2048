@@ -17,14 +17,14 @@ interface SpinWheelProps {
 }
 
 export interface SpinPrize {
-  type: 'blast' | 'magnet' | 'hammer' | 'undo' | 'spin' | 'coin' | 'respin'
+  type: 'blast' | 'magnet' | 'hammer' | 'undo' | 'spin' | 'coin' | 'respin' | 'multiply5' | 'multiply2_5' | 'timeExtend'
   count: number
   label: string
   emoji: string
   color: string
 }
 
-// 8 items with user-specified probabilities (normalized to 100%)
+// 11 items with user-specified probabilities (normalized to 100%)
 const PRIZE_POOL: { prize: SpinPrize; weight: number }[] = [
   { prize: { type: 'blast', count: 2, label: '2 Boom', emoji: '💣', color: '#FF7A00' }, weight: 6 },
   { prize: { type: 'magnet', count: 3, label: '3 Magnet', emoji: '🧲', color: '#00E676' }, weight: 5 },
@@ -34,6 +34,9 @@ const PRIZE_POOL: { prize: SpinPrize; weight: number }[] = [
   { prize: { type: 'undo', count: 3, label: '3 Undo', emoji: '↩️', color: '#8f7a66' }, weight: 5 },
   { prize: { type: 'spin', count: 1, label: '1 Spin Ticket', emoji: '🎫', color: '#00FFFF' }, weight: 7 },
   { prize: { type: 'coin', count: 100, label: '100 Coins', emoji: '💰', color: '#EDC22E' }, weight: 6 },
+  { prize: { type: 'multiply5', count: 1, label: '5x Ability', emoji: '⚡', color: '#FF00FF' }, weight: 0.5 },
+  { prize: { type: 'multiply2_5', count: 1, label: '2.5x Ability', emoji: '💫', color: '#00FFFF' }, weight: 1 },
+  { prize: { type: 'timeExtend', count: 1, label: '+10s Timer', emoji: '⏱️', color: '#00E676' }, weight: 1.5 },
 ]
 
 function pickPrize(): { index: number; prize: SpinPrize } {
@@ -173,10 +176,10 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
                               stroke={item.prize.color + '40'}
                               strokeWidth="0.5"
                             />
-                            <text x={tx} y={ty - 4} textAnchor="middle" dominantBaseline="middle" fontSize="12" fontWeight="bold">
+                            <text x={tx} y={ty - 3} textAnchor="middle" dominantBaseline="middle" fontSize="10" fontWeight="bold">
                               {item.prize.emoji}
                             </text>
-                            <text x={tx} y={ty + 10} textAnchor="middle" dominantBaseline="middle" fontSize="5" fontWeight="bold" fill="white">
+                            <text x={tx} y={ty + 8} textAnchor="middle" dominantBaseline="middle" fontSize="4" fontWeight="bold" fill="white">
                               {item.prize.label}
                             </text>
                           </g>

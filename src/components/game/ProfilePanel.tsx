@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users, TrendingUp, Percent } from 'lucide-react'
-import { Notification, PLAYER_AVATARS, getLevelInfo, getNextLevelPoints, getCurrentLevelPoints, MAX_LEVEL } from '@/hooks/useGame'
+import { Notification, PLAYER_AVATARS, getLevelInfo, getLevelThreshold, MAX_LEVEL } from '@/hooks/useGame'
 
 interface ProfilePanelProps {
   isOpen: boolean
@@ -12,6 +12,7 @@ interface ProfilePanelProps {
   playerAvatar: string
   playerLevel: number
   gamePoints: number
+  levelXP: number
   bestScore: number
   modBestScore: number
   coins: number
@@ -29,7 +30,7 @@ interface ProfilePanelProps {
 
 export function ProfilePanel({
   isOpen, onClose, playerName, playerAvatar, playerLevel,
-  gamePoints, bestScore, modBestScore, coins,
+  gamePoints, levelXP, bestScore, modBestScore, coins,
   gamesPlayedToday, maxGamesPerDay, invitedUsers,
   onUpdateName, onUpdateAvatar,
   totalBattlesPlayed, totalBattlesWon,
@@ -40,11 +41,12 @@ export function ProfilePanel({
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
 
   const levelInfo = getLevelInfo(playerLevel)
-  const nextLevelPts = getNextLevelPoints(playerLevel)
-  const currentLevelPts = getCurrentLevelPoints(playerLevel)
-  const progressPct = nextLevelPts > currentLevelPts
-    ? Math.min(100, ((gamePoints - currentLevelPts) / (nextLevelPts - currentLevelPts)) * 100)
+  const currentLevelThreshold = getLevelThreshold(playerLevel)
+  const nextLevelThreshold = getLevelThreshold(playerLevel + 1)
+  const progressPct = nextLevelThreshold > currentLevelThreshold
+    ? Math.min(100, ((levelXP - currentLevelThreshold) / (nextLevelThreshold - currentLevelThreshold)) * 100)
     : 100
+  const xpNeededForNextLevel = playerLevel < MAX_LEVEL ? nextLevelThreshold - levelXP : 0
 
   const winPercentage = totalBattlesPlayed > 0
     ? Math.round((totalBattlesWon / totalBattlesPlayed) * 100)
@@ -160,14 +162,14 @@ export function ProfilePanel({
               <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-[10px] font-bold" style={{ color: levelInfo.color }}>Level {playerLevel} Progress</span>
-                  <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{gamePoints.toLocaleString()} / {nextLevelPts.toLocaleString()} pts</span>
+                  <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{levelXP.toLocaleString()} / {nextLevelThreshold.toLocaleString()} XP</span>
                 </div>
                 <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
                   <div className="h-full rounded-full transition-all" style={{ width: `${progressPct}%`, background: `linear-gradient(90deg, ${levelInfo.color}, ${levelInfo.color}CC)` }} />
                 </div>
                 {playerLevel < MAX_LEVEL && (
                   <p className="text-[8px] mt-1 text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                    {(nextLevelPts - gamePoints).toLocaleString()} more points to Level {playerLevel + 1}
+                    {xpNeededForNextLevel.toLocaleString()} more XP to Level {playerLevel + 1}
                   </p>
                 )}
                 {playerLevel >= MAX_LEVEL && (
@@ -207,7 +209,7 @@ export function ProfilePanel({
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <StatBox icon={<Trophy className="w-4 h-4" />} label="Best Score" value={bestScore.toLocaleString()} color="#EDC22E" />
                 <StatBox icon={<Swords className="w-4 h-4" />} label="Mod Best" value={modBestScore > 0 ? modBestScore.toLocaleString() : '-'} color="#F65E3B" />
-                <StatBox icon={<Target className="w-4 h-4" />} label="Game Points" value={gamePoints.toLocaleString()} color="#00E676" />
+                <StatBox icon={<Target className="w-4 h-4" />} label="Level XP" value={`${levelXP.toLocaleString()} / ${nextLevelThreshold.toLocaleString()}`} color="#00E676" />
                 <StatBox icon={<Coins className="w-4 h-4" />} label="Coins" value={coins.toLocaleString()} color="#EDC22E" />
                 <StatBox icon={<Calendar className="w-4 h-4" />} label="Games Today" value={`${gamesPlayedToday}/${maxGamesPerDay}`} color="#00FFFF" />
                 <StatBox icon={<Users className="w-4 h-4" />} label="Invited" value={invitedUsers.length.toString()} color="#F59563" />
@@ -218,13 +220,19 @@ export function ProfilePanel({
                 <p className="text-[10px] font-bold mb-1" style={{ color: '#00E676' }}>📊 How Points Work</p>
                 <ul className="space-y-0.5">
                   <li className="text-[9px] flex items-start gap-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                    <span style={{ color: '#00E676' }}>•</span> Points = your in-game score from merges
+                    <span style={{ color: '#00E676' }}>•</span> 50 score = 1.5 points from merges
                   </li>
                   <li className="text-[9px] flex items-start gap-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                    <span style={{ color: '#00E676' }}>•</span> Combo bonus (3 merges = 1/5 extra) counts too
+                    <span style={{ color: '#00E676' }}>•</span> 3 points = 1 XP
                   </li>
                   <li className="text-[9px] flex items-start gap-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                    <span style={{ color: '#00E676' }}>•</span> Coins from spin/daily do NOT count
+                    <span style={{ color: '#00E676' }}>•</span> XP determines your level
+                  </li>
+                  <li className="text-[9px] flex items-start gap-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    <span style={{ color: '#00E676' }}>•</span> 100 coins per level completion
+                  </li>
+                  <li className="text-[9px] flex items-start gap-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    <span style={{ color: '#00E676' }}>•</span> Bonus 400 coins every 5 levels
                   </li>
                   <li className="text-[9px] flex items-start gap-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
                     <span style={{ color: '#00E676' }}>•</span> Daily limit: {maxGamesPerDay} games
