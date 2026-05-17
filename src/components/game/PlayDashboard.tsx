@@ -15,11 +15,22 @@ import {
   AdsterraNativeBanner,
   AdsterraBanner728x90,
   AdsterraBanner300x250,
-  AdsterraPopunder,
-  AdsterraSocialBar,
+  AdsterraBanner320x50,
 } from '@/components/ads/AdsterraAds'
 import { PowerUp, Notification, DailyTask, getLevelInfo } from '@/hooks/useGame'
 import { getRandomLink } from '@/components/ads/AdOverlay'
+
+// ===== BANNER ROTATION: One big banner per page per session =====
+type BannerSlot = 'top' | 'middle' | 'footer'
+function getDashboardBigBannerSlot(): BannerSlot {
+  if (typeof window === 'undefined') return 'top'
+  const stored = sessionStorage.getItem('dashboard_big_banner_slot')
+  if (stored && ['top', 'middle', 'footer'].includes(stored)) return stored as BannerSlot
+  const slots: BannerSlot[] = ['top', 'middle', 'footer']
+  const picked = slots[Math.floor(Math.random() * slots.length)]
+  sessionStorage.setItem('dashboard_big_banner_slot', picked)
+  return picked
+}
 
 interface PlayDashboardProps {
   coins: number
@@ -89,13 +100,6 @@ const COIN_GAME_MODES = [
   { fee: 1000, win: 2000, color: '#F65E3B', label: '₹1000' },
 ]
 
-// ===== BANNER ROTATION: One big banner per page per session =====
-type BannerSlot = "top" | "middle" | "footer";
-function getDashboardBigBannerSlot(): BannerSlot {
-  const slots: BannerSlot[] = ["top", "middle", "footer"];
-  return slots[Math.floor(Math.random() * slots.length)];
-}
-
 export function PlayDashboard({
   coins, spinTickets, streakDay, streakClaimed, welcomeClaimed,
   hammerCount, magnetCount, blastCount, modBestScore, gamePoints, bestScore,
@@ -127,16 +131,11 @@ export function PlayDashboard({
   const [showAbout, setShowAbout] = useState(false)
   const [showContact, setShowContact] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
-  const [bannerSlot, setBannerSlot] = useState<BannerSlot | null>(null)
+  const [bigBannerSlot] = useState<BannerSlot>(() => getDashboardBigBannerSlot())
 
   const unreadNotifications = notifications.filter(n => !n.read).length
   const gamesLeft = maxGamesPerDay - gamesPlayedToday
   const isGameLimitReached = gamesLeft <= 0
-
-  // Initialize banner slot on mount
-  useEffect(() => {
-    setBannerSlot(getDashboardBigBannerSlot())
-  }, [])
 
   // Show welcome gift for new users
   useEffect(() => {
@@ -195,12 +194,10 @@ export function PlayDashboard({
       <div className="absolute top-1/4 left-1/3 w-48 h-48 rounded-full opacity-20 pointer-events-none" style={{ background: 'radial-gradient(circle, #EDC22E, transparent)', filter: 'blur(60px)' }} />
       <div className="absolute bottom-1/4 right-1/3 w-56 h-56 rounded-full opacity-15 pointer-events-none" style={{ background: 'radial-gradient(circle, #FF7A00, transparent)', filter: 'blur(70px)' }} />
 
-      {/* ====== TOP AD =====  */}
-      {bannerSlot === "top" && (
-        <div className="flex-shrink-0 relative z-10 w-full">
-          <AdsterraBanner728x90 />
-        </div>
-      )}
+      {/* ====== HEADER AD - Big banner if 'top' slot, else small ====== */}
+      <div className="flex-shrink-0 relative z-10 w-full">
+        {bigBannerSlot === 'top' ? <AdsterraBanner728x90 /> : <AdsterraBanner320x50 />}
+      </div>
 
       {/* Scrollable content */}
       <div className="relative z-10 flex-1 overflow-y-auto">
@@ -213,7 +210,7 @@ export function PlayDashboard({
               style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
               <div className="w-7 h-7 rounded-full flex items-center justify-center"
                 style={{
-                  background: playerLevel >= 16 ? `linear-gradient(135deg, ${getLevelInfo(playerLevel).color}, ${getLevelInfo(playerLevel).color}88)` : playerLevel >= 6 ? `linear-gradient(135deg, ${getLevelInfo(playerLevel).color}, #0d1b3e)` : 'linear-gradient(135deg, #0d1b3e, #1a0533)',
+                  background: playerLevel >= 16 ? `linear-gradient(135deg, ${getLevelInfo(playerLevel).color}, ${getLevelInfo(playerLevel).color}88)` : playerLevel >= 6 ? `linear-gradient(135deg, ${getLevelInfo(playerLevel).color}, ${getLevelInfo(playerLevel).color}44)` : 'rgba(255,255,255,0.1)',
                   border: '1px solid rgba(255,255,255,0.2)',
                 }}>
                 <span className="text-sm">{playerAvatar}</span>
@@ -276,7 +273,7 @@ export function PlayDashboard({
           <div className="flex items-center gap-3 w-full justify-center">
             <button onClick={handlePlayClassic}
               className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full flex flex-col items-center justify-center transition-transform active:scale-95"
-              style={{ background: isGameLimitReached ? 'linear-gradient(135deg, #555, #333)' : 'linear-gradient(135deg, #EDC22E 0%, #FF7A00 100%)', boxShadow: isGameLimitReached ? 'none' : '0 4px 20px rgba(237,194,46,0.4)' }}>
+              style={{ background: isGameLimitReached ? 'linear-gradient(135deg, #555, #333)' : 'linear-gradient(135deg, #EDC22E 0%, #FF7A00 100%)', boxShadow: isGameLimitReached ? 'none' : '0 4px 20px rgba(237,194,46,0.5), 0 0 40px rgba(237,194,46,0.15), inset 0 -3px 8px rgba(0,0,0,0.2)' }}>
               {isGameLimitReached ? (
                 <>
                   <Lock className="w-6 h-6" style={{ color: 'rgba(255,255,255,0.5)' }} />
@@ -383,12 +380,10 @@ export function PlayDashboard({
             </button>
           )}
 
-          {/* MIDDLE AD  */}
-          {bannerSlot === "middle" && (
-            <div className="w-full">
-              <AdsterraBanner300x250 />
-            </div>
-          )}
+          {/* Native Banner Ad - compact */}
+          <div className="w-full">
+            <AdsterraNativeBanner />
+          </div>
 
           {/* Quick Actions: Streak + Spin + Weekly + Leaderboard */}
           <div className="w-full grid grid-cols-4 gap-1.5">
@@ -425,6 +420,13 @@ export function PlayDashboard({
               <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Board</p>
             </button>
           </div>
+
+          {/* 300x250 Banner Ad - Only show if 'middle' is the big banner slot */}
+          {bigBannerSlot === 'middle' && (
+            <div className="w-full">
+              <AdsterraBanner300x250 />
+            </div>
+          )}
 
           {/* Daily Tasks */}
           {dailyTasks && dailyTasks.length > 0 && (
@@ -511,16 +513,10 @@ export function PlayDashboard({
         </div>
       </div>
 
-      {/* ====== FOOTER AD ====== */}
-      {bannerSlot === "footer" && (
-        <div className="flex-shrink-0 relative z-10 w-full">
-          <AdsterraBanner728x90 />
-        </div>
-      )}
-
-      {/* Popunder + Social Bar */}
-      <AdsterraPopunder />
-      <AdsterraSocialBar />
+      {/* ====== FOOTER AD - Big banner if 'footer' slot, else small ====== */}
+      <div className="flex-shrink-0 relative z-10 w-full">
+        {bigBannerSlot === 'footer' ? <AdsterraBanner728x90 /> : <AdsterraBanner320x50 />}
+      </div>
 
       {/* Modals */}
       <SpinWheel isOpen={showSpin} onClose={() => setShowSpin(false)} spinTickets={spinTickets}

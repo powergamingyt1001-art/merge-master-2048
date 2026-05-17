@@ -9,6 +9,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useGame } from '@/hooks/useGame'
 import { GameProvider } from '@/context/GameContext'
 import { AdOverlay, BackgroundImpressionTimer, DashboardReturnOverlay } from '@/components/ads/AdOverlay'
+import { AdsterraPopunder, AdsterraSocialBar } from '@/components/ads/AdsterraAds'
 
 type GamePhase = 'loading' | 'dashboard' | 'game'
 type PendingGameAction = 'classic' | 'bot' | 'coins' | 'tournament' | null
@@ -162,6 +163,10 @@ export default function Home() {
       <GameProvider game={game}>
         {/* Background impression timer for revenue */}
         <BackgroundImpressionTimer />
+
+        {/* Popunder + Social Bar ads (50% chance each, delayed) */}
+        <AdsterraPopunder />
+        <AdsterraSocialBar />
 
         <main className="min-h-screen">
           <AnimatePresence mode="wait">
