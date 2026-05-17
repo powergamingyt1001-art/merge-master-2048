@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { syncPlayerToFirebase, processReferral, processCommissionForReferrer, getReferrals, onReferralsUpdate, getCommissionNotifications, claimCommissionNotification, type FirebaseReferral } from '@/lib/firebase-service'
 
 export type Direction = 'up' | 'down' | 'left' | 'right'
-export type PowerUp = 'hammer' | 'magnet' | 'blast'
+export type PowerUp = 'hammer' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x' | 'extraTime'
 export type GameMode = 'classic' | 'bot' | 'coins' | 'tournament'
 
 export interface Tile {
@@ -141,6 +141,12 @@ export interface GameState {
   weeklyBonusClaimed: boolean
   // Daily tasks
   dailyTasks: DailyTask[]
+  // New ability types
+  multiplier5xCount: number
+  multiplier2_5xCount: number
+  extraTimeCount: number
+  activeMultiplier: number // 1 = none, 5 = 5x active, 2.5 = 2.5x active
+  multiplierTimeLeft: number // seconds remaining for multiplier
 }
 
 const BOT_NAMES = [
@@ -630,6 +636,11 @@ export function useGame() {
       gameHistory: [],
       weeklyBonusClaimed: false,
       dailyTasks: generateDailyTasks(),
+      multiplier5xCount: 0,
+      multiplier2_5xCount: 0,
+      extraTimeCount: 0,
+      activeMultiplier: 1,
+      multiplierTimeLeft: 0,
     }
 
     if (!saved) {
@@ -744,6 +755,11 @@ export function useGame() {
         if (!hasTodayTasks) return generateDailyTasks()
         return savedTasks
       })(),
+      multiplier5xCount: saved.multiplier5xCount ?? 0,
+      multiplier2_5xCount: saved.multiplier2_5xCount ?? 0,
+      extraTimeCount: saved.extraTimeCount ?? 0,
+      activeMultiplier: 1,
+      multiplierTimeLeft: 0,
     }
   })
 
@@ -793,9 +809,12 @@ export function useGame() {
       gameHistory: state.gameHistory.slice(0, 30),
       weeklyBonusClaimed: state.weeklyBonusClaimed,
       dailyTasks: state.dailyTasks,
+      multiplier5xCount: state.multiplier5xCount,
+      multiplier2_5xCount: state.multiplier2_5xCount,
+      extraTimeCount: state.extraTimeCount,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount])
 
   // ============================================================
   // FIREBASE SYNC - Sync player data to Firebase RTDB
@@ -984,7 +1003,20 @@ export function useGame() {
         comboMultiplier = 1
       }
 
-      const newScore = prev.score + scoreGain + comboExtra
+      // Apply active multiplier to score gain
+      let multiplierExtra = 0
+      let newActiveMultiplier = prev.activeMultiplier
+      let newMultiplierTimeLeft = prev.multiplierTimeLeft
+      if (prev.activeMultiplier > 1 && prev.multiplierTimeLeft > 0) {
+        multiplierExtra = Math.round((scoreGain + comboExtra) * (prev.activeMultiplier - 1))
+        newMultiplierTimeLeft = prev.multiplierTimeLeft - 1
+        if (newMultiplierTimeLeft <= 0) {
+          newActiveMultiplier = 1
+          newMultiplierTimeLeft = 0
+        }
+      }
+
+      const newScore = prev.score + scoreGain + comboExtra + multiplierExtra
       const newBestScore = Math.max(newScore, prev.bestScore)
       const isStuck = !canMove(tilesWithNew)
       const won = !prev.won && hasWon(tilesWithNew)
@@ -1079,7 +1111,9 @@ export function useGame() {
         consecutiveMerges: newConsecutiveMerges,
         comboBonus: newComboBonus,
         comboMultiplier: comboMultiplier,
-        gamePoints: newGamePoints,
+        gamePoints: newGamePoints + multiplierExtra,
+        activeMultiplier: newActiveMultiplier,
+        multiplierTimeLeft: newMultiplierTimeLeft,
         coinGameWon,
         playerLevel: calculateLevel(prev.levelXP),
         totalBattlesPlayed,
@@ -1113,6 +1147,21 @@ export function useGame() {
       if (pu === 'hammer' && prev.hammerCount <= 0) return prev
       if (pu === 'magnet' && prev.magnetCount <= 0) return prev
       if (pu === 'blast' && prev.blastCount <= 0) return prev
+      if (pu === 'multiplier5x' && prev.multiplier5xCount <= 0) return prev
+      if (pu === 'multiplier2_5x' && prev.multiplier2_5xCount <= 0) return prev
+      if (pu === 'extraTime' && prev.extraTimeCount <= 0) return prev
+
+      if (pu === 'multiplier5x') {
+        return { ...prev, activeMultiplier: 5, multiplierTimeLeft: 10, multiplier5xCount: prev.multiplier5xCount - 1, activePowerUp: null }
+      }
+      if (pu === 'multiplier2_5x') {
+        return { ...prev, activeMultiplier: 2.5, multiplierTimeLeft: 10, multiplier2_5xCount: prev.multiplier2_5xCount - 1, activePowerUp: null }
+      }
+      if (pu === 'extraTime') {
+        const isBattleMode = prev.gameMode === 'bot' || prev.gameMode === 'coins' || prev.gameMode === 'tournament'
+        if (!isBattleMode) return prev
+        return { ...prev, battleTimer: prev.battleTimer + 10, extraTimeCount: prev.extraTimeCount - 1, activePowerUp: null }
+      }
 
       if (pu === 'blast') {
         const tilesToRemove = Math.ceil(prev.tiles.length / 2)
@@ -1136,20 +1185,32 @@ export function useGame() {
       if (prev.activePowerUp === 'hammer') {
         if (!prev.tiles.some(t => t.row === row && t.col === col) || prev.hammerCount <= 0) return { ...prev, activePowerUp: null }
         prevState.current = prev
-        return { ...prev, tiles: prev.tiles.filter(t => !(t.row === row && t.col === col)), hammerCount: prev.hammerCount - 1, activePowerUp: null, canUndo: true }
+        // Find adjacent tiles (up/down/left/right)
+        const adjacentOffsets = [[-1, 0], [1, 0], [0, -1], [0, 1]]
+        const adjacentTiles: Tile[] = []
+        for (const [dr, dc] of adjacentOffsets) {
+          const adj = prev.tiles.find(t => t.row === row + dr && t.col === col + dc)
+          if (adj) adjacentTiles.push(adj)
+        }
+        // Remove clicked tile + up to 2 adjacent tiles
+        const tilesToRemove = adjacentTiles.slice(0, 2)
+        const removeSet = new Set<string>()
+        removeSet.add(`${row}-${col}`)
+        for (const t of tilesToRemove) {
+          removeSet.add(`${t.row}-${t.col}`)
+        }
+        return { ...prev, tiles: prev.tiles.filter(t => !removeSet.has(`${t.row}-${t.col}`)), hammerCount: prev.hammerCount - 1, activePowerUp: null, canUndo: true }
       }
       if (prev.activePowerUp === 'magnet') {
         const targetTile = prev.tiles.find(t => t.row === row && t.col === col)
         if (!targetTile || prev.magnetCount <= 0) return { ...prev, activePowerUp: null }
-        const same = prev.tiles.filter(t => t.value === targetTile.value && !(t.row === row && t.col === col))
-        if (same.length === 0) return { ...prev, activePowerUp: null }
-        const mergeTarget = same[0]
-        const newValue = targetTile.value * 2
+        // Find ALL tiles with the same value
+        const sameValueTiles = prev.tiles.filter(t => t.value === targetTile.value)
+        // Remove ALL of them (including the clicked one)
+        const removedValuesSum = sameValueTiles.reduce((sum, t) => sum + t.value, 0)
         prevState.current = prev
-        const newTiles = prev.tiles
-          .filter(t => !(t.row === row && t.col === col) && !(t.row === mergeTarget.row && t.col === mergeTarget.col))
-          .concat([{ id: getNextId(), value: newValue, row: mergeTarget.row, col: mergeTarget.col, isNew: false, isMerged: true, flash: true }])
-        return { ...prev, tiles: newTiles, score: prev.score + newValue, magnetCount: prev.magnetCount - 1, activePowerUp: null, canUndo: true, gamePoints: prev.gamePoints + newValue }
+        const newTiles = prev.tiles.filter(t => t.value !== targetTile.value)
+        return { ...prev, tiles: newTiles, score: prev.score + removedValuesSum, magnetCount: prev.magnetCount - 1, activePowerUp: null, canUndo: true, gamePoints: prev.gamePoints + removedValuesSum }
       }
       return prev
     })
@@ -1181,6 +1242,8 @@ export function useGame() {
       comboMultiplier: 1,
       coinEntryFee: 0,
       coinGameWon: null,
+      activeMultiplier: 1,
+      multiplierTimeLeft: 0,
     }))
   }, [])
 
@@ -1218,6 +1281,8 @@ export function useGame() {
         lastPlayDate: today,
         coinEntryFee: 0,
         coinGameWon: null,
+        activeMultiplier: 1,
+        multiplierTimeLeft: 0,
       }
     })
   }, [])
@@ -1256,6 +1321,8 @@ export function useGame() {
         coins: prev.coins - entryFee,
         coinEntryFee: entryFee,
         coinGameWon: null,
+        activeMultiplier: 1,
+        multiplierTimeLeft: 0,
         gamesPlayedToday: gamesToday + 1,
         lastPlayDate: today,
       }
@@ -1297,6 +1364,8 @@ export function useGame() {
         comboBonus: 0,
         coinEntryFee: 0,
         coinGameWon: null,
+        activeMultiplier: 1,
+        multiplierTimeLeft: 0,
         gamesPlayedToday: gamesToday + 1,
         lastPlayDate: today,
       }
@@ -1494,6 +1563,9 @@ export function useGame() {
         case 'hammer': return { ...prev, hammerCount: prev.hammerCount + count }
         case 'magnet': return { ...prev, magnetCount: prev.magnetCount + count }
         case 'blast': return { ...prev, blastCount: prev.blastCount + count }
+        case 'multiplier5x': return { ...prev, multiplier5xCount: prev.multiplier5xCount + count }
+        case 'multiplier2_5x': return { ...prev, multiplier2_5xCount: prev.multiplier2_5xCount + count }
+        case 'extraTime': return { ...prev, extraTimeCount: prev.extraTimeCount + count }
         default: return prev
       }
     })
@@ -1548,6 +1620,8 @@ export function useGame() {
       comboMultiplier: 1,
       coinEntryFee: 0,
       coinGameWon: null,
+      activeMultiplier: 1,
+      multiplierTimeLeft: 0,
     }))
   }, [])
 
@@ -1720,6 +1794,20 @@ export function useGame() {
       gameHistory: [],
       weeklyBonusClaimed: false,
       dailyTasks: generateDailyTasks(),
+      multiplier5xCount: 0,
+      multiplier2_5xCount: 0,
+      extraTimeCount: 0,
+      activeMultiplier: 1,
+      multiplierTimeLeft: 0,
+    })
+  }, [])
+
+  const multiplierTick = useCallback(() => {
+    setState(prev => {
+      if (prev.multiplierTimeLeft <= 0) return { ...prev, activeMultiplier: 1 }
+      const newTime = prev.multiplierTimeLeft - 1
+      if (newTime <= 0) return { ...prev, multiplierTimeLeft: 0, activeMultiplier: 1 }
+      return { ...prev, multiplierTimeLeft: newTime }
     })
   }, [])
 
@@ -1774,6 +1862,7 @@ export function useGame() {
     claimWeeklyBonus,
     claimDailyTask,
     resetAllData,
+    multiplierTick,
     completeVisitWebsiteTask: useCallback(() => {
       setState(prev => {
         const today = getTodayStr()

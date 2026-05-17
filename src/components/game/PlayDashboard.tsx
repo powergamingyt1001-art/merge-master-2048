@@ -11,6 +11,8 @@ import { Tournament } from './Tournament'
 import { InvitePanel } from './InvitePanel'
 import { ProfilePanel, NotificationsPanel } from './ProfilePanel'
 import { PrivacyPolicy, AboutPage, ContactPage } from './FooterPages'
+import { Store } from './Store'
+import { CouponCode } from './CouponCode'
 import {
   AdsterraNativeBanner,
   AdsterraBanner728x90,
@@ -30,6 +32,9 @@ interface PlayDashboardProps {
   hammerCount: number
   magnetCount: number
   blastCount: number
+  multiplier5xCount: number
+  multiplier2_5xCount: number
+  extraTimeCount: number
   modBestScore: number
   gamePoints: number
   bestScore: number
@@ -87,11 +92,16 @@ const COIN_GAME_MODES = [
   { fee: 200, win: 400, color: '#EDC22E', label: '₹200' },
   { fee: 500, win: 1000, color: '#FF7A00', label: '₹500' },
   { fee: 1000, win: 2000, color: '#F65E3B', label: '₹1000' },
+  { fee: 2000, win: 4000, color: '#FF4081', label: '₹2K' },
+  { fee: 3000, win: 6000, color: '#E040FB', label: '₹3K' },
+  { fee: 4000, win: 8000, color: '#7C4DFF', label: '₹4K' },
+  { fee: 5000, win: 10000, color: '#FFD700', label: '₹5K' },
 ]
 
 export function PlayDashboard({
   coins, spinTickets, streakDay, streakClaimed, welcomeClaimed,
-  hammerCount, magnetCount, blastCount, modBestScore, gamePoints, bestScore,
+  hammerCount, magnetCount, blastCount, multiplier5xCount, multiplier2_5xCount, extraTimeCount,
+  modBestScore, gamePoints, bestScore,
   inviteCode, invitedUsers, commissionBalance, commissionClaimed, autoClaimCommission,
   gamesPlayedToday, maxGamesPerDay, notifications,
   playerName, playerAvatar, playerLevel, playerId, firebaseReferrals, firebaseCommissionPending,
@@ -119,6 +129,8 @@ export function PlayDashboard({
   const [showPrivacy, setShowPrivacy] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
   const [showContact, setShowContact] = useState(false)
+  const [showStore, setShowStore] = useState(false)
+  const [showCoupon, setShowCoupon] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
   // Decide which big banner to show (only 1 per session) - lazy init
   const [bigBannerSlot] = useState<string>(() => getDashboardBigBannerSlot())
@@ -246,6 +258,9 @@ export function PlayDashboard({
               <InventoryItem emoji="🔨" count={hammerCount} color="#F59563" />
               <InventoryItem emoji="🧲" count={magnetCount} color="#00E676" />
               <InventoryItem emoji="💣" count={blastCount} color="#FF7A00" />
+              <InventoryItem emoji="5️⃣" count={multiplier5xCount} color="#F65E3B" />
+              <InventoryItem emoji="⚡" count={multiplier2_5xCount} color="#FF7A00" />
+              <InventoryItem emoji="⏱️" count={extraTimeCount} color="#00FFFF" />
             </div>
             <div className="flex items-center gap-1.5">
               <div className="flex items-center gap-0.5 px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(0,230,118,0.08)' }}>
@@ -375,7 +390,7 @@ export function PlayDashboard({
             <AdsterraNativeBanner />
           </div>
 
-          {/* Quick Actions: Streak + Spin + Weekly + Leaderboard */}
+          {/* Quick Actions Row 1: Streak + Spin + Store + Coupon */}
           <div className="w-full grid grid-cols-4 gap-1.5">
             <button onClick={() => setShowStreak(true)}
               className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
@@ -391,6 +406,24 @@ export function PlayDashboard({
               <p className="text-[7px] font-bold" style={{ color: '#00E676' }}>Spin</p>
               <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{spinTickets}🎫</p>
             </button>
+            <button onClick={() => setShowStore(true)}
+              className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
+              style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '1px solid rgba(237,194,46,0.2)' }}>
+              <span className="text-base">🏪</span>
+              <p className="text-[7px] font-bold" style={{ color: '#EDC22E' }}>Store</p>
+              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Buy</p>
+            </button>
+            <button onClick={() => setShowCoupon(true)}
+              className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
+              style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
+              <span className="text-base">🎟️</span>
+              <p className="text-[7px] font-bold" style={{ color: '#00E676' }}>Coupon</p>
+              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Code</p>
+            </button>
+          </div>
+
+          {/* Quick Actions Row 2: Weekly + Rank + Invite */}
+          <div className="w-full grid grid-cols-3 gap-1.5">
             <button onClick={() => !weeklyBonusClaimed && onClaimWeeklyBonus?.()}
               className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
               style={{
@@ -408,6 +441,13 @@ export function PlayDashboard({
               <span className="text-base">🏆</span>
               <p className="text-[7px] font-bold" style={{ color: '#F65E3B' }}>Rank</p>
               <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Board</p>
+            </button>
+            <button onClick={() => setShowInvite(true)}
+              className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
+              style={{ backgroundColor: 'rgba(0,230,118,0.05)', border: '1px solid rgba(0,230,118,0.1)' }}>
+              <span className="text-base">🤝</span>
+              <p className="text-[7px] font-bold" style={{ color: '#00E676' }}>Invite</p>
+              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.3)' }}>5%</p>
             </button>
           </div>
 
@@ -466,15 +506,8 @@ export function PlayDashboard({
             </div>
           )}
 
-          {/* Invite row */}
+          {/* Best Score + Commission row */}
           <div className="w-full flex gap-1.5">
-            <button onClick={() => setShowInvite(true)}
-              className="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-transform active:scale-95"
-              style={{ backgroundColor: 'rgba(0,230,118,0.05)', border: '1px solid rgba(0,230,118,0.1)' }}>
-              <span className="text-sm">🤝</span>
-              <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>Invite</span>
-              <span className="text-[6px]" style={{ color: 'rgba(255,255,255,0.3)' }}>5%</span>
-            </button>
             {modBestScore > 0 && (
               <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg"
                 style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -545,6 +578,8 @@ export function PlayDashboard({
       <PrivacyPolicy isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
       <AboutPage isOpen={showAbout} onClose={() => setShowAbout(false)} />
       <ContactPage isOpen={showContact} onClose={() => setShowContact(false)} />
+      <Store isOpen={showStore} onClose={() => setShowStore(false)} playerId={playerId} coins={coins} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} />
+      <CouponCode isOpen={showCoupon} onClose={() => setShowCoupon(false)} onAddCoins={onAddCoins} onAddPowerUp={onAddPowerUp} onAddSpinTickets={onAddSpinTickets} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} />
     </div>
   )
 }

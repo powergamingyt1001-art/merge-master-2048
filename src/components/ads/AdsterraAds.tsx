@@ -11,8 +11,8 @@ import { useEffect, useRef } from 'react'
 // inappropriate/dirty ads for family-friendly gaming
 //
 // AD CONDITIONS:
-// - Popunder: 50% chance per session, 15s delay, once per 5 min
-// - Social Bar: 50% chance per session, 10s delay
+// - Popunder: Always loads, 15s delay, once per 5 min
+// - Social Bar: Always loads, 10s delay
 // - Big banners (728x90, 300x250): Only ONE per page view (rotated)
 // - Small banners (320x50, 468x60): Always shown (small, non-intrusive)
 // ============================================================
@@ -56,14 +56,17 @@ export function getDashboardBigBannerSlot(): string {
 }
 
 // --- Popunder Ad (Global - with conditions) ---
-// 50% chance per session, 15s delay, once per 5 minutes
+// Always loads, 15s delay, once per 5 minutes
 export function AdsterraPopunder() {
   useEffect(() => {
-    // Check session chance
-    if (!shouldShowAdThisSession('popunder', 50)) return
+    // Always attempt to load popunder (no random session chance)
 
+    // Remove any existing script element to allow fresh load
+    // (handles cases where previous load failed)
     const existing = document.getElementById('adsterra-popunder')
-    if (existing) return
+    if (existing) {
+      existing.remove()
+    }
 
     // 15 second delay after page load - prevents redirect on page open
     const timer = setTimeout(() => {
@@ -74,8 +77,13 @@ export function AdsterraPopunder() {
       script.id = 'adsterra-popunder'
       script.src = 'https://pl29392034.profitablecpmratenetwork.com/40/9d/aa/409daa8e988b716a6a40b571e679667a.js'
       script.async = true
+      script.onerror = () => {
+        console.warn('[AdsterraPopunder] Script failed to load')
+      }
+      script.onload = () => {
+        markPopunderShown()
+      }
       document.body.appendChild(script)
-      markPopunderShown()
     }, 15000) // 15 second delay
 
     return () => clearTimeout(timer)
@@ -85,14 +93,17 @@ export function AdsterraPopunder() {
 }
 
 // --- Social Bar Ad (Global - with conditions) ---
-// 50% chance per session, 10s delay
+// Always loads, 10s delay
 export function AdsterraSocialBar() {
   useEffect(() => {
-    // Check session chance
-    if (!shouldShowAdThisSession('socialbar', 50)) return
+    // Always attempt to load social bar (no random session chance)
 
+    // Remove any existing script element to allow fresh load
+    // (handles cases where previous load failed)
     const existing = document.getElementById('adsterra-socialbar')
-    if (existing) return
+    if (existing) {
+      existing.remove()
+    }
 
     // 10 second delay after page load
     const timer = setTimeout(() => {
@@ -100,6 +111,9 @@ export function AdsterraSocialBar() {
       script.id = 'adsterra-socialbar'
       script.src = 'https://pl29392035.profitablecpmratenetwork.com/b7/40/ba/b740ba65f24e56491e9bd88c482e6b7f.js'
       script.async = true
+      script.onerror = () => {
+        console.warn('[AdsterraSocialBar] Script failed to load')
+      }
       document.body.appendChild(script)
     }, 10000) // 10 second delay
 

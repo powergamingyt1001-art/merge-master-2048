@@ -25,6 +25,16 @@ interface LeaderboardEntry {
   avatar: string
   value: number
   isPlayer: boolean
+  isOnline?: boolean
+}
+
+// Deterministic hash for fake player online status
+function hashName(name: string): number {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0
+  }
+  return Math.abs(hash)
 }
 
 // Fake players for fallback when Firebase is unavailable
@@ -71,19 +81,23 @@ const OFFLINE_RANKS = [
 function buildModesLeaderboard(playerBestScore: number, playerName: string, playerAvatar: string, firebasePlayers: FirebasePlayer[], playerId: string): LeaderboardEntry[] {
   const entries: LeaderboardEntry[] = []
 
+  const FIVE_MINUTES = 5 * 60 * 1000
+  const now = Date.now()
+
   if (firebasePlayers.length > 0) {
     // Use real Firebase data
     firebasePlayers.forEach(p => {
       if (p.id !== playerId) {
-        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.bestScore || 0, isPlayer: false })
+        const isOnline = typeof p.lastActive === 'number' && (now - p.lastActive) < FIVE_MINUTES
+        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.bestScore || 0, isPlayer: false, isOnline })
       }
     })
   } else {
-    // Fallback to fake data
-    FAKE_PLAYERS_MODES.forEach(p => entries.push({ rank: 0, name: p.name, avatar: p.avatar, value: p.score, isPlayer: false }))
+    // Fallback to fake data — deterministic online/offline from name hash
+    FAKE_PLAYERS_MODES.forEach(p => entries.push({ rank: 0, name: p.name, avatar: p.avatar, value: p.score, isPlayer: false, isOnline: hashName(p.name) % 3 !== 0 }))
   }
 
-  entries.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', value: playerBestScore, isPlayer: true })
+  entries.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', value: playerBestScore, isPlayer: true, isOnline: true })
   entries.sort((a, b) => b.value - a.value)
   entries.forEach((e, i) => { e.rank = i + 1 })
   return entries
@@ -92,17 +106,21 @@ function buildModesLeaderboard(playerBestScore: number, playerName: string, play
 function buildCoinsLeaderboard(playerCoins: number, playerName: string, playerAvatar: string, firebasePlayers: FirebasePlayer[], playerId: string): LeaderboardEntry[] {
   const entries: LeaderboardEntry[] = []
 
+  const FIVE_MINUTES = 5 * 60 * 1000
+  const now = Date.now()
+
   if (firebasePlayers.length > 0) {
     firebasePlayers.forEach(p => {
       if (p.id !== playerId) {
-        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.coins || 0, isPlayer: false })
+        const isOnline = typeof p.lastActive === 'number' && (now - p.lastActive) < FIVE_MINUTES
+        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.coins || 0, isPlayer: false, isOnline })
       }
     })
   } else {
-    FAKE_PLAYERS_COINS.forEach(p => entries.push({ rank: 0, name: p.name, avatar: p.avatar, value: p.coins || 0, isPlayer: false }))
+    FAKE_PLAYERS_COINS.forEach(p => entries.push({ rank: 0, name: p.name, avatar: p.avatar, value: p.coins || 0, isPlayer: false, isOnline: hashName(p.name) % 3 !== 0 }))
   }
 
-  entries.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', value: playerCoins, isPlayer: true })
+  entries.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', value: playerCoins, isPlayer: true, isOnline: true })
   entries.sort((a, b) => b.value - a.value)
   entries.forEach((e, i) => { e.rank = i + 1 })
   return entries
@@ -354,7 +372,19 @@ function RankRow({ entry, color }: { entry: LeaderboardEntry; color: string }) {
     <div className="flex items-center gap-2 py-1.5 px-2 rounded-lg mb-1"
       style={{ backgroundColor: entry.isPlayer ? 'rgba(237,194,46,0.12)' : 'rgba(255,255,255,0.03)', border: entry.isPlayer ? '1px solid rgba(237,194,46,0.2)' : '1px solid transparent' }}>
       <span className="text-[10px] font-bold w-5 text-center" style={{ color: 'rgba(255,255,255,0.4)' }}>#{entry.rank}</span>
-      <span className="text-sm">{entry.avatar}</span>
+      <div className="relative flex-shrink-0">
+        <span className="text-sm">{entry.avatar}</span>
+        {entry.rank > 3 && (
+          <div className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full"
+            style={{
+              backgroundColor: entry.isOnline ? '#00E676' : '#F65E3B',
+              boxShadow: entry.isOnline
+                ? '0 0 4px rgba(0,230,118,0.5)'
+                : '0 0 4px rgba(246,94,59,0.5)',
+            }}
+          />
+        )}
+      </div>
       <span className="text-[10px] font-semibold flex-1 truncate" style={{ color: entry.isPlayer ? '#EDC22E' : 'rgba(255,255,255,0.7)' }}>
         {entry.name} {entry.isPlayer && '(You)'}
       </span>
