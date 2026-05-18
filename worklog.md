@@ -359,3 +359,28 @@ Stage Summary:
 - InventoryItem changed to horizontal pill/oval shape (rounded-full) for compact display
 - All 7 game board power-up buttons now show text labels below icons for better identification
 - Pre-existing CouponCode.tsx syntax error fixed
+
+---
+Task ID: 1-2-3-4-5-6-7-8-9
+Agent: Main Agent (with subagent)
+Task: Comprehensive UI/admin/payment fixes round
+
+Work Log:
+- Leaderboard.tsx: Added two-pass deduplication (by playerId, then by name case-insensitive) to eliminate duplicate players like "Omkar Pandit x5". Removed generic "Player" name entries. Removed fake fallback players, shows "No players yet" when empty.
+- useGame.ts: Added generateRandomName() function creating cool names like "Shadow47", "Blaze88". New accounts get random names instead of "Player".
+- PlayDashboard.tsx: Redesigned ability grid - 3 left (5x, Time, 2.5x) | Center (Big CODE button + Spin/Undo) | 3 right (Mag, Ham, Bomb). InventoryItem changed to horizontal pill shape (rounded-full). Container padding reduced.
+- GameBoard.tsx: Added text labels to all 7 power-up buttons (5x, 2.5x, Time). Made buttons more compact. Removed sponsor ad redirect - "Get Free Life" now revives directly without opening external websites. Removed Welcome Back overlay. Removed getRandomLink import.
+- CouponCode.tsx: Merged Night Code tab into Coupons tab with Day/Night toggle switch. Added custom code editing for both day and night codes. Added screenshot viewer modal (View/Download) for payment proofs. Made coupon code input larger with rounded-full shape. Prices tab now has editable coin amounts AND prices.
+- Store.tsx: Changed UPI_ID from 9897186065@fam to 7668122925@mbk. Updated getCoinPackages() to support coin amount overrides from admin panel. Payment amount already locked (verified).
+- Pushed to GitHub: commit 59ab78d
+
+Stage Summary:
+- Leaderboard no longer shows duplicate players (dedup by name + ID)
+- New accounts get random cool names instead of "Player"
+- Ability layout: 3 left | CODE center | 3 right, oval pill shapes
+- Sponsor ad popup completely removed (direct revive)
+- Admin panel: Night code merged into Coupons tab with Day/Night toggle
+- Admin Prices tab: both coin amounts and ₹ prices editable
+- UPI ID changed to 7668122925@mbk
+- Screenshot viewer with View + Download in admin panel
+- All changes lint-clean and pushed to GitHub
