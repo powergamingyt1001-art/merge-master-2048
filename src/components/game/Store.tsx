@@ -47,17 +47,20 @@ const DEFAULT_COIN_PACKAGES = [
   { coins: 120000, price: 99, label: '1,20,000 Coins', color: '#E040FB' },
 ]
 
-// Load coin packages with admin price overrides
+// Load coin packages with admin price overrides (including coin amount overrides)
 function getCoinPackages(): typeof DEFAULT_COIN_PACKAGES {
   if (typeof window === 'undefined') return DEFAULT_COIN_PACKAGES
   try {
     const data = localStorage.getItem('adminCustomPrices')
     if (!data) return DEFAULT_COIN_PACKAGES
-    const overrides: { coinPackages: { coins: number; price: number }[] } = JSON.parse(data)
+    const overrides: { coinPackages: { coins: number; price: number; label?: string }[] } = JSON.parse(data)
     if (!overrides.coinPackages) return DEFAULT_COIN_PACKAGES
     return DEFAULT_COIN_PACKAGES.map((pkg, idx) => {
       const override = overrides.coinPackages[idx]
-      return override ? { ...pkg, price: override.price } : pkg
+      if (!override) return pkg
+      const newCoins = override.coins || pkg.coins
+      const newLabel = newCoins !== pkg.coins ? `${newCoins.toLocaleString()} Coins` : pkg.label
+      return { ...pkg, coins: newCoins, price: override.price, label: newLabel }
     })
   } catch { return DEFAULT_COIN_PACKAGES }
 }
@@ -106,7 +109,7 @@ const FREE_AD_REWARDS = [
   { type: 'undo', count: 3, label: '3 Undos', emoji: '↩️', weight: 15 },
 ]
 
-const UPI_ID = '9897186065@fam'
+const UPI_ID = '7668122925@mbk'
 const BIWEEKLY_ABILITY_LIMIT = 20
 
 type StoreTab = 'coins' | 'abilities' | 'history'

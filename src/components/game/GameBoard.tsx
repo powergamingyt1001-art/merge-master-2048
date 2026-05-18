@@ -17,7 +17,7 @@ import {
   Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle, Swords, Coins,
 } from 'lucide-react'
 import { AdsterraBanner300x250, AdsterraBanner468x60 } from '@/components/ads/AdsterraAds'
-import { getRandomLink } from '@/components/ads/AdOverlay'
+
 
 // ============================================================
 // HELPER: Check if tiles can still move
@@ -120,8 +120,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   const [scoreGain, setScoreGain] = useState(0)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
   const [gameOverDismissed, setGameOverDismissed] = useState(false)
-  const [waitingForReturn, setWaitingForReturn] = useState(false) // User visiting ad site
-  const [showWelcomeBack, setShowWelcomeBack] = useState(false) // Show welcome back overlay
+  // Removed sponsor ad states - no more redirect ads
 
   // Determine game type
   const isBattleMode = gameMode === 'bot' || gameMode === 'coins' || gameMode === 'tournament'
@@ -151,17 +150,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
   }, [])
 
-  // Detect when user returns from ad website
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && waitingForReturn) {
-        setWaitingForReturn(false)
-        setShowWelcomeBack(true)
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => document.removeEventListener('visibilitychange', handleVisibility)
-  }, [waitingForReturn])
+  // Removed sponsor ad detection - no more redirect ads
 
   // Battle timer tick - don't tick during countdown or when paused
   useEffect(() => {
@@ -219,24 +208,13 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   const handleStuckContinue = useCallback(() => { restartAfterStuck() }, [restartAfterStuck])
   const handleBack = useCallback(() => { onBackToDashboard() }, [onBackToDashboard])
 
-  // Open direct link for ad revenue - wait for user to return before reviving
+  // Direct revive - no sponsor redirect
   const openAdAndRevive = useCallback(() => {
-    if (isOnline) {
-      try { window.open(getRandomLink(), '_blank') } catch { /* popup blocked */ }
-      setWaitingForReturn(true)
-    } else {
-      // Offline - just revive immediately
-      setGameOverDismissed(false)
-      reviveWithAd()
-    }
-  }, [isOnline, reviveWithAd])
-
-  // Handle user returning from ad - revive the game
-  const handleWelcomeBackContinue = useCallback(() => {
-    setShowWelcomeBack(false)
     setGameOverDismissed(false)
     reviveWithAd()
   }, [reviveWithAd])
+
+  // Removed welcome back handler - no more sponsor redirect
 
   // Finalize current game (save history, coins, tournament points)
   const finalizeGame = useCallback(() => {
@@ -569,7 +547,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
                 margin: '0 auto',
               }}>
               ❤️ Get Free Life
-              <span style={{ fontSize: 8, fontWeight: 400, opacity: 0.7 }}> (opens ad)</span>
+
             </button>
           </motion.div>
         )}
@@ -742,14 +720,14 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
       </div>
 
       {/* Power-ups row - BELOW the board */}
-      <div className="flex items-center gap-1.5 py-1.5 flex-shrink-0 flex-wrap justify-center">
-        <PowerUpBtn icon={<Hammer className="w-3.5 h-3.5" />} count={hammerCount} active={activePowerUp === 'hammer'} onClick={() => handlePowerUp('hammer')} color="#F59563" />
-        <PowerUpBtn icon={<Magnet className="w-3.5 h-3.5" />} count={magnetCount} active={activePowerUp === 'magnet'} onClick={() => handlePowerUp('magnet')} color="#00E676" />
-        <PowerUpBtn icon={<Bomb className="w-3.5 h-3.5" />} count={blastCount} active={false} onClick={() => handlePowerUp('blast')} color="#FF7A00" />
-        <PowerUpBtn icon={<Undo2 className="w-3.5 h-3.5" />} count={undoTotal - undoCount} active={false} onClick={undo} color="#8f7a66" disabled={!canUndo || undoCount >= undoTotal} />
-        <PowerUpBtn icon={<Zap className="w-3.5 h-3.5" />} count={multiply5Count} active={false} onClick={() => {}} color="#EDC22E" disabled={multiply5Count <= 0} />
-        <PowerUpBtn icon={<span className="text-[10px]">✨</span>} count={multiply2_5Count} active={false} onClick={() => {}} color="#FF69B4" disabled={multiply2_5Count <= 0} />
-        <PowerUpBtn icon={<span className="text-[10px]">🌀</span>} count={timeExtendCount} active={false} onClick={() => {}} color="#00FFFF" disabled={timeExtendCount <= 0} />
+      <div className="flex items-center gap-1 py-1 flex-shrink-0 flex-wrap justify-center">
+        <PowerUpBtn icon={<Hammer className="w-3 h-3" />} count={hammerCount} active={activePowerUp === 'hammer'} onClick={() => handlePowerUp('hammer')} color="#F59563" label="Ham" />
+        <PowerUpBtn icon={<Magnet className="w-3 h-3" />} count={magnetCount} active={activePowerUp === 'magnet'} onClick={() => handlePowerUp('magnet')} color="#00E676" label="Mag" />
+        <PowerUpBtn icon={<Bomb className="w-3 h-3" />} count={blastCount} active={false} onClick={() => handlePowerUp('blast')} color="#FF7A00" label="Bomb" />
+        <PowerUpBtn icon={<Undo2 className="w-3 h-3" />} count={undoTotal - undoCount} active={false} onClick={undo} color="#8f7a66" disabled={!canUndo || undoCount >= undoTotal} label="Undo" />
+        <PowerUpBtn icon={<Zap className="w-3 h-3" />} count={multiply5Count} active={false} onClick={() => {}} color="#EDC22E" disabled={multiply5Count <= 0} label="5x" />
+        <PowerUpBtn icon={<span className="text-[9px]">✨</span>} count={multiply2_5Count} active={false} onClick={() => {}} color="#FF69B4" disabled={multiply2_5Count <= 0} label="2.5x" />
+        <PowerUpBtn icon={<span className="text-[9px]">🌀</span>} count={timeExtendCount} active={false} onClick={() => {}} color="#00FFFF" disabled={timeExtendCount <= 0} label="Time" />
       </div>
 
       {/* Active Power-up indicator */}
@@ -802,7 +780,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
                   className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
                   style={{ background: 'linear-gradient(135deg, #F65E3B, #F67C5F)', color: '#FFFFFF' }}>
                   <Heart className="w-4 h-4" /> Get Free Life
-                  <span style={{ fontSize: 8, fontWeight: 400, opacity: 0.7 }}> (opens ad)</span>
+    
                 </button>
                 <button onClick={() => {
                   addGameToHistory('classic', score, 'classic', 0, 0)
@@ -819,49 +797,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
         )}
       </AnimatePresence>
 
-      {/* Welcome Back overlay - shown when user returns from ad website */}
-      <AnimatePresence>
-        {showWelcomeBack && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center px-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.88)' }}
-          >
-            <motion.div
-              initial={{ scale: 0.85, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.85 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-              className="w-full max-w-xs rounded-2xl p-6 text-center"
-              style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.12)' }}
-            >
-              <span className="text-4xl block mb-3">👋</span>
-              <h2 className="text-xl font-extrabold mb-1" style={{ color: '#FFFFFF' }}>Welcome Back!</h2>
-              <p className="text-xs mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                Your game is ready to continue. Tap below to resume!
-              </p>
-              {isBattleMode && (
-                <p className="text-[10px] mb-3" style={{ color: '#EDC22E' }}>
-                  ⏱ Timer: {battleTimer}s remaining • Score: {score}
-                </p>
-              )}
-              <button
-                onClick={handleWelcomeBackContinue}
-                className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-transform active:scale-95"
-                style={{
-                  background: 'linear-gradient(135deg, #00E676, #00C853)',
-                  color: '#FFFFFF',
-                  boxShadow: '0 4px 15px rgba(0,230,118,0.3)',
-                }}
-              >
-                ❤️ Continue Game
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Welcome Back overlay removed - no more sponsor redirect ads */}
 
       {/* ============================================================ */}
       {/* BLINK CSS ANIMATION - Injected via useEffect                 */}
@@ -879,16 +815,17 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
 // ============================================================
 // SUB-COMPONENT: PowerUpBtn
 // ============================================================
-function PowerUpBtn({ icon, count, active, onClick, color, disabled }: {
-  icon: React.ReactNode; count: number; active: boolean; onClick: () => void; color: string; disabled?: boolean
+function PowerUpBtn({ icon, count, active, onClick, color, disabled, label }: {
+  icon: React.ReactNode; count: number; active: boolean; onClick: () => void; color: string; disabled?: boolean; label?: string
 }) {
   return (
-    <motion.button onClick={onClick} disabled={disabled} className="relative flex items-center justify-center rounded-lg"
-      style={{ width: 36, height: 36, backgroundColor: active ? `${color}20` : 'rgba(255,255,255,0.04)', border: active ? `1.5px solid ${color}` : '1px solid rgba(255,255,255,0.06)', opacity: disabled ? 0.35 : 1 }}
+    <motion.button onClick={onClick} disabled={disabled} className="relative flex flex-col items-center justify-center rounded-lg"
+      style={{ width: 34, height: 38, backgroundColor: active ? `${color}20` : 'rgba(255,255,255,0.04)', border: active ? `1.5px solid ${color}` : '1px solid rgba(255,255,255,0.06)', opacity: disabled ? 0.35 : 1 }}
       whileTap={!disabled ? { scale: 0.9 } : {}} animate={active ? { scale: [1, 1.05, 1] } : {}} transition={{ duration: 0.8, repeat: active ? Infinity : 0 }}>
       <div style={{ color: count > 0 ? color : 'rgba(255,255,255,0.15)' }}>{icon}</div>
-      <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold"
+      <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[6px] font-bold"
         style={{ backgroundColor: count > 0 ? color : 'rgba(255,255,255,0.08)', color: '#FFFFFF' }}>{count}</div>
+      {label && <span className="text-[6px] font-bold mt-0.5" style={{ color: disabled ? 'rgba(255,255,255,0.15)' : color }}>{label}</span>}
     </motion.button>
   )
 }

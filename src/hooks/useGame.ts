@@ -182,6 +182,14 @@ const BOT_NAMES = [
 
 export const PLAYER_AVATARS = ['😎', '🦊', '🐺', '🦅', '🐉', '🦁', '👑', '🔥', '💎', '⚡']
 
+// Generate a random cool name for new players (instead of generic "Player")
+function generateRandomName(): string {
+  const prefixes = ['Shadow', 'Blaze', 'Storm', 'Viper', 'Phoenix', 'Titan', 'Nova', 'Fang', 'Apex', 'Bolt']
+  const prefix = prefixes[Math.floor(Math.random() * prefixes.length)]
+  const num = Math.floor(Math.random() * 99) + 1
+  return `${prefix}${num}`
+}
+
 let tileId = 0
 
 function getNextId(): number {
@@ -724,7 +732,7 @@ export function useGame() {
       notifications: [],
       coinEntryFee: 0,
       coinGameWon: null,
-      playerName: 'Player',
+      playerName: generateRandomName(),
       playerAvatar: '😎',
       playerLevel: 1,
       playerId: '',
@@ -835,7 +843,7 @@ export function useGame() {
       gamesPlayedToday,
       lastPlayDate: today,
       notifications: saved.notifications || [],
-      playerName: saved.playerName || 'Player',
+      playerName: saved.playerName && saved.playerName !== 'Player' ? saved.playerName : generateRandomName(),
       playerAvatar: saved.playerAvatar || '😎',
       playerLevel: calculateLevel(levelXP),
       playerId: saved.playerId || generatePlayerId(),
@@ -1929,7 +1937,7 @@ export function useGame() {
       notifications: [],
       coinEntryFee: 0,
       coinGameWon: null,
-      playerName: 'Player',
+      playerName: generateRandomName(),
       playerAvatar: '😎',
       playerLevel: 1,
       playerId: '',

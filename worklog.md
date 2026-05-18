@@ -325,3 +325,37 @@ Stage Summary:
 - Notification delete: trash icon per notification + Clear All button for read notifications
 - Admin disapprove: Undo button on Delivered purchases within 24 hours, changes status back to Denied
 - Daily tasks: new multiply5, multiply2_5, timeExtend reward types with streak-day-based special tasks
+
+---
+Task ID: 1-2-3
+Agent: UI Fix Agent
+Task: Fix leaderboard duplicates, ability layout, game board abilities
+
+Work Log:
+- Leaderboard.tsx: Removed FAKE_PLAYERS_MODES and FAKE_PLAYERS_COINS fallback data arrays (replaced with "No players yet" empty state)
+- Leaderboard.tsx: Added two-pass deduplication in buildModesLeaderboard() — first by playerId, then by name (case-insensitive) keeping highest score entry
+- Leaderboard.tsx: Added two-pass deduplication in buildCoinsLeaderboard() — first by playerId, then by name (case-insensitive) keeping highest coins entry
+- Leaderboard.tsx: Added filter for generic "Player" name entries (case-insensitive exact match) — these are filtered out from leaderboard
+- Leaderboard.tsx: Added empty state UI for Modes and Coins tabs when no real players exist — shows emoji + "No players yet" message
+- useGame.ts: Added generateRandomName() function that creates cool names from prefixes (Shadow, Blaze, Storm, Viper, Phoenix, Titan, Nova, Fang, Apex, Bolt) + random 1-99 number
+- useGame.ts: Changed default playerName from 'Player' to generateRandomName() in both defaults object and resetAllData
+- useGame.ts: Changed saved playerName loading to check if name was 'Player' and replace with generated name
+- PlayDashboard.tsx: Redesigned ability grid from 4x2 grid to 3-column layout: Left 3 abilities (5x, Time, 2.5x) | Center CODE button + Spin/Undo | Right 3 abilities (Mag, Ham, Bomb)
+- PlayDashboard.tsx: Changed InventoryItem from vertical (emoji/label/count stacked) to horizontal pill shape (rounded-full, emoji+label+count inline)
+- PlayDashboard.tsx: Made CODE button bigger with rounded-full shape, gradient background, larger icon/text
+- PlayDashboard.tsx: Reduced container padding from py-1.5 to py-0.5 for tighter layout
+- GameBoard.tsx: Added optional label prop to PowerUpBtn component — shows small text below icon
+- GameBoard.tsx: Added labels to all 7 power-up buttons (Ham, Mag, Bomb, Undo, 5x, 2.5x, Time) for clarity
+- GameBoard.tsx: Made PowerUpBtn slightly more compact (34x38px vs 36x36px), smaller icon (w-3 h-3 vs w-3.5 h-3.5), smaller count badge (3.5 vs 4)
+- GameBoard.tsx: Reduced power-up row gap from gap-1.5 to gap-1 and padding from py-1.5 to py-1
+- CouponCode.tsx: Fixed pre-existing syntax error — missing closing brace on line 942 (changed `)` to `)}`)
+- Lint check passes with no errors
+
+Stage Summary:
+- Leaderboard deduplicates by BOTH playerId AND name (case-insensitive) — handles same person with multiple accounts
+- Generic "Player" name entries filtered from leaderboard; new accounts get cool random names (e.g., "Shadow47", "Blaze88")
+- Fake fallback players removed — empty state shows "No players yet" instead
+- Ability grid redesigned: 3 left | Big CODE button center | 3 right, with Spin/Undo below CODE button
+- InventoryItem changed to horizontal pill/oval shape (rounded-full) for compact display
+- All 7 game board power-up buttons now show text labels below icons for better identification
+- Pre-existing CouponCode.tsx syntax error fixed

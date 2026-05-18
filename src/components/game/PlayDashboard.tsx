@@ -259,25 +259,36 @@ export function PlayDashboard({
             </div>
           </div>
 
-          {/* Ability Grid */}
-          <div className="w-full px-2 py-1.5 rounded-lg"
+          {/* Ability Grid - 3 left | CODE button | 3 right */}
+          <div className="w-full px-2 py-0.5 rounded-lg"
             style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="grid grid-cols-4 gap-1">
-              <InventoryItem emoji="⚡" label="5x" count={multiply5Count} color="#EDC22E" />
-              <InventoryItem emoji="🌀" label="Time" count={timeExtendCount} color="#00FFFF" />
-              <InventoryItem emoji="✨" label="2.5x" count={multiply2_5Count} color="#FF69B4" />
-              <InventoryItem emoji="🎟️" label="Spin" count={spinTickets} color="#EDC22E" />
-              <InventoryItem emoji="🧲" label="Mag" count={magnetCount} color="#00E676" />
-              <InventoryItem emoji="🔨" label="Ham" count={hammerCount} color="#F59563" />
-              <InventoryItem emoji="💣" label="Bomb" count={blastCount} color="#FF7A00" />
-              <InventoryItem emoji="↩️" label="Undo" count={undoTotal} color="#8f7a66" />
-            </div>
-            <div className="flex justify-center mt-1">
-              <button onClick={() => setShowCouponCode(true)} className="flex items-center gap-1 px-3 py-1 rounded-lg transition-transform active:scale-95"
-                style={{ backgroundColor: 'rgba(237,194,46,0.12)', border: '1px solid rgba(237,194,46,0.25)' }}>
-                <Ticket className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
-                <span className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Code</span>
-              </button>
+            <div className="flex items-center gap-1">
+              {/* Left 3 abilities */}
+              <div className="flex flex-col gap-0.5 flex-1">
+                <InventoryItem emoji="⚡" label="5x" count={multiply5Count} color="#EDC22E" />
+                <InventoryItem emoji="🌀" label="Time" count={timeExtendCount} color="#00FFFF" />
+                <InventoryItem emoji="✨" label="2.5x" count={multiply2_5Count} color="#FF69B4" />
+              </div>
+
+              {/* Center: Big CODE button + Spin/Undo below */}
+              <div className="flex flex-col items-center gap-0.5 px-1">
+                <button onClick={() => setShowCouponCode(true)} className="flex items-center gap-1 px-4 py-2 rounded-full transition-transform active:scale-95"
+                  style={{ backgroundColor: 'rgba(237,194,46,0.15)', border: '1.5px solid rgba(237,194,46,0.35)', background: 'linear-gradient(135deg, rgba(237,194,46,0.2), rgba(255,122,0,0.15))' }}>
+                  <Ticket className="w-4 h-4" style={{ color: '#EDC22E' }} />
+                  <span className="text-[10px] font-extrabold" style={{ color: '#EDC22E' }}>Code</span>
+                </button>
+                <div className="flex gap-1">
+                  <InventoryItem emoji="🎟️" label="Spin" count={spinTickets} color="#EDC22E" />
+                  <InventoryItem emoji="↩️" label="Undo" count={undoTotal} color="#8f7a66" />
+                </div>
+              </div>
+
+              {/* Right 3 abilities */}
+              <div className="flex flex-col gap-0.5 flex-1">
+                <InventoryItem emoji="🧲" label="Mag" count={magnetCount} color="#00E676" />
+                <InventoryItem emoji="🔨" label="Ham" count={hammerCount} color="#F59563" />
+                <InventoryItem emoji="💣" label="Bomb" count={blastCount} color="#FF7A00" />
+              </div>
             </div>
           </div>
 
@@ -614,11 +625,11 @@ export function PlayDashboard({
 function InventoryItem({ emoji, label, count, color }: { emoji: string; label: string; count: number; color: string }) {
   const isZero = count <= 0
   return (
-    <div className="flex flex-col items-center gap-0.5 py-1 px-1 rounded-lg"
-      style={{ backgroundColor: isZero ? 'rgba(255,255,255,0.01)' : `${color}08`, border: `1px solid ${isZero ? 'rgba(255,255,255,0.03)' : `${color}15`}` }}>
-      <span className="text-[12px]" style={{ opacity: isZero ? 0.3 : 1 }}>{emoji}</span>
+    <div className="flex items-center gap-0.5 px-2 py-0.5 rounded-full"
+      style={{ backgroundColor: isZero ? 'rgba(255,255,255,0.01)' : `${color}10`, border: `1px solid ${isZero ? 'rgba(255,255,255,0.03)' : `${color}20`}`, opacity: isZero ? 0.4 : 1 }}>
+      <span className="text-[10px]" style={{ opacity: isZero ? 0.3 : 1 }}>{emoji}</span>
       <span className="text-[7px] font-bold" style={{ color: isZero ? 'rgba(255,255,255,0.2)' : color }}>{label}</span>
-      <span className="text-[9px] font-extrabold" style={{ color: isZero ? 'rgba(255,255,255,0.15)' : '#FFFFFF' }}>{count}</span>
+      <span className="text-[8px] font-extrabold" style={{ color: isZero ? 'rgba(255,255,255,0.15)' : '#FFFFFF' }}>{count}</span>
     </div>
   )
 }

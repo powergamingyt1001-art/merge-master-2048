@@ -35,32 +35,7 @@ function isOnline(lastActive: number | undefined): boolean {
   return Date.now() - lastActive < 2 * 60 * 1000
 }
 
-// Fake players for fallback when Firebase is unavailable
-const FAKE_PLAYERS_MODES = [
-  { name: 'Aero 4', avatar: '🦅', score: 15000 },
-  { name: 'Blaze 7', avatar: '🔥', score: 12500 },
-  { name: 'Viper 9', avatar: '🐍', score: 10200 },
-  { name: 'Nova 3', avatar: '💫', score: 8500 },
-  { name: 'Storm 6', avatar: '⚡', score: 7200 },
-  { name: 'Raze 2', avatar: '💥', score: 5800 },
-  { name: 'Fang 8', avatar: '🐺', score: 4100 },
-  { name: 'Drift 5', avatar: '🌪️', score: 3200 },
-  { name: 'Apex 1', avatar: '🏆', score: 2500 },
-  { name: 'Volt 11', avatar: '⚡', score: 1800 },
-]
-
-const FAKE_PLAYERS_COINS = [
-  { name: 'Blaze 7', avatar: '🔥', coins: 25000 },
-  { name: 'Aero 4', avatar: '🦅', coins: 18500 },
-  { name: 'Storm 6', avatar: '⚡', coins: 12000 },
-  { name: 'Viper 9', avatar: '🐍', coins: 8500 },
-  { name: 'Nova 3', avatar: '💫', coins: 6200 },
-  { name: 'Raze 2', avatar: '💥', coins: 4100 },
-  { name: 'Fang 8', avatar: '🐺', coins: 2800 },
-  { name: 'Drift 5', avatar: '🌪️', coins: 1500 },
-  { name: 'Apex 1', avatar: '🏆', coins: 800 },
-  { name: 'Volt 11', avatar: '⚡', coins: 300 },
-]
+// No fake fallback players - show real data only or empty message
 
 // Offline rank players - progressive, beat one to advance
 const OFFLINE_RANKS = [
@@ -86,24 +61,34 @@ function buildModesLeaderboard(playerBestScore: number, playerName: string, play
         entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.bestScore || 0, isPlayer: false, lastActive: p.lastActive, playerId: p.id })
       }
     })
-  } else {
-    // Fallback to fake data
-    FAKE_PLAYERS_MODES.forEach(p => entries.push({ rank: 0, name: p.name, avatar: p.avatar, value: p.score, isPlayer: false }))
   }
+  // No fake fallback players - show real data only or empty message
 
   // Deduplicate by playerId (keep highest score entry)
-  const seen = new Map<string, LeaderboardEntry>()
+  const seenById = new Map<string, LeaderboardEntry>()
   for (const entry of entries) {
     const key = entry.playerId || `${entry.name}_${entry.avatar}`
-    const existing = seen.get(key)
+    const existing = seenById.get(key)
     if (!existing || entry.value > existing.value) {
-      seen.set(key, entry)
+      seenById.set(key, entry)
     }
   }
+
+  // Also deduplicate by name (case-insensitive) — same person with different IDs
+  const seenByName = new Map<string, LeaderboardEntry>()
+  for (const entry of seenById.values()) {
+    const nameKey = entry.name.toLowerCase().trim()
+    const existing = seenByName.get(nameKey)
+    if (!existing || entry.value > existing.value) {
+      seenByName.set(nameKey, entry)
+    }
+  }
+
   const deduped: LeaderboardEntry[] = []
-  for (const entry of seen.values()) {
-    // Filter out zero-value entries (they clutter the leaderboard)
+  for (const entry of seenByName.values()) {
+    // Filter out zero-value entries and generic "Player" names
     if (entry.value === 0) continue
+    if (entry.name.toLowerCase().trim() === 'player') continue
     deduped.push(entry)
   }
 
@@ -122,23 +107,34 @@ function buildCoinsLeaderboard(playerCoins: number, playerName: string, playerAv
         entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.coins || 0, isPlayer: false, lastActive: p.lastActive, playerId: p.id })
       }
     })
-  } else {
-    FAKE_PLAYERS_COINS.forEach(p => entries.push({ rank: 0, name: p.name, avatar: p.avatar, value: p.coins || 0, isPlayer: false }))
   }
+  // No fake fallback players - show real data only or empty message
 
   // Deduplicate by playerId (keep highest coins entry)
-  const seen = new Map<string, LeaderboardEntry>()
+  const seenById = new Map<string, LeaderboardEntry>()
   for (const entry of entries) {
     const key = entry.playerId || `${entry.name}_${entry.avatar}`
-    const existing = seen.get(key)
+    const existing = seenById.get(key)
     if (!existing || entry.value > existing.value) {
-      seen.set(key, entry)
+      seenById.set(key, entry)
     }
   }
+
+  // Also deduplicate by name (case-insensitive) — same person with different IDs
+  const seenByName = new Map<string, LeaderboardEntry>()
+  for (const entry of seenById.values()) {
+    const nameKey = entry.name.toLowerCase().trim()
+    const existing = seenByName.get(nameKey)
+    if (!existing || entry.value > existing.value) {
+      seenByName.set(nameKey, entry)
+    }
+  }
+
   const deduped: LeaderboardEntry[] = []
-  for (const entry of seen.values()) {
-    // Filter out zero-value entries (they clutter the leaderboard)
+  for (const entry of seenByName.values()) {
+    // Filter out zero-value entries and generic "Player" names
     if (entry.value === 0) continue
+    if (entry.name.toLowerCase().trim() === 'player') continue
     deduped.push(entry)
   }
 
@@ -233,38 +229,58 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
               {/* MODES BEST SCORE TAB */}
               {tab === 'modesScore' && (
                 <div>
-                  {/* Top 3 Podium */}
-                  <div className="flex items-end justify-center gap-2 mb-3">
-                    {modesEntries[1] && <PodiumSlot entry={modesEntries[1]} place={2} />}
-                    {modesEntries[0] && <PodiumSlot entry={modesEntries[0]} place={1} />}
-                    {modesEntries[2] && <PodiumSlot entry={modesEntries[2]} place={3} />}
-                  </div>
+                  {modesEntries.length <= 1 && !modesEntries.some(e => !e.isPlayer) ? (
+                    <div className="flex flex-col items-center justify-center py-8">
+                      <span className="text-3xl mb-2">🏆</span>
+                      <p className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>No players yet</p>
+                      <p className="text-[9px] mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>Play to be the first on the board!</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Top 3 Podium */}
+                      <div className="flex items-end justify-center gap-2 mb-3">
+                        {modesEntries[1] && <PodiumSlot entry={modesEntries[1]} place={2} />}
+                        {modesEntries[0] && <PodiumSlot entry={modesEntries[0]} place={1} />}
+                        {modesEntries[2] && <PodiumSlot entry={modesEntries[2]} place={3} />}
+                      </div>
 
-                  {/* List below */}
-                  <div className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
-                    {modesEntries.slice(3).map((entry) => (
-                      <RankRow key={entry.rank} entry={entry} color="#F65E3B" />
-                    ))}
-                  </div>
+                      {/* List below */}
+                      <div className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+                        {modesEntries.slice(3).map((entry) => (
+                          <RankRow key={entry.rank} entry={entry} color="#F65E3B" />
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
               {/* COINS RANK TAB */}
               {tab === 'coinsRank' && (
                 <div>
-                  {/* Top 3 Podium */}
-                  <div className="flex items-end justify-center gap-2 mb-3">
-                    {coinsEntries[1] && <PodiumSlot entry={coinsEntries[1]} place={2} />}
-                    {coinsEntries[0] && <PodiumSlot entry={coinsEntries[0]} place={1} />}
-                    {coinsEntries[2] && <PodiumSlot entry={coinsEntries[2]} place={3} />}
-                  </div>
+                  {coinsEntries.length <= 1 && !coinsEntries.some(e => !e.isPlayer) ? (
+                    <div className="flex flex-col items-center justify-center py-8">
+                      <span className="text-3xl mb-2">💰</span>
+                      <p className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>No players yet</p>
+                      <p className="text-[9px] mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>Earn coins to rank up!</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Top 3 Podium */}
+                      <div className="flex items-end justify-center gap-2 mb-3">
+                        {coinsEntries[1] && <PodiumSlot entry={coinsEntries[1]} place={2} />}
+                        {coinsEntries[0] && <PodiumSlot entry={coinsEntries[0]} place={1} />}
+                        {coinsEntries[2] && <PodiumSlot entry={coinsEntries[2]} place={3} />}
+                      </div>
 
-                  {/* List below */}
-                  <div className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
-                    {coinsEntries.slice(3).map((entry) => (
-                      <RankRow key={entry.rank} entry={entry} color="#EDC22E" />
-                    ))}
-                  </div>
+                      {/* List below */}
+                      <div className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+                        {coinsEntries.slice(3).map((entry) => (
+                          <RankRow key={entry.rank} entry={entry} color="#EDC22E" />
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 

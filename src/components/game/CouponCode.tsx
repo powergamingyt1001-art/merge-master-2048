@@ -255,11 +255,11 @@ function getCoinAmountFromItem(item: string): number {
   return 500
 }
 
-type AdminTab = 'payments' | 'coupons' | 'nightcode' | 'prices'
+type AdminTab = 'payments' | 'coupons' | 'prices'
 
 // Custom price overrides stored in localStorage
 interface CustomPriceOverride {
-  coinPackages: { coins: number; price: number }[]
+  coinPackages: { coins: number; price: number; label?: string }[]
   inrAbilityPackages: { type: string; uses: number; price: number }[]
 }
 
@@ -338,6 +338,12 @@ export function CouponCode({
   // Night code settings form
   const [ncRewardType, setNcRewardType] = useState<RewardType>(nightCodeSettings.rewardType)
   const [ncRewardAmount, setNcRewardAmount] = useState(nightCodeSettings.rewardAmount)
+
+  // Day/Night code toggle in Coupons tab
+  const [dnToggle, setDnToggle] = useState<'day' | 'night'>('day')
+  const [dayCodeCustom, setDayCodeCustom] = useState('')
+  const [nightCodeCustom, setNightCodeCustom] = useState('')
+  const [viewingScreenshot, setViewingScreenshot] = useState<string | null>(null)
 
   // Refresh admin data when panel opens
   useEffect(() => {
@@ -818,7 +824,6 @@ export function CouponCode({
                     {[
                       { key: 'payments' as AdminTab, label: 'Payments', icon: <Clock className="w-3 h-3" /> },
                       { key: 'coupons' as AdminTab, label: 'Coupons', icon: <Ticket className="w-3 h-3" /> },
-                      { key: 'nightcode' as AdminTab, label: 'Night Code', icon: <Sparkles className="w-3 h-3" /> },
                       { key: 'prices' as AdminTab, label: 'Prices', icon: <Coins className="w-3 h-3" /> },
                     ].map(tab => (
                       <button
@@ -921,9 +926,19 @@ export function CouponCode({
                                       </p>
                                     )}
                                     {entry.screenshotDataUrl && (
-                                      <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                        📸 Screenshot: <span style={{ color: '#00E676' }}>Uploaded</span>
-                                      </p>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>📸 Screenshot:</span>
+                                        <button onClick={() => setViewingScreenshot(entry.screenshotDataUrl!)}
+                                          className="text-[7px] font-bold px-1.5 py-0.5 rounded"
+                                          style={{ backgroundColor: 'rgba(0,230,118,0.1)', color: '#00E676' }}>
+                                          <Eye className="w-2.5 h-2.5 inline" /> View
+                                        </button>
+                                        <button onClick={() => { const a = document.createElement('a'); a.href = entry.screenshotDataUrl!; a.download = `payment-${entry.id}.jpg`; a.click(); }}
+                                          className="text-[7px] font-bold px-1.5 py-0.5 rounded"
+                                          style={{ backgroundColor: 'rgba(237,194,46,0.1)', color: '#EDC22E' }}>
+                                          ⬇️ Download
+                                        </button>
+                                      </div>
                                     )}
                                   </div>
 
@@ -1010,6 +1025,159 @@ export function CouponCode({
                     {/* ====== COUPONS TAB ====== */}
                     {adminTab === 'coupons' && (
                       <div className="space-y-3">
+                        {/* Day/Night Code Management Section */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-1.5">
+                              <Sparkles className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                              <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Day/Night Codes</p>
+                            </div>
+                            <div className="flex rounded-full overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                              <button onClick={() => setDnToggle('day')}
+                                className="px-2.5 py-1 text-[8px] font-bold transition-all"
+                                style={{ backgroundColor: dnToggle === 'day' ? '#FFD700' : 'rgba(255,255,255,0.05)', color: dnToggle === 'day' ? '#000000' : 'rgba(255,255,255,0.4)' }}>
+                                ☀️ Day
+                              </button>
+                              <button onClick={() => setDnToggle('night')}
+                                className="px-2.5 py-1 text-[8px] font-bold transition-all"
+                                style={{ backgroundColor: dnToggle === 'night' ? '#7C4DFF' : 'rgba(255,255,255,0.05)', color: dnToggle === 'night' ? '#FFFFFF' : 'rgba(255,255,255,0.4)' }}>
+                                🌙 Night
+                              </button>
+                            </div>
+                          </div>
+
+                          {dnToggle === 'day' ? (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between px-2 py-1.5 rounded-lg"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(255,215,0,0.2)' }}>
+                                <div>
+                                  <p className="text-[10px] font-bold font-mono" style={{ color: '#FFD700' }}>{dayCode}</p>
+                                  <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Today&apos;s Day Code (auto-generated)</p>
+                                </div>
+                                <span className="text-lg">☀️</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Custom:</p>
+                                <input
+                                  type="text"
+                                  value={dayCodeCustom}
+                                  onChange={(e) => setDayCodeCustom(e.target.value.toUpperCase())}
+                                  placeholder="Override code text..."
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                                />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Reward:</p>
+                                <select
+                                  value={ncRewardType}
+                                  onChange={(e) => setNcRewardType(e.target.value as RewardType)}
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                                >
+                                  <option value="coins">💰 Coins</option>
+                                  <option value="spins">🎫 Spin Tickets</option>
+                                  <option value="magnets">🧲 Magnets</option>
+                                  <option value="bombs">💣 Bombs</option>
+                                  <option value="hammers">🔨 Hammers</option>
+                                  <option value="5x">✨ 5x Multiplier</option>
+                                  <option value="2.5x">🌟 2.5x Multiplier</option>
+                                </select>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Amount:</p>
+                                <input
+                                  type="number"
+                                  value={ncRewardAmount}
+                                  onChange={(e) => setNcRewardAmount(parseInt(e.target.value) || 0)}
+                                  min={1}
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                                />
+                              </div>
+                              <button
+                                onClick={handleSaveNightCodeSettings}
+                                className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                                style={{ background: 'linear-gradient(135deg, #FFD700, #FF7A00)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(255,165,0,0.3)' }}
+                              >
+                                SAVE DAY CODE SETTINGS
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between px-2 py-1.5 rounded-lg"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(124,77,255,0.2)' }}>
+                                <div>
+                                  <p className="text-[10px] font-bold font-mono" style={{ color: '#7C4DFF' }}>{nightCode}</p>
+                                  <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Tonight&apos;s Night Code (auto-generated)</p>
+                                </div>
+                                <span className="text-lg">🌙</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Custom:</p>
+                                <input
+                                  type="text"
+                                  value={nightCodeCustom}
+                                  onChange={(e) => setNightCodeCustom(e.target.value.toUpperCase())}
+                                  placeholder="Override code text..."
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                                />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Reward:</p>
+                                <select
+                                  value={ncRewardType}
+                                  onChange={(e) => setNcRewardType(e.target.value as RewardType)}
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                                >
+                                  <option value="coins">💰 Coins</option>
+                                  <option value="spins">🎫 Spin Tickets</option>
+                                  <option value="magnets">🧲 Magnets</option>
+                                  <option value="bombs">💣 Bombs</option>
+                                  <option value="hammers">🔨 Hammers</option>
+                                  <option value="5x">✨ 5x Multiplier</option>
+                                  <option value="2.5x">🌟 2.5x Multiplier</option>
+                                </select>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Amount:</p>
+                                <input
+                                  type="number"
+                                  value={ncRewardAmount}
+                                  onChange={(e) => setNcRewardAmount(parseInt(e.target.value) || 0)}
+                                  min={1}
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                                />
+                              </div>
+                              <button
+                                onClick={handleSaveNightCodeSettings}
+                                className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                                style={{ background: 'linear-gradient(135deg, #7C4DFF, #651FFF)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(124,77,255,0.3)' }}
+                              >
+                                SAVE NIGHT CODE SETTINGS
+                              </button>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-1.5 mt-2">
+                            <div className="px-2 py-1.5 rounded-lg text-center"
+                              style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                              <p className="text-lg">{nightCodeSettings.emoji}</p>
+                              <p className="text-[8px] font-bold" style={{ color: '#FFFFFF' }}>{nightCodeSettings.label}</p>
+                            </div>
+                            <div className="px-2 py-1.5 rounded-lg text-center"
+                              style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                              <p className="text-lg">{dnToggle === 'day' ? '☀️' : '🌙'}</p>
+                              <p className="text-[8px] font-bold" style={{ color: dnToggle === 'day' ? '#FFD700' : '#7C4DFF' }}>{dnToggle === 'day' ? 'Day Code' : 'Night Code'}</p>
+                              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Changes daily</p>
+                            </div>
+                          </div>
+                        </div>
+
                         {/* Built-in admin codes */}
                         <div>
                           <p className="text-[9px] font-bold mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
@@ -1207,112 +1375,6 @@ export function CouponCode({
                       </div>
                     )}
 
-                    {/* ====== NIGHT CODE TAB ====== */}
-                    {adminTab === 'nightcode' && (
-                      <div className="space-y-3">
-                        {/* Today's night code preview */}
-                        <div className="p-2.5 rounded-lg"
-                          style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.15)' }}>
-                          <div className="flex items-center gap-1.5 mb-1.5">
-                            <Eye className="w-3 h-3" style={{ color: '#00E676' }} />
-                            <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>Tonight&apos;s Code Preview</p>
-                          </div>
-                          <div className="flex items-center justify-between px-2 py-1.5 rounded-lg"
-                            style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(0,230,118,0.2)' }}>
-                            <div>
-                              <p className="text-[10px] font-bold font-mono" style={{ color: '#00E676' }}>{nightCode}</p>
-                              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                Will distribute: {nightCodeSettings.emoji} {nightCodeSettings.label}
-                              </p>
-                            </div>
-                            <span className="text-lg">{nightCodeSettings.emoji}</span>
-                          </div>
-                        </div>
-
-                        {/* Night code reward settings */}
-                        <div className="p-2.5 rounded-lg"
-                          style={{ backgroundColor: 'rgba(255,165,0,0.05)', border: '1px solid rgba(255,165,0,0.15)' }}>
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <Settings className="w-3 h-3" style={{ color: '#FF7A00' }} />
-                            <p className="text-[9px] font-bold" style={{ color: '#FF7A00' }}>Night Code Reward Settings</p>
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Type:</p>
-                              <select
-                                value={ncRewardType}
-                                onChange={(e) => setNcRewardType(e.target.value as RewardType)}
-                                className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
-                                style={{
-                                  backgroundColor: 'rgba(255,255,255,0.06)',
-                                  border: '1px solid rgba(255,255,255,0.1)',
-                                  color: '#FFFFFF',
-                                }}
-                              >
-                                <option value="coins">💰 Coins</option>
-                                <option value="spins">🎫 Spin Tickets</option>
-                                <option value="magnets">🧲 Magnets</option>
-                                <option value="bombs">💣 Bombs</option>
-                                <option value="hammers">🔨 Hammers</option>
-                                <option value="5x">✨ 5x Multiplier</option>
-                                <option value="2.5x">🌟 2.5x Multiplier</option>
-                              </select>
-                            </div>
-
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Amount:</p>
-                              <input
-                                type="number"
-                                value={ncRewardAmount}
-                                onChange={(e) => setNcRewardAmount(parseInt(e.target.value) || 0)}
-                                min={1}
-                                className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
-                                style={{
-                                  backgroundColor: 'rgba(255,255,255,0.06)',
-                                  border: '1px solid rgba(255,255,255,0.1)',
-                                  color: '#FFFFFF',
-                                }}
-                              />
-                            </div>
-
-                            <button
-                              onClick={handleSaveNightCodeSettings}
-                              className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
-                              style={{
-                                background: 'linear-gradient(135deg, #00E676, #00C853)',
-                                color: '#FFFFFF',
-                                boxShadow: '0 2px 10px rgba(0,230,118,0.3)',
-                              }}
-                            >
-                              SAVE NIGHT CODE SETTINGS
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Current settings display */}
-                        <div className="p-2.5 rounded-lg"
-                          style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                          <p className="text-[9px] font-bold mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                            Current Night Code Distribution
-                          </p>
-                          <div className="grid grid-cols-2 gap-1.5">
-                            <div className="px-2 py-1.5 rounded-lg text-center"
-                              style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                              <p className="text-lg">{nightCodeSettings.emoji}</p>
-                              <p className="text-[8px] font-bold" style={{ color: '#FFFFFF' }}>{nightCodeSettings.label}</p>
-                            </div>
-                            <div className="px-2 py-1.5 rounded-lg text-center"
-                              style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                              <p className="text-lg">🌙</p>
-                              <p className="text-[8px] font-bold" style={{ color: '#00E676' }}>Night Code</p>
-                              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Changes daily</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
                     {/* ====== PRICES TAB ====== */}
                     {adminTab === 'prices' && (
                       <div className="space-y-3">
@@ -1321,15 +1383,39 @@ export function CouponCode({
                           style={{ backgroundColor: 'rgba(237,194,46,0.05)', border: '1px solid rgba(237,194,46,0.15)' }}>
                           <div className="flex items-center gap-1.5 mb-2">
                             <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
-                            <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Coin Package Prices (₹)</p>
+                            <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Coin Packages</p>
                           </div>
                           <div className="space-y-1.5">
                             {(customPrices?.coinPackages || DEFAULT_COIN_PACKAGES).map((pkg, idx) => (
-                              <div key={idx} className="flex items-center gap-2">
-                                <span className="text-[8px] font-semibold w-20 truncate" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                                  {pkg.coins.toLocaleString()} Coins
+                              <div key={idx} className="flex items-center gap-1.5">
+                                <span className="text-[7px] font-semibold w-14 truncate" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                                  {DEFAULT_COIN_PACKAGES[idx]?.coins?.toLocaleString() || pkg.coins?.toLocaleString()}
                                 </span>
-                                <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>₹</span>
+                                <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Coins:</span>
+                                <input
+                                  type="number"
+                                  value={pkg.coins}
+                                  onChange={(e) => {
+                                    const newCoins = parseInt(e.target.value) || 0
+                                    const currentPackages = customPrices?.coinPackages || DEFAULT_COIN_PACKAGES
+                                    const updated = [...currentPackages]
+                                    updated[idx] = { ...updated[idx], coins: newCoins }
+                                    const newPrices: CustomPriceOverride = {
+                                      coinPackages: updated,
+                                      inrAbilityPackages: customPrices?.inrAbilityPackages || DEFAULT_INR_ABILITY_PACKAGES,
+                                    }
+                                    setCustomPrices(newPrices)
+                                    saveCustomPrices(newPrices)
+                                  }}
+                                  min={1}
+                                  className="w-14 px-1.5 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{
+                                    backgroundColor: 'rgba(255,255,255,0.06)',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    color: '#00E676',
+                                  }}
+                                />
+                                <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>₹</span>
                                 <input
                                   type="number"
                                   value={pkg.price}
@@ -1346,7 +1432,7 @@ export function CouponCode({
                                     saveCustomPrices(newPrices)
                                   }}
                                   min={1}
-                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  className="w-14 px-1.5 py-1 rounded-lg text-[8px] font-semibold outline-none"
                                   style={{
                                     backgroundColor: 'rgba(255,255,255,0.06)',
                                     border: '1px solid rgba(255,255,255,0.1)',
@@ -1458,7 +1544,7 @@ export function CouponCode({
                   }}
                   onKeyDown={(e) => e.key === 'Enter' && handleClaim()}
                   placeholder="Enter code here..."
-                  className="flex-1 px-3 py-2 rounded-lg text-xs font-semibold outline-none"
+                  className="flex-1 px-4 py-2.5 rounded-full text-sm font-semibold outline-none"
                   style={{
                     backgroundColor: 'rgba(255,255,255,0.06)',
                     border: '1px solid rgba(255,255,255,0.1)',
@@ -1467,7 +1553,7 @@ export function CouponCode({
                 />
                 <button
                   onClick={handleClaim}
-                  className="px-4 py-2 rounded-lg text-[10px] font-bold transition-transform active:scale-95"
+                  className="px-6 py-2.5 rounded-full text-xs font-bold transition-transform active:scale-95"
                   style={{
                     background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
                     color: '#FFFFFF',
@@ -1538,6 +1624,58 @@ export function CouponCode({
           </motion.div>
         </motion.div>
       )}
+
+      {/* Screenshot Viewer Modal */}
+      <AnimatePresence>
+        {viewingScreenshot && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] flex items-center justify-center px-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.92)' }}
+            onClick={() => setViewingScreenshot(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.8 }}
+              className="relative max-w-sm w-full rounded-2xl p-4 text-center"
+              style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold" style={{ color: '#EDC22E' }}>📸 Payment Proof</p>
+                <button onClick={() => setViewingScreenshot(null)}
+                  className="w-7 h-7 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                  <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                </button>
+              </div>
+              <div className="rounded-lg overflow-hidden mb-3" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                <img src={viewingScreenshot} alt="Payment proof" className="w-full h-auto max-h-64 object-contain" style={{ backgroundColor: '#FFFFFF' }} />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => {
+                  const a = document.createElement('a')
+                  a.href = viewingScreenshot
+                  a.download = `payment-proof-${Date.now()}.jpg`
+                  a.click()
+                }}
+                  className="flex-1 py-2 rounded-lg text-[10px] font-bold transition-transform active:scale-95"
+                  style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
+                  ⬇️ Download
+                </button>
+                <button onClick={() => setViewingScreenshot(null)}
+                  className="flex-1 py-2 rounded-lg text-[10px] font-semibold"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </AnimatePresence>
   )
 }
