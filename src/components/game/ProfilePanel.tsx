@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users, TrendingUp, Percent } from 'lucide-react'
 import { Notification, PLAYER_AVATARS, getLevelInfo, getLevelThreshold, MAX_LEVEL } from '@/hooks/useGame'
+import { AdsterraBanner320x50 } from '@/components/ads/AdsterraAds'
 
 interface ProfilePanelProps {
   isOpen: boolean
@@ -255,6 +256,11 @@ export function ProfilePanel({
                   🔄 Reset All Data
                 </button>
               )}
+
+              {/* Banner Ad */}
+              <div className="w-full mt-3">
+                <AdsterraBanner320x50 />
+              </div>
             </div>
           </motion.div>
         </motion.div>

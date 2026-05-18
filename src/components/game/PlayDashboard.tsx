@@ -32,6 +32,7 @@ interface PlayDashboardProps {
   hammerCount: number
   magnetCount: number
   blastCount: number
+  undoTotal: number
   modBestScore: number
   gamePoints: number
   bestScore: number
@@ -83,6 +84,7 @@ interface PlayDashboardProps {
   onClaimWeeklyBonus?: () => void
   onClaimStreakAdBonus?: () => void
   streakAdBonusClaimed?: boolean
+  levelXP: number
 }
 
 const COIN_GAME_MODES = [
@@ -95,7 +97,7 @@ const COIN_GAME_MODES = [
 
 export function PlayDashboard({
   coins, spinTickets, streakDay, streakClaimed, welcomeClaimed,
-  hammerCount, magnetCount, blastCount, modBestScore, gamePoints, bestScore,
+  hammerCount, magnetCount, blastCount, undoTotal, modBestScore, gamePoints, bestScore,
   inviteCode, invitedUsers, commissionBalance, commissionClaimed, autoClaimCommission,
   gamesPlayedToday, maxGamesPerDay, notifications,
   playerName, playerAvatar, playerLevel, playerId, firebaseReferrals, firebaseCommissionPending,
@@ -109,6 +111,7 @@ export function PlayDashboard({
   onUpdatePlayerName, onUpdatePlayerAvatar,
   dailyTasks, onClaimDailyTask, onCompleteVisitWebsiteTask, onResetAllData,
   weeklyBonusClaimed = false, onClaimWeeklyBonus, onClaimStreakAdBonus, streakAdBonusClaimed = false,
+  levelXP,
 }: PlayDashboardProps) {
   const [showSpin, setShowSpin] = useState(false)
   const [showStreak, setShowStreak] = useState(false)
@@ -159,8 +162,12 @@ export function PlayDashboard({
       case 'spin': onAddSpinTickets(prize.count); break
       case 'coin': onAddCoins(prize.count); break
       case 'respin': onAddSpinTickets(1); break
+      // Rare prizes: convert to equivalent coin rewards
+      case 'multiply5': onAddCoins(500); break
+      case 'multiply2_5': onAddCoins(250); break
+      case 'timeExtend': onAddCoins(150); break
     }
-    onAddNotification('Spin Prize!', `You won ${prize.emoji} ${prize.label}!`, 'reward', '🎰')
+    onAddNotification('Spin Prize!', `You won ${prize.emoji} ${prize.label}${prize.type === 'multiply5' ? ' (→500💰)' : prize.type === 'multiply2_5' ? ' (→250💰)' : prize.type === 'timeExtend' ? ' (→150💰)' : ''}!`, 'reward', '🎰')
   }, [onAddPowerUp, onAddUndos, onAddSpinTickets, onAddCoins, onAddNotification])
 
   const handlePlayClassic = useCallback(() => {
@@ -245,28 +252,21 @@ export function PlayDashboard({
             </div>
           </div>
 
-          {/* Inventory bar + Games Left */}
-          <div className="w-full flex items-center justify-between px-2 py-1 rounded-lg"
+          {/* Inventory bar */}
+          <div className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg"
             style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="flex items-center gap-1.5">
-              <InventoryItem emoji="🔨" count={hammerCount} color="#F59563" />
-              <InventoryItem emoji="🧲" count={magnetCount} color="#00E676" />
-              <InventoryItem emoji="💣" count={blastCount} color="#FF7A00" />
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <InventoryItem emoji="🔨" label="H" count={hammerCount} color="#F59563" />
+              <InventoryItem emoji="🧲" label="M" count={magnetCount} color="#00E676" />
+              <InventoryItem emoji="💣" label="B" count={blastCount} color="#FF7A00" />
+              <InventoryItem emoji="↩️" label="U" count={undoTotal} color="#8f7a66" />
+              <InventoryItem emoji="🎫" label="S" count={spinTickets} color="#EDC22E" />
             </div>
-            <div className="flex items-center gap-1.5">
-              <button onClick={() => setShowCouponCode(true)} className="flex items-center gap-0.5 px-1 py-0.5 rounded transition-transform active:scale-95" style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.12)' }}>
-                <Ticket className="w-2.5 h-2.5" style={{ color: '#EDC22E' }} />
-                <span className="text-[7px] font-bold" style={{ color: '#EDC22E' }}>Code</span>
-              </button>
-              <div className="flex items-center gap-0.5 px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(0,230,118,0.08)' }}>
-                <span className="text-[10px]">🎫</span>
-                <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>{spinTickets}</span>
-              </div>
-              <div className="flex items-center gap-0.5 px-1 py-0.5 rounded" style={{ backgroundColor: isGameLimitReached ? 'rgba(246,94,59,0.12)' : 'rgba(255,255,255,0.06)' }}>
-                <span className="text-[10px]">{isGameLimitReached ? '🚫' : '🎮'}</span>
-                <span className="text-[8px] font-bold" style={{ color: isGameLimitReached ? '#F65E3B' : 'rgba(255,255,255,0.5)' }}>{gamesLeft}</span>
-              </div>
-            </div>
+            <button onClick={() => setShowCouponCode(true)} className="flex items-center gap-1 px-2.5 py-1 rounded-lg transition-transform active:scale-95 flex-shrink-0"
+              style={{ backgroundColor: 'rgba(237,194,46,0.12)', border: '1px solid rgba(237,194,46,0.25)' }}>
+              <Ticket className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
+              <span className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Code</span>
+            </button>
           </div>
 
           {/* Central PLAY Button */}
@@ -385,8 +385,8 @@ export function PlayDashboard({
             <AdsterraNativeBanner />
           </div>
 
-          {/* Quick Actions: Streak + Spin + Weekly + Store + Leaderboard */}
-          <div className="w-full grid grid-cols-5 gap-1.5">
+          {/* Quick Actions: Daily + Spin + Store + Rank */}
+          <div className="w-full grid grid-cols-4 gap-1.5">
             <button onClick={() => setShowStreak(true)}
               className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
               style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
@@ -400,17 +400,6 @@ export function PlayDashboard({
               <span className="text-base">🎰</span>
               <p className="text-[7px] font-bold" style={{ color: '#00E676' }}>Spin</p>
               <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{spinTickets}🎫</p>
-            </button>
-            <button onClick={() => !weeklyBonusClaimed && onClaimWeeklyBonus?.()}
-              className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
-              style={{
-                backgroundColor: weeklyBonusClaimed ? 'rgba(255,255,255,0.02)' : 'rgba(237,194,46,0.1)',
-                border: weeklyBonusClaimed ? '1px solid rgba(255,255,255,0.04)' : '1px solid rgba(237,194,46,0.2)',
-                opacity: weeklyBonusClaimed ? 0.5 : 1,
-              }}>
-              <span className="text-base">🎁</span>
-              <p className="text-[7px] font-bold" style={{ color: weeklyBonusClaimed ? 'rgba(255,255,255,0.3)' : '#EDC22E' }}>Weekly</p>
-              <p className="text-[6px]" style={{ color: weeklyBonusClaimed ? 'rgba(255,255,255,0.2)' : '#00E676' }}>{weeklyBonusClaimed ? '✓' : '400💰'}</p>
             </button>
             <button onClick={() => setShowStore(true)}
               className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
@@ -555,7 +544,9 @@ export function PlayDashboard({
         tournamentGamesPlayed={tournamentGamesPlayed}
         onJoinTournament={onJoinTournament}
         onStartTournamentGame={onStartTournamentGame}
-        playerName={playerName} playerAvatar={playerAvatar} playerId={playerId} />
+        playerName={playerName} playerAvatar={playerAvatar} playerId={playerId}
+        weeklyBonusClaimed={weeklyBonusClaimed}
+        onClaimWeeklyBonus={onClaimWeeklyBonus} />
       <InvitePanel isOpen={showInvite} onClose={() => setShowInvite(false)}
         inviteCode={inviteCode} invitedUsers={invitedUsers}
         commissionBalance={commissionBalance} commissionClaimed={commissionClaimed}
@@ -565,7 +556,7 @@ export function PlayDashboard({
         firebaseReferrals={firebaseReferrals} firebaseCommissionPending={firebaseCommissionPending} />
       <ProfilePanel isOpen={showProfile} onClose={() => setShowProfile(false)}
         playerName={playerName} playerAvatar={playerAvatar} playerLevel={playerLevel}
-        gamePoints={gamePoints} bestScore={bestScore} modBestScore={modBestScore}
+        gamePoints={gamePoints} levelXP={levelXP} bestScore={bestScore} modBestScore={modBestScore}
         coins={coins} gamesPlayedToday={gamesPlayedToday} maxGamesPerDay={maxGamesPerDay}
         invitedUsers={invitedUsers} onUpdateName={onUpdatePlayerName} onUpdateAvatar={onUpdatePlayerAvatar}
         totalBattlesPlayed={totalBattlesPlayed} totalBattlesWon={totalBattlesWon}
@@ -607,11 +598,11 @@ export function PlayDashboard({
   )
 }
 
-function InventoryItem({ emoji, count, color }: { emoji: string; count: number; color: string }) {
+function InventoryItem({ emoji, label, count, color }: { emoji: string; label: string; count: number; color: string }) {
   return (
     <div className="flex items-center gap-0.5">
-      <span className="text-sm">{emoji}</span>
-      <span className="text-[10px] font-bold" style={{ color: count > 0 ? color : 'rgba(255,255,255,0.2)' }}>{count}</span>
+      <span className="text-[11px]">{emoji}</span>
+      <span className="text-[8px] font-bold" style={{ color: count > 0 ? color : 'rgba(255,255,255,0.2)' }}>{label}:{count}</span>
     </div>
   )
 }

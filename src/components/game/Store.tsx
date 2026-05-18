@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, ShoppingCart, Coins, Zap, Clock, Check, AlertCircle, Tv } from 'lucide-react'
+import { X, ShoppingCart, Coins, Zap, Clock, Tv, Upload, Image as ImageIcon, Copy, Check } from 'lucide-react'
 import { getRandomLink } from '@/components/ads/AdOverlay'
 
 interface StoreProps {
@@ -27,26 +27,45 @@ interface PurchaseHistoryEntry {
   item: string
   amount: string
   status: 'Pending' | 'Delivered'
-  type: 'coins' | 'ability'
+  type: 'coins' | 'ability' | 'inr_ability'
   transactionId?: string
+  whatsappNumber?: string
+  buyerName?: string
+  screenshotDataUrl?: string
+  coinAmount?: number
+  abilityType?: string
+  abilityCount?: number
 }
 
-// Coin packages (INR prices)
+// Coin packages (INR prices) - Updated
 const COIN_PACKAGES = [
-  { coins: 500, price: 49, label: '500 Coins', color: '#EDC22E' },
-  { coins: 1500, price: 129, label: '1,500 Coins', color: '#FF7A00' },
-  { coins: 5000, price: 399, label: '5,000 Coins', color: '#00E676' },
-  { coins: 15000, price: 999, label: '15,000 Coins', color: '#00FFFF' },
-  { coins: 50000, price: 2999, label: '50,000 Coins', color: '#FF69B4' },
+  { coins: 2500, price: 3, label: '2,500 Coins', color: '#EDC22E' },
+  { coins: 4999, price: 5, label: '4,999 Coins', color: '#FF7A00' },
+  { coins: 11999, price: 10, label: '11,999 Coins', color: '#00E676' },
+  { coins: 25000, price: 19, label: '25,000 Coins', color: '#00FFFF', popular: true },
+  { coins: 62000, price: 49, label: '62,000 Coins', color: '#FF69B4' },
+  { coins: 120000, price: 99, label: '1,20,000 Coins', color: '#E040FB' },
 ]
 
-// Ability packages (coin prices)
+// Ability packages (coin prices) - Keep existing
 const ABILITY_PACKAGES = [
   { type: 'hammer' as const, count: 5, cost: 100, emoji: '🔨', label: '5 Hammers', color: '#F59563' },
   { type: 'magnet' as const, count: 5, cost: 100, emoji: '🧲', label: '5 Magnets', color: '#00E676' },
   { type: 'blast' as const, count: 5, cost: 150, emoji: '💣', label: '5 Bombs', color: '#FF7A00' },
   { type: 'undo' as const, count: 10, cost: 50, emoji: '↩️', label: '10 Undos', color: '#00FFFF' },
   { type: 'spin' as const, count: 5, cost: 200, emoji: '🎫', label: '5 Spin Tickets', color: '#EDC22E' },
+]
+
+// INR Ability packages (5x and 2.5x)
+const INR_ABILITY_PACKAGES = [
+  // 5x Ability
+  { type: '5x' as const, uses: 1, price: 20, label: '5x × 1', emoji: '✖️', color: '#FF6D00', category: '5x' },
+  { type: '5x' as const, uses: 5, price: 80, label: '5x × 5', emoji: '✖️', color: '#FF6D00', category: '5x' },
+  { type: '5x' as const, uses: 10, price: 149, label: '5x × 10', emoji: '✖️', color: '#FF6D00', category: '5x' },
+  // 2.5x Ability
+  { type: '2.5x' as const, uses: 1, price: 10, label: '2.5x × 1', emoji: '✨', color: '#7C4DFF', category: '2.5x' },
+  { type: '2.5x' as const, uses: 5, price: 40, label: '2.5x × 5', emoji: '✨', color: '#7C4DFF', category: '2.5x' },
+  { type: '2.5x' as const, uses: 10, price: 75, label: '2.5x × 10', emoji: '✨', color: '#7C4DFF', category: '2.5x' },
 ]
 
 // Free ad reward options (basic abilities only)
@@ -57,7 +76,8 @@ const FREE_AD_REWARDS = [
   { type: 'undo', count: 3, label: '3 Undos', emoji: '↩️', weight: 15 },
 ]
 
-const WHATSAPP_NUMBER = '919999999999'
+const UPI_ID = '9897186065@fam'
+const WEEKLY_ABILITY_LIMIT = 15
 
 type StoreTab = 'coins' | 'abilities' | 'history'
 
@@ -101,6 +121,42 @@ function saveFreeAdRewardCount(week: number, count: number) {
   localStorage.setItem('freeAdRewardsWeek', JSON.stringify({ week, count }))
 }
 
+// Weekly INR ability purchase tracking
+interface WeeklyAbilityPurchases {
+  week: number
+  '5x': number
+  '2.5x': number
+}
+
+function getWeeklyAbilityPurchases(): WeeklyAbilityPurchases {
+  const currentWeek = getWeekNumber()
+  if (typeof window === 'undefined') return { week: currentWeek, '5x': 0, '2.5x': 0 }
+  try {
+    const data = localStorage.getItem('weeklyAbilityPurchases')
+    if (!data) return { week: currentWeek, '5x': 0, '2.5x': 0 }
+    const parsed = JSON.parse(data)
+    if (parsed.week !== currentWeek) {
+      return { week: currentWeek, '5x': 0, '2.5x': 0 }
+    }
+    return { week: currentWeek, '5x': parsed['5x'] || 0, '2.5x': parsed['2.5x'] || 0 }
+  } catch {
+    return { week: currentWeek, '5x': 0, '2.5x': 0 }
+  }
+}
+
+function saveWeeklyAbilityPurchases(data: WeeklyAbilityPurchases) {
+  localStorage.setItem('weeklyAbilityPurchases', JSON.stringify(data))
+}
+
+// Check if a pending purchase is older than 12 hours
+function isPendingOver12Hours(dateStr: string): boolean {
+  const purchaseDate = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - purchaseDate.getTime()
+  const diffHours = diffMs / (1000 * 60 * 60)
+  return diffHours > 12
+}
+
 export function Store({
   isOpen,
   onClose,
@@ -118,46 +174,136 @@ export function Store({
 }: StoreProps) {
   const [activeTab, setActiveTab] = useState<StoreTab>('coins')
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryEntry[]>(() => loadPurchaseHistory())
-  const [showTransactionDialog, setShowTransactionDialog] = useState(false)
-  const [selectedPackage, setSelectedPackage] = useState<typeof COIN_PACKAGES[0] | null>(null)
-  const [transactionInput, setTransactionInput] = useState('')
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false)
+  const [paymentItem, setPaymentItem] = useState<{
+    label: string
+    price: number
+    type: 'coins' | '5x' | '2.5x'
+    coins?: number
+    uses?: number
+  } | null>(null)
+  const [paymentForm, setPaymentForm] = useState({
+    whatsappNumber: '',
+    name: '',
+    amountPaid: '',
+    screenshotFile: null as File | null,
+  })
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [adWatching, setAdWatching] = useState(false)
   const [adCountdown, setAdCountdown] = useState(0)
   const [freeAdInfo, setFreeAdInfo] = useState(() => getFreeAdRewardCount())
+  const [weeklyAbilities, setWeeklyAbilities] = useState(() => getWeeklyAbilityPurchases())
+  const [upiCopied, setUpiCopied] = useState(false)
 
-  // Handle coin package purchase - open WhatsApp
+  // Handle coin package purchase - open payment dialog
   const handleBuyCoins = useCallback((pkg: typeof COIN_PACKAGES[0]) => {
-    const message = `Hi! I want to buy ${pkg.label} (₹${pkg.price}). My Player ID: ${playerId}`
-    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`
-    try {
-      window.open(url, '_blank')
-    } catch { /* popup blocked */ }
-    setSelectedPackage(pkg)
-    setShowTransactionDialog(true)
-  }, [playerId])
+    setPaymentItem({
+      label: pkg.label,
+      price: pkg.price,
+      type: 'coins',
+      coins: pkg.coins,
+    })
+    setPaymentForm(prev => ({ ...prev, amountPaid: String(pkg.price) }))
+    setScreenshotPreview(null)
+    setShowPaymentDialog(true)
+  }, [])
 
-  // Save transaction ID
-  const handleSaveTransaction = useCallback(() => {
-    if (!selectedPackage || !transactionInput.trim()) return
+  // Handle INR ability purchase - open payment dialog
+  const handleBuyInrAbility = useCallback((ability: typeof INR_ABILITY_PACKAGES[0]) => {
+    const weeklyData = getWeeklyAbilityPurchases()
+    const currentCount = weeklyData[ability.category] || 0
+    if (currentCount >= WEEKLY_ABILITY_LIMIT) {
+      onAddNotification('Weekly Limit Reached', 'Weekly limit reached (15/week). Come back next week!', 'system', '⏰')
+      return
+    }
+
+    setPaymentItem({
+      label: ability.label,
+      price: ability.price,
+      type: ability.type,
+      uses: ability.uses,
+    })
+    setPaymentForm(prev => ({ ...prev, amountPaid: String(ability.price) }))
+    setScreenshotPreview(null)
+    setShowPaymentDialog(true)
+  }, [onAddNotification])
+
+  // Handle screenshot file selection
+  const handleScreenshotChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setPaymentForm(prev => ({ ...prev, screenshotFile: file }))
+
+    // Create preview
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const result = reader.result as string
+      // Resize to save localStorage space - max 200x200
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const maxSize = 200
+        let w = img.width
+        let h = img.height
+        if (w > h) { h = (h / w) * maxSize; w = maxSize }
+        else { w = (w / h) * maxSize; h = maxSize }
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        ctx?.drawImage(img, 0, 0, w, h)
+        setScreenshotPreview(canvas.toDataURL('image/jpeg', 0.5))
+      }
+      img.src = result
+    }
+    reader.readAsDataURL(file)
+  }, [])
+
+  // Submit payment form
+  const handleSubmitPayment = useCallback(() => {
+    if (!paymentItem) return
+    if (!paymentForm.whatsappNumber.trim() || !paymentForm.name.trim()) return
 
     const entry: PurchaseHistoryEntry = {
       id: Date.now().toString(),
       date: new Date().toISOString(),
-      item: selectedPackage.label,
-      amount: `₹${selectedPackage.price}`,
+      item: paymentItem.label,
+      amount: `₹${paymentForm.amountPaid || paymentItem.price}`,
       status: 'Pending',
-      type: 'coins',
-      transactionId: transactionInput.trim(),
+      type: paymentItem.type === 'coins' ? 'coins' : 'inr_ability',
+      whatsappNumber: paymentForm.whatsappNumber.trim(),
+      buyerName: paymentForm.name.trim(),
+      screenshotDataUrl: screenshotPreview || undefined,
+      coinAmount: paymentItem.type === 'coins' ? paymentItem.coins : undefined,
+      abilityType: paymentItem.type !== 'coins' ? paymentItem.type : undefined,
+      abilityCount: paymentItem.uses,
     }
 
     const updated = [entry, ...purchaseHistory].slice(0, 50)
     setPurchaseHistory(updated)
     savePurchaseHistory(updated)
-    setShowTransactionDialog(false)
-    setTransactionInput('')
-    setSelectedPackage(null)
-    onAddNotification('Order Placed! 📦', `${selectedPackage.label} - Delivery within 12 hours. Transaction ID saved.`, 'system', '🛒')
-  }, [selectedPackage, transactionInput, purchaseHistory, onAddNotification])
+
+    // Update weekly ability purchases if applicable
+    if (paymentItem.type === '5x' || paymentItem.type === '2.5x') {
+      const weeklyData = getWeeklyAbilityPurchases()
+      weeklyData[paymentItem.type] = (weeklyData[paymentItem.type] || 0) + (paymentItem.uses || 1)
+      saveWeeklyAbilityPurchases(weeklyData)
+      setWeeklyAbilities(weeklyData)
+    }
+
+    setShowPaymentDialog(false)
+    setPaymentItem(null)
+    setPaymentForm({ whatsappNumber: '', name: '', amountPaid: '', screenshotFile: null })
+    setScreenshotPreview(null)
+
+    onAddNotification(
+      'Order Placed! 📦',
+      `Your order will be delivered within 12 hours. If delayed, you'll get 50% extra coins!`,
+      'system',
+      '🛒'
+    )
+  }, [paymentItem, paymentForm, screenshotPreview, purchaseHistory, onAddNotification])
 
   // Buy ability with coins
   const handleBuyAbility = useCallback((ability: typeof ABILITY_PACKAGES[0]) => {
@@ -222,7 +368,7 @@ export function Store({
     setAdCountdown(5)
   }, [onAddNotification])
 
-  // Countdown timer for ad watching - only decrements timer, no state cascading
+  // Countdown timer for ad watching
   useEffect(() => {
     if (!adWatching || adCountdown <= 0) return
     const timer = setTimeout(() => {
@@ -236,7 +382,6 @@ export function Store({
     if (!adWatching) return
     const handleVisibility = () => {
       if (document.visibilityState === 'visible' && adCountdown > 0) {
-        // Speed up countdown when user returns
         setAdCountdown(prev => Math.min(prev, 2))
       }
     }
@@ -244,7 +389,7 @@ export function Store({
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [adWatching, adCountdown])
 
-  // Claim ad reward (called from click handler, not effect)
+  // Claim ad reward
   const handleClaimAdReward = useCallback(() => {
     const totalWeight = FREE_AD_REWARDS.reduce((s, r) => s + r.weight, 0)
     let random = Math.random() * totalWeight
@@ -279,6 +424,13 @@ export function Store({
     onAddNotification('Free Reward! 🎁', `You got ${reward.emoji} ${reward.label} for watching an ad!`, 'reward', '📺')
     setAdWatching(false)
   }, [onAddPowerUp, onAddUndos, onAddNotification])
+
+  // Refresh data on tab change
+  const handleTabChange = useCallback((tab: StoreTab) => {
+    setActiveTab(tab)
+    setWeeklyAbilities(getWeeklyAbilityPurchases())
+    setPurchaseHistory(loadPurchaseHistory())
+  }, [])
 
   const tabs: { key: StoreTab; label: string; icon: React.ReactNode }[] = [
     { key: 'coins', label: 'Coins', icon: <Coins className="w-3 h-3" /> },
@@ -331,7 +483,7 @@ export function Store({
               {tabs.map(tab => (
                 <button
                   key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
+                  onClick={() => handleTabChange(tab.key)}
                   className="flex-1 flex items-center justify-center gap-1 py-2 transition-all"
                   style={{
                     borderBottom: activeTab === tab.key ? '2px solid #EDC22E' : '2px solid transparent',
@@ -349,8 +501,14 @@ export function Store({
               {activeTab === 'coins' && (
                 <div className="space-y-2">
                   {COIN_PACKAGES.map(pkg => (
-                    <div key={pkg.coins} className="flex items-center justify-between p-2.5 rounded-lg"
+                    <div key={pkg.coins} className="flex items-center justify-between p-2.5 rounded-lg relative"
                       style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: `1px solid ${pkg.color}20` }}>
+                      {pkg.popular && (
+                        <div className="absolute -top-2 -right-1 px-1.5 py-0.5 rounded-full text-[7px] font-extrabold"
+                          style={{ backgroundColor: '#EDC22E', color: '#000000' }}>
+                          POPULAR
+                        </div>
+                      )}
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-lg flex items-center justify-center"
                           style={{ backgroundColor: `${pkg.color}15`, border: `1px solid ${pkg.color}30` }}>
@@ -378,7 +536,7 @@ export function Store({
                   {/* Delivery info */}
                   <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(0,230,118,0.04)', border: '1px solid rgba(0,230,118,0.1)' }}>
                     <p className="text-[8px]" style={{ color: '#00E676' }}>
-                      📦 Delivery within 12 hours • Double compensation if delayed
+                      📦 Delivery within 12 hours • 50% extra coins if delayed!
                     </p>
                   </div>
                 </div>
@@ -440,7 +598,104 @@ export function Store({
                     )}
                   </div>
 
-                  {/* Ability packages */}
+                  {/* INR Ability Packages - 5x Section */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between px-1 pt-1">
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px]">✖️</span>
+                        <p className="text-[9px] font-bold" style={{ color: '#FF6D00' }}>5x Multiplier</p>
+                      </div>
+                      <span className="text-[7px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,109,0,0.1)', color: '#FF6D00' }}>
+                        {WEEKLY_ABILITY_LIMIT - (weeklyAbilities['5x'] || 0)} left this week
+                      </span>
+                    </div>
+                    {INR_ABILITY_PACKAGES.filter(a => a.category === '5x').map((ability, idx) => {
+                      const remaining = WEEKLY_ABILITY_LIMIT - (weeklyAbilities['5x'] || 0)
+                      const disabled = remaining <= 0
+                      return (
+                        <div key={`5x-${idx}`} className="flex items-center justify-between p-2 rounded-lg"
+                          style={{
+                            backgroundColor: disabled ? 'rgba(255,255,255,0.01)' : 'rgba(255,109,0,0.03)',
+                            border: `1px solid ${disabled ? 'rgba(255,255,255,0.04)' : 'rgba(255,109,0,0.12)'}`,
+                            opacity: disabled ? 0.5 : 1,
+                          }}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{ability.emoji}</span>
+                            <div>
+                              <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>{ability.label}</p>
+                              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.35)' }}>₹{ability.price}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleBuyInrAbility(ability)}
+                            disabled={disabled}
+                            className="px-3 py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                            style={{
+                              background: disabled ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg, #FF6D00, #E65100)',
+                              color: disabled ? 'rgba(255,255,255,0.3)' : '#FFFFFF',
+                              boxShadow: disabled ? 'none' : '0 2px 8px rgba(255,109,0,0.3)',
+                            }}
+                          >
+                            BUY ₹{ability.price}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* INR Ability Packages - 2.5x Section */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between px-1 pt-1">
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px]">✨</span>
+                        <p className="text-[9px] font-bold" style={{ color: '#7C4DFF' }}>2.5x Multiplier</p>
+                      </div>
+                      <span className="text-[7px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(124,77,255,0.1)', color: '#7C4DFF' }}>
+                        {WEEKLY_ABILITY_LIMIT - (weeklyAbilities['2.5x'] || 0)} left this week
+                      </span>
+                    </div>
+                    {INR_ABILITY_PACKAGES.filter(a => a.category === '2.5x').map((ability, idx) => {
+                      const remaining = WEEKLY_ABILITY_LIMIT - (weeklyAbilities['2.5x'] || 0)
+                      const disabled = remaining <= 0
+                      return (
+                        <div key={`2.5x-${idx}`} className="flex items-center justify-between p-2 rounded-lg"
+                          style={{
+                            backgroundColor: disabled ? 'rgba(255,255,255,0.01)' : 'rgba(124,77,255,0.03)',
+                            border: `1px solid ${disabled ? 'rgba(255,255,255,0.04)' : 'rgba(124,77,255,0.12)'}`,
+                            opacity: disabled ? 0.5 : 1,
+                          }}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{ability.emoji}</span>
+                            <div>
+                              <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>{ability.label}</p>
+                              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.35)' }}>₹{ability.price}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleBuyInrAbility(ability)}
+                            disabled={disabled}
+                            className="px-3 py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                            style={{
+                              background: disabled ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg, #7C4DFF, #651FFF)',
+                              color: disabled ? 'rgba(255,255,255,0.3)' : '#FFFFFF',
+                              boxShadow: disabled ? 'none' : '0 2px 8px rgba(124,77,255,0.3)',
+                            }}
+                          >
+                            BUY ₹{ability.price}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Divider */}
+                  <div className="flex items-center gap-2 py-1">
+                    <div className="flex-1 h-px" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
+                    <span className="text-[7px] font-bold" style={{ color: 'rgba(255,255,255,0.25)' }}>COIN PRICES</span>
+                    <div className="flex-1 h-px" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }} />
+                  </div>
+
+                  {/* Coin-price Ability packages */}
                   <div className="space-y-1.5">
                     {ABILITY_PACKAGES.map(ability => {
                       const canAfford = coins >= ability.cost
@@ -492,83 +747,258 @@ export function Store({
                     </div>
                   ) : (
                     <div className="max-h-64 overflow-y-auto space-y-1.5" style={{ scrollbarWidth: 'thin' }}>
-                      {purchaseHistory.map(entry => (
-                        <div key={entry.id} className="flex items-center justify-between p-2 rounded-lg"
-                          style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
-                          <div>
-                            <p className="text-[9px] font-semibold" style={{ color: '#FFFFFF' }}>{entry.item}</p>
-                            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                              {new Date(entry.date).toLocaleDateString()} • {entry.amount}
-                            </p>
-                          </div>
-                          <span className="text-[8px] font-bold px-2 py-0.5 rounded-full"
+                      {purchaseHistory.map(entry => {
+                        const over12h = entry.status === 'Pending' && isPendingOver12Hours(entry.date)
+                        return (
+                          <div key={entry.id} className="p-2 rounded-lg"
                             style={{
-                              backgroundColor: entry.status === 'Delivered' ? 'rgba(0,230,118,0.1)' : 'rgba(237,194,46,0.1)',
-                              color: entry.status === 'Delivered' ? '#00E676' : '#EDC22E',
+                              backgroundColor: over12h ? 'rgba(237,194,46,0.04)' : 'rgba(255,255,255,0.02)',
+                              border: over12h ? '1px solid rgba(237,194,46,0.15)' : '1px solid rgba(255,255,255,0.04)',
                             }}>
-                            {entry.status}
-                          </span>
-                        </div>
-                      ))}
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-[9px] font-semibold" style={{ color: '#FFFFFF' }}>{entry.item}</p>
+                                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                  {new Date(entry.date).toLocaleDateString()} • {entry.amount}
+                                </p>
+                              </div>
+                              <span className="text-[8px] font-bold px-2 py-0.5 rounded-full"
+                                style={{
+                                  backgroundColor: entry.status === 'Delivered' ? 'rgba(0,230,118,0.1)' : 'rgba(237,194,46,0.1)',
+                                  color: entry.status === 'Delivered' ? '#00E676' : '#EDC22E',
+                                }}>
+                                {entry.status}
+                              </span>
+                            </div>
+                            {over12h && (
+                              <div className="mt-1 flex items-center gap-1">
+                                <span className="text-[8px]" style={{ color: '#EDC22E' }}>⏰</span>
+                                <span className="text-[7px] font-bold" style={{ color: '#EDC22E' }}>
+                                  Eligible for 50% bonus!
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
               )}
             </div>
 
-            {/* Transaction ID Dialog */}
+            {/* Payment Dialog */}
             <AnimatePresence>
-              {showTransactionDialog && selectedPackage && (
+              {showPaymentDialog && paymentItem && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl p-4"
-                  style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
+                  className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl p-3"
+                  style={{ backgroundColor: 'rgba(0,0,0,0.9)' }}
                 >
                   <motion.div
                     initial={{ scale: 0.9 }}
                     animate={{ scale: 1 }}
                     exit={{ scale: 0.9 }}
-                    className="w-full max-w-xs p-4 rounded-xl text-center"
+                    className="w-full max-w-xs p-4 rounded-xl"
                     style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
                   >
-                    <h4 className="text-sm font-bold mb-1" style={{ color: '#FFFFFF' }}>Enter Transaction ID</h4>
-                    <p className="text-[9px] mb-3" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                      After completing payment for {selectedPackage.label}, enter your Transaction ID / UTR Number
+                    <h4 className="text-sm font-bold mb-1 text-center" style={{ color: '#FFFFFF' }}>Complete Payment</h4>
+                    <p className="text-[9px] mb-3 text-center" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                      {paymentItem.label} — ₹{paymentItem.price}
                     </p>
-                    <input
-                      type="text"
-                      value={transactionInput}
-                      onChange={(e) => setTransactionInput(e.target.value)}
-                      placeholder="Transaction ID / UTR Number"
-                      className="w-full px-3 py-2 rounded-lg text-xs font-semibold outline-none mb-3"
-                      style={{
-                        backgroundColor: 'rgba(255,255,255,0.06)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        color: '#FFFFFF',
-                      }}
-                    />
+
+                    {/* UPI Payment Info */}
+                    <div className="p-3 rounded-lg mb-3 text-center"
+                      style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                      {/* QR Code Placeholder - styled to look like a QR code area */}
+                      <div className="w-20 h-20 mx-auto mb-2 rounded-lg relative overflow-hidden"
+                        style={{ backgroundColor: '#FFFFFF', border: '2px solid rgba(0,0,0,0.05)' }}>
+                        {/* QR code pattern simulation */}
+                        <div className="absolute inset-0 p-1.5">
+                          <div className="w-full h-full relative">
+                            {/* Corner squares */}
+                            <div className="absolute top-0 left-0 w-5 h-5" style={{ border: '2px solid #1a0533' }}>
+                              <div className="absolute top-1 left-1 w-2 h-2" style={{ backgroundColor: '#1a0533' }} />
+                            </div>
+                            <div className="absolute top-0 right-0 w-5 h-5" style={{ border: '2px solid #1a0533' }}>
+                              <div className="absolute top-1 right-1 w-2 h-2" style={{ backgroundColor: '#1a0533' }} />
+                            </div>
+                            <div className="absolute bottom-0 left-0 w-5 h-5" style={{ border: '2px solid #1a0533' }}>
+                              <div className="absolute bottom-1 left-1 w-2 h-2" style={{ backgroundColor: '#1a0533' }} />
+                            </div>
+                            {/* Data area dots */}
+                            <div className="absolute top-1 left-7 grid grid-cols-3 gap-[2px]">
+                              {[1,0,1,0,1,0,1,1,0].map((v, i) => (
+                                <div key={i} className="w-[3px] h-[3px]" style={{ backgroundColor: v ? '#1a0533' : 'transparent' }} />
+                              ))}
+                            </div>
+                            <div className="absolute top-7 left-1 grid grid-cols-4 gap-[2px]">
+                              {[0,1,0,1,1,0,1,0,0,1,1,1].map((v, i) => (
+                                <div key={i} className="w-[3px] h-[3px]" style={{ backgroundColor: v ? '#1a0533' : 'transparent' }} />
+                              ))}
+                            </div>
+                            <div className="absolute bottom-1 right-1 grid grid-cols-3 gap-[2px]">
+                              {[1,0,1,0,0,1,1,1,0].map((v, i) => (
+                                <div key={i} className="w-[3px] h-[3px]" style={{ backgroundColor: v ? '#1a0533' : 'transparent' }} />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-[8px] mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Pay via UPI to:</p>
+                      <div className="flex items-center justify-center gap-1.5 mb-1">
+                        <span className="text-[11px] font-extrabold px-2 py-0.5 rounded" style={{ color: '#EDC22E', backgroundColor: 'rgba(237,194,46,0.1)' }}>
+                          {UPI_ID}
+                        </span>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(UPI_ID)
+                            setUpiCopied(true)
+                            setTimeout(() => setUpiCopied(false), 2000)
+                          }}
+                          className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-90"
+                          style={{ backgroundColor: upiCopied ? 'rgba(0,230,118,0.2)' : 'rgba(237,194,46,0.15)', border: '1px solid ' + (upiCopied ? 'rgba(0,230,118,0.3)' : 'rgba(237,194,46,0.25)') }}
+                        >
+                          {upiCopied ? (
+                            <Check className="w-2.5 h-2.5" style={{ color: '#00E676' }} />
+                          ) : (
+                            <Copy className="w-2.5 h-2.5" style={{ color: '#EDC22E' }} />
+                          )}
+                        </button>
+                      </div>
+                      <p className="text-[8px] font-bold" style={{ color: '#FF7A00' }}>
+                        Amount: ₹{paymentItem.price}
+                      </p>
+                    </div>
+
+                    {/* Form Fields */}
+                    <div className="space-y-2 mb-3">
+                      <div>
+                        <label className="text-[8px] font-semibold block mb-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                          WhatsApp Number *
+                        </label>
+                        <input
+                          type="tel"
+                          value={paymentForm.whatsappNumber}
+                          onChange={(e) => setPaymentForm(prev => ({ ...prev, whatsappNumber: e.target.value }))}
+                          placeholder="Your WhatsApp number"
+                          className="w-full px-3 py-1.5 rounded-lg text-[10px] font-semibold outline-none"
+                          style={{
+                            backgroundColor: 'rgba(255,255,255,0.06)',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            color: '#FFFFFF',
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[8px] font-semibold block mb-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                          Name *
+                        </label>
+                        <input
+                          type="text"
+                          value={paymentForm.name}
+                          onChange={(e) => setPaymentForm(prev => ({ ...prev, name: e.target.value }))}
+                          placeholder="Your name"
+                          className="w-full px-3 py-1.5 rounded-lg text-[10px] font-semibold outline-none"
+                          style={{
+                            backgroundColor: 'rgba(255,255,255,0.06)',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            color: '#FFFFFF',
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[8px] font-semibold block mb-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                          Amount Paid (₹)
+                        </label>
+                        <input
+                          type="text"
+                          value={paymentForm.amountPaid}
+                          onChange={(e) => setPaymentForm(prev => ({ ...prev, amountPaid: e.target.value }))}
+                          className="w-full px-3 py-1.5 rounded-lg text-[10px] font-semibold outline-none"
+                          style={{
+                            backgroundColor: 'rgba(255,255,255,0.06)',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            color: '#FFFFFF',
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[8px] font-semibold block mb-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                          Screenshot (optional)
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[9px] font-semibold transition-transform active:scale-95"
+                            style={{
+                              backgroundColor: 'rgba(255,255,255,0.06)',
+                              border: '1px solid rgba(255,255,255,0.1)',
+                              color: 'rgba(255,255,255,0.5)',
+                            }}
+                          >
+                            <Upload className="w-3 h-3" />
+                            Upload
+                          </button>
+                          {screenshotPreview && (
+                            <div className="w-8 h-8 rounded overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                              <img src={screenshotPreview} alt="Screenshot" className="w-full h-full object-cover" />
+                            </div>
+                          )}
+                          {paymentForm.screenshotFile && !screenshotPreview && (
+                            <div className="w-8 h-8 rounded flex items-center justify-center"
+                              style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)' }}>
+                              <ImageIcon className="w-4 h-4" style={{ color: '#00E676' }} />
+                            </div>
+                          )}
+                        </div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleScreenshotChange}
+                          className="hidden"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
                     <div className="flex gap-2">
                       <button
-                        onClick={() => { setShowTransactionDialog(false); setTransactionInput('') }}
+                        onClick={() => {
+                          setShowPaymentDialog(false)
+                          setPaymentItem(null)
+                          setPaymentForm({ whatsappNumber: '', name: '', amountPaid: '', screenshotFile: null })
+                          setScreenshotPreview(null)
+                        }}
                         className="flex-1 py-2 rounded-lg text-[10px] font-semibold"
                         style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}
                       >
-                        Skip
+                        Cancel
                       </button>
                       <button
-                        onClick={handleSaveTransaction}
-                        disabled={!transactionInput.trim()}
+                        onClick={handleSubmitPayment}
+                        disabled={!paymentForm.whatsappNumber.trim() || !paymentForm.name.trim()}
                         className="flex-1 py-2 rounded-lg text-[10px] font-bold transition-transform active:scale-95"
                         style={{
-                          background: transactionInput.trim() ? 'linear-gradient(135deg, #EDC22E, #FF7A00)' : 'rgba(255,255,255,0.06)',
-                          color: transactionInput.trim() ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
+                          background: (paymentForm.whatsappNumber.trim() && paymentForm.name.trim())
+                            ? 'linear-gradient(135deg, #EDC22E, #FF7A00)'
+                            : 'rgba(255,255,255,0.06)',
+                          color: (paymentForm.whatsappNumber.trim() && paymentForm.name.trim())
+                            ? '#FFFFFF'
+                            : 'rgba(255,255,255,0.3)',
                         }}
                       >
-                        SAVE
+                        SUBMIT
                       </button>
                     </div>
+
+                    <p className="text-[7px] text-center mt-2" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                      Your order will be delivered within 12 hours. If delayed, you&apos;ll get 50% extra coins!
+                    </p>
                   </motion.div>
                 </motion.div>
               )}

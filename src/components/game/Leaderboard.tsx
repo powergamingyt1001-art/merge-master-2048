@@ -26,6 +26,7 @@ interface LeaderboardEntry {
   value: number
   isPlayer: boolean
   lastActive?: number
+  playerId?: string
 }
 
 // Check if a player is online (active within last 2 minutes)
@@ -82,7 +83,7 @@ function buildModesLeaderboard(playerBestScore: number, playerName: string, play
     // Use real Firebase data
     firebasePlayers.forEach(p => {
       if (p.id !== playerId) {
-        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.bestScore || 0, isPlayer: false, lastActive: p.lastActive })
+        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.bestScore || 0, isPlayer: false, lastActive: p.lastActive, playerId: p.id })
       }
     })
   } else {
@@ -90,10 +91,24 @@ function buildModesLeaderboard(playerBestScore: number, playerName: string, play
     FAKE_PLAYERS_MODES.forEach(p => entries.push({ rank: 0, name: p.name, avatar: p.avatar, value: p.score, isPlayer: false }))
   }
 
-  entries.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', value: playerBestScore, isPlayer: true })
-  entries.sort((a, b) => b.value - a.value)
-  entries.forEach((e, i) => { e.rank = i + 1 })
-  return entries
+  // Deduplicate by playerId (keep highest score entry)
+  const seen = new Map<string, LeaderboardEntry>()
+  const deduped: LeaderboardEntry[] = []
+  for (const entry of entries) {
+    const key = entry.playerId || `${entry.name}_${entry.avatar}`
+    const existing = seen.get(key)
+    if (!existing || entry.value > existing.value) {
+      seen.set(key, entry)
+    }
+  }
+  for (const entry of seen.values()) {
+    deduped.push(entry)
+  }
+
+  deduped.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', value: playerBestScore, isPlayer: true, playerId })
+  deduped.sort((a, b) => b.value - a.value)
+  deduped.forEach((e, i) => { e.rank = i + 1 })
+  return deduped
 }
 
 function buildCoinsLeaderboard(playerCoins: number, playerName: string, playerAvatar: string, firebasePlayers: FirebasePlayer[], playerId: string): LeaderboardEntry[] {
@@ -102,17 +117,31 @@ function buildCoinsLeaderboard(playerCoins: number, playerName: string, playerAv
   if (firebasePlayers.length > 0) {
     firebasePlayers.forEach(p => {
       if (p.id !== playerId) {
-        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.coins || 0, isPlayer: false, lastActive: p.lastActive })
+        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.coins || 0, isPlayer: false, lastActive: p.lastActive, playerId: p.id })
       }
     })
   } else {
     FAKE_PLAYERS_COINS.forEach(p => entries.push({ rank: 0, name: p.name, avatar: p.avatar, value: p.coins || 0, isPlayer: false }))
   }
 
-  entries.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', value: playerCoins, isPlayer: true })
-  entries.sort((a, b) => b.value - a.value)
-  entries.forEach((e, i) => { e.rank = i + 1 })
-  return entries
+  // Deduplicate by playerId (keep highest coins entry)
+  const seen = new Map<string, LeaderboardEntry>()
+  const deduped: LeaderboardEntry[] = []
+  for (const entry of entries) {
+    const key = entry.playerId || `${entry.name}_${entry.avatar}`
+    const existing = seen.get(key)
+    if (!existing || entry.value > existing.value) {
+      seen.set(key, entry)
+    }
+  }
+  for (const entry of seen.values()) {
+    deduped.push(entry)
+  }
+
+  deduped.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', value: playerCoins, isPlayer: true, playerId })
+  deduped.sort((a, b) => b.value - a.value)
+  deduped.forEach((e, i) => { e.rank = i + 1 })
+  return deduped
 }
 
 function getOfflineRank(playerBestScore: number): { currentRank: number; nextTarget: typeof OFFLINE_RANKS[0] | null; beatenRanks: number } {

@@ -181,9 +181,8 @@ export default function Home() {
                 hammerCount={game.hammerCount}
                 magnetCount={game.magnetCount}
                 blastCount={game.blastCount}
-                multiplier5xCount={game.multiplier5xCount}
-                multiplier2_5xCount={game.multiplier2_5xCount}
-                extraTimeCount={game.extraTimeCount}
+                undoTotal={game.undoTotal}
+                levelXP={game.levelXP}
                 modBestScore={game.modBestScore}
                 gamePoints={game.gamePoints}
                 bestScore={game.bestScore}

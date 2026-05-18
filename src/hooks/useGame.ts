@@ -1572,12 +1572,12 @@ export function useGame() {
       return {
         ...prev,
         welcomeClaimed: true,
-        hammerCount: prev.hammerCount + 5,
-        magnetCount: prev.magnetCount + 5,
-        blastCount: prev.blastCount + 5,
-        undoTotal: prev.undoTotal + 5,
-        spinTickets: prev.spinTickets + 5,
-        coins: prev.coins + 500, // Welcome bonus coins for new users
+        hammerCount: prev.hammerCount + 55,
+        magnetCount: prev.magnetCount + 55,
+        blastCount: prev.blastCount + 55,
+        undoTotal: prev.undoTotal + 55,
+        spinTickets: prev.spinTickets + 55,
+        coins: prev.coins + 1000, // Welcome bonus coins for new users
       }
     })
   }, [])
