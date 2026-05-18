@@ -20,7 +20,7 @@ import {
   AdsterraBanner320x50,
   getDashboardBigBannerSlot,
 } from '@/components/ads/AdsterraAds'
-import { PowerUp, Notification, DailyTask, getLevelInfo } from '@/hooks/useGame'
+import { PowerUp, Notification, DailyTask, DailyTaskReward, getLevelInfo } from '@/hooks/useGame'
 import { getRandomLink } from '@/components/ads/AdOverlay'
 
 interface PlayDashboardProps {
@@ -468,7 +468,10 @@ export function PlayDashboard({
               <div className="flex flex-col gap-1">
                 {dailyTasks.map(task => {
                   const isComplete = task.progress >= task.target
-                  const isVisitTask = task.id.startsWith('visit-')
+                  const isVisitTask = task.actionType === 'visit'
+                  const isClaimTask = task.actionType === 'claim'
+                  const isSpinTask = task.actionType === 'spin'
+                  const rewardDisplay = task.reward.emoji + ' ' + task.reward.label
                   return (
                     <div key={task.id} className="flex items-center justify-between px-2 py-1.5 rounded-lg"
                       style={{ backgroundColor: isComplete ? 'rgba(0,230,118,0.06)' : 'rgba(255,255,255,0.02)', border: `1px solid ${isComplete ? 'rgba(0,230,118,0.15)' : 'rgba(255,255,255,0.04)'}` }}>
@@ -476,7 +479,7 @@ export function PlayDashboard({
                         <span className="text-[10px]">{task.emoji}</span>
                         <div>
                           <p className="text-[8px] font-semibold" style={{ color: isComplete ? '#00E676' : 'rgba(255,255,255,0.7)' }}>{task.description}</p>
-                          <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{task.progress}/{task.target} • +{task.reward}💰</p>
+                          <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{task.progress}/{task.target} • {rewardDisplay}</p>
                         </div>
                       </div>
                       {task.claimed ? (
@@ -495,6 +498,33 @@ export function PlayDashboard({
                           className="px-2 py-0.5 rounded text-[7px] font-bold transition-transform active:scale-95"
                           style={{ background: 'linear-gradient(135deg, #F65E3B, #FF7A00)', color: '#FFFFFF' }}>
                           VISIT
+                        </button>
+                      ) : isClaimTask ? (
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => {
+                            // Mark as complete immediately for claim tasks
+                            onClaimDailyTask?.(task.id)
+                          }}
+                            className="px-2 py-0.5 rounded text-[7px] font-bold transition-transform active:scale-95"
+                            style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF' }}>
+                            CLAIM 💰
+                          </button>
+                          <button onClick={() => {
+                            // Open popup ad for +100 bonus coins
+                            try { window.open(getRandomLink(), '_blank') } catch { /* popup blocked */ }
+                            onAddCoins(100)
+                            onAddNotification('Bonus Coins!', 'You watched an ad and got +100 bonus coins! 🎉', 'reward', '💰')
+                          }}
+                            className="px-1.5 py-0.5 rounded text-[6px] font-bold transition-transform active:scale-95"
+                            style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.2)' }}>
+                          +100 📺
+                          </button>
+                        </div>
+                      ) : isSpinTask ? (
+                        <button onClick={() => setShowSpin(true)}
+                          className="px-2 py-0.5 rounded text-[7px] font-bold transition-transform active:scale-95"
+                          style={{ background: 'rgba(0,230,118,0.15)', color: '#00E676', border: '1px solid rgba(0,230,118,0.3)' }}>
+                          SPIN
                         </button>
                       ) : (
                         <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.2)' }}>{task.progress}/{task.target}</span>

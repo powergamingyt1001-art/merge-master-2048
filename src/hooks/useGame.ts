@@ -50,14 +50,25 @@ export interface GameHistoryEntry {
   timeLimit: number
 }
 
+export interface DailyTaskReward {
+  type: 'coins' | 'spin' | 'hammer' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x' | 'extraTime' | 'undo'
+  count: number
+  label: string
+  emoji: string
+}
+
 export interface DailyTask {
   id: string
   description: string
   emoji: string
   target: number
   progress: number
-  reward: number
+  reward: DailyTaskReward
   claimed: boolean
+  // Task action type - determines UI button and behavior
+  actionType?: 'visit' | 'play' | 'spin' | 'claim' | 'auto' // auto = tracks automatically
+  // For visit tasks: how many visits required
+  visitCount?: number
 }
 
 export interface GameState {
@@ -555,14 +566,38 @@ export function getCurrentLevelPoints(level: number): number {
   return getLevelThreshold(Math.min(Math.max(level, 1), MAX_LEVEL))
 }
 
-// Generate daily tasks for today
+// Generate daily tasks for today - varied tasks with coins + ability rewards
 function generateDailyTasks(): DailyTask[] {
   const today = getTodayStr()
+  // Use day of year to vary tasks slightly each day
+  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24))
+  const taskVariant = dayOfYear % 7 // Rotate ability rewards weekly
+
+  // Ability reward varies by day of week
+  const abilityRewards: DailyTaskReward[] = [
+    { type: 'blast', count: 3, label: '3 Bombs', emoji: '💣' },
+    { type: 'hammer', count: 3, label: '3 Hammers', emoji: '🔨' },
+    { type: 'magnet', count: 3, label: '3 Magnets', emoji: '🧲' },
+    { type: 'extraTime', count: 3, label: '3 Timers', emoji: '⏱️' },
+    { type: 'undo', count: 3, label: '3 Undos', emoji: '↩️' },
+    { type: 'blast', count: 5, label: '5 Bombs', emoji: '💣' },
+    { type: 'hammer', count: 5, label: '5 Hammers', emoji: '🔨' },
+  ]
+
   return [
-    { id: `visit-${today}`, description: 'Visit Sponsor Website', emoji: '🌐', target: 1, progress: 0, reward: 50, claimed: false },
-    { id: `play3-${today}`, description: 'Play 3 Games', emoji: '🎮', target: 3, progress: 0, reward: 30, claimed: false },
-    { id: `score500-${today}`, description: 'Score 500+ in a game', emoji: '🏆', target: 1, progress: 0, reward: 40, claimed: false },
-    { id: `spin-${today}`, description: 'Spin the Wheel', emoji: '🎰', target: 1, progress: 0, reward: 20, claimed: false },
+    // Visit tasks - some require 2 visits
+    { id: `visit1-${today}`, description: 'Visit Sponsor Website', emoji: '🌐', target: 1, progress: 0, reward: { type: 'coins', count: 50, label: '50 Coins', emoji: '💰' }, claimed: false, actionType: 'visit', visitCount: 1 },
+    { id: `visit2-${today}`, description: 'Visit 2 Sponsor Pages', emoji: '🌐', target: 2, progress: 0, reward: { type: 'coins', count: 100, label: '100 Coins', emoji: '💰' }, claimed: false, actionType: 'visit', visitCount: 2 },
+    // Play games task
+    { id: `play3-${today}`, description: 'Play 3 Games', emoji: '🎮', target: 3, progress: 0, reward: { type: 'coins', count: 30, label: '30 Coins', emoji: '💰' }, claimed: false, actionType: 'play' },
+    // Score task
+    { id: `score500-${today}`, description: 'Score 500+ in a game', emoji: '🏆', target: 1, progress: 0, reward: { type: 'coins', count: 40, label: '40 Coins', emoji: '💰' }, claimed: false, actionType: 'auto' },
+    // Spin task
+    { id: `spin-${today}`, description: 'Spin the Wheel', emoji: '🎰', target: 1, progress: 0, reward: { type: 'coins', count: 20, label: '20 Coins', emoji: '💰' }, claimed: false, actionType: 'spin' },
+    // Ability reward task - varies daily
+    { id: `ability-${today}`, description: 'Play 5 Games', emoji: '🎯', target: 5, progress: 0, reward: abilityRewards[taskVariant], claimed: false, actionType: 'play' },
+    // Claim free coins task (just press claim)
+    { id: `claim-coins-${today}`, description: 'Claim Free Coins', emoji: '💰', target: 1, progress: 0, reward: { type: 'coins', count: 100, label: '100 Coins', emoji: '💰' }, claimed: false, actionType: 'claim' },
   ]
 }
 
@@ -939,12 +974,18 @@ export function useGame() {
       timeLimit,
     }
     setState(prev => {
-      // Update daily task progress for games played and score
+      // Update daily task progress for games played, score, and ability tasks
       const today = getTodayStr()
       const tasks = prev.dailyTasks.map(t => {
+        // Play 3 games task
         if (t.id === `play3-${today}` && !t.claimed) {
           return { ...t, progress: Math.min(t.progress + 1, t.target) }
         }
+        // Play 5 games (ability) task
+        if (t.id === `ability-${today}` && !t.claimed) {
+          return { ...t, progress: Math.min(t.progress + 1, t.target) }
+        }
+        // Score 500+ task
         if (t.id === `score500-${today}` && !t.claimed && score >= 500) {
           return { ...t, progress: Math.min(t.progress + 1, t.target) }
         }
@@ -1709,19 +1750,53 @@ export function useGame() {
   // Claim daily task reward
   const claimDailyTask = useCallback((taskId: string) => {
     setState(prev => {
+      const task = prev.dailyTasks.find(t => t.id === taskId)
+      if (!task || task.claimed) return prev
+
+      // For 'claim' action type, auto-complete (progress = target)
+      // For other types, require progress >= target
+      if (task.actionType !== 'claim' && task.progress < task.target) return prev
+
       const tasks = prev.dailyTasks.map(t => {
-        if (t.id === taskId && !t.claimed && t.progress >= t.target) {
-          return { ...t, claimed: true }
-        }
+        if (t.id === taskId) return { ...t, claimed: true, progress: Math.max(t.progress, t.target) }
         return t
       })
-      const task = prev.dailyTasks.find(t => t.id === taskId)
-      if (!task || task.claimed || task.progress < task.target) return prev
-      return {
-        ...prev,
-        dailyTasks: tasks,
-        coins: prev.coins + task.reward,
+
+      // Grant the reward based on type
+      const reward = task.reward
+      let newState: Partial<GameState> = { dailyTasks: tasks }
+
+      switch (reward.type) {
+        case 'coins':
+          newState = { ...newState, coins: prev.coins + reward.count }
+          break
+        case 'spin':
+          newState = { ...newState, spinTickets: prev.spinTickets + reward.count }
+          break
+        case 'hammer':
+          newState = { ...newState, hammerCount: prev.hammerCount + reward.count }
+          break
+        case 'magnet':
+          newState = { ...newState, magnetCount: prev.magnetCount + reward.count }
+          break
+        case 'blast':
+          newState = { ...newState, blastCount: prev.blastCount + reward.count }
+          break
+        case 'multiplier5x':
+          newState = { ...newState, multiplier5xCount: prev.multiplier5xCount + reward.count }
+          break
+        case 'multiplier2_5x':
+          newState = { ...newState, multiplier2_5xCount: prev.multiplier2_5xCount + reward.count }
+          break
+        case 'extraTime':
+          newState = { ...newState, extraTimeCount: prev.extraTimeCount + reward.count }
+          break
+        case 'undo':
+          newState = { ...newState, undoTotal: prev.undoTotal + reward.count }
+          break
       }
+
+      return { ...prev, ...newState }
     })
   }, [])
 
@@ -1867,7 +1942,12 @@ export function useGame() {
       setState(prev => {
         const today = getTodayStr()
         const tasks = prev.dailyTasks.map(t => {
-          if (t.id === `visit-${today}` && !t.claimed) {
+          // Update visit1 task
+          if (t.id === `visit1-${today}` && !t.claimed) {
+            return { ...t, progress: Math.min(t.progress + 1, t.target) }
+          }
+          // Update visit2 task (requires 2 visits)
+          if (t.id === `visit2-${today}` && !t.claimed) {
             return { ...t, progress: Math.min(t.progress + 1, t.target) }
           }
           return t
