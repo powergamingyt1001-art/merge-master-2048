@@ -18,6 +18,8 @@ interface TournamentProps {
   playerName: string
   playerAvatar: string
   playerId: string
+  weeklyBonusClaimed?: boolean
+  onClaimWeeklyBonus?: () => void
 }
 
 type TabType = 'play' | 'prize' | 'rankings'
@@ -28,6 +30,7 @@ interface TournamentPlayer {
   avatar: string
   score: number
   isPlayer: boolean
+  playerId?: string
 }
 
 const FAKE_TOURNAMENT_PLAYERS = [
@@ -84,6 +87,7 @@ export function Tournament({
   tournamentJoined, tournamentPoints, tournamentCarryOver, tournamentGamesPlayed,
   onJoinTournament, onStartTournamentGame,
   playerName, playerAvatar, playerId,
+  weeklyBonusClaimed = false, onClaimWeeklyBonus,
 }: TournamentProps) {
   const [tab, setTab] = useState<TabType>('play')
   const [firebasePlayers, setFirebasePlayers] = useState<FirebasePlayer[]>([])
@@ -107,27 +111,40 @@ export function Tournament({
   }, [])
 
   // Build rankings based on tournament points (Firebase + player)
-  const players: TournamentPlayer[] = []
+  const rawPlayers: TournamentPlayer[] = []
 
   if (firebasePlayers.length > 0) {
     firebasePlayers.forEach(p => {
       if (p.id !== playerId) {
-        players.push({
+        rawPlayers.push({
           rank: 0,
           name: p.name || 'Player',
           avatar: p.avatar || '😎',
           score: p.tournamentPoints || 0,
           isPlayer: false,
+          playerId: p.id,
         })
       }
     })
   } else {
     FAKE_TOURNAMENT_PLAYERS.forEach(p => {
-      players.push({ rank: 0, name: p.name, avatar: p.avatar, score: p.score, isPlayer: false })
+      rawPlayers.push({ rank: 0, name: p.name, avatar: p.avatar, score: p.score, isPlayer: false })
     })
   }
 
-  players.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', score: tournamentPoints, isPlayer: true })
+  // Deduplicate by playerId (keep highest score entry)
+  const seen = new Map<string, TournamentPlayer>()
+  for (const entry of rawPlayers) {
+    const key = entry.playerId || `${entry.name}_${entry.avatar}`
+    const existing = seen.get(key)
+    if (!existing || entry.score > existing.score) {
+      seen.set(key, entry)
+    }
+  }
+  // Filter out zero-score entries (they clutter the leaderboard)
+  const players: TournamentPlayer[] = [...seen.values()].filter(entry => entry.score > 0)
+
+  players.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', score: tournamentPoints, isPlayer: true, playerId })
   players.sort((a, b) => b.score - a.score)
   players.forEach((p, i) => { p.rank = i + 1 })
 
@@ -279,6 +296,28 @@ export function Tournament({
             <div className="px-4 pb-4">
               {tab === 'play' && (
                 <div>
+                  {/* Weekly Claim Section */}
+                  <div className="p-3 rounded-xl mb-2" style={{ backgroundColor: weeklyBonusClaimed ? 'rgba(255,255,255,0.02)' : 'rgba(0,230,118,0.08)', border: weeklyBonusClaimed ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,230,118,0.15)' }}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">🎁</span>
+                        <div>
+                          <p className="text-[10px] font-bold" style={{ color: weeklyBonusClaimed ? 'rgba(255,255,255,0.3)' : '#00E676' }}>Weekly Claim</p>
+                          <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Bonus 400 coins every week!</p>
+                        </div>
+                      </div>
+                      {weeklyBonusClaimed ? (
+                        <span className="text-[10px] font-bold px-3 py-1.5 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.3)', border: '1px solid rgba(255,255,255,0.06)' }}>✓ Claimed</span>
+                      ) : (
+                        <button onClick={() => onClaimWeeklyBonus?.()}
+                          className="px-3 py-1.5 rounded-lg text-[10px] font-bold transition-transform active:scale-95"
+                          style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(0,230,118,0.3)' }}>
+                          🎁 400💰
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="p-3 rounded-xl mb-2" style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
                     <p className="text-[10px] font-bold mb-1" style={{ color: '#EDC22E' }}>🏆 How Tournament Works</p>
                     <ul className="space-y-1">

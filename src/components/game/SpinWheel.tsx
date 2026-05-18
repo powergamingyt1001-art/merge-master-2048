@@ -51,40 +51,107 @@ function pickPrize(): { index: number; prize: SpinPrize } {
   return { index: 0, prize: { ...PRIZE_POOL[0].prize } }
 }
 
+const SPIN_COUNTS = [1, 2, 3, 5, 10]
+
 export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPrize, onWatchAdForSpin, isOnline }: SpinWheelProps) {
   const [spinning, setSpinning] = useState(false)
   const [result, setResult] = useState<{ index: number; prize: SpinPrize } | null>(null)
   const [rotation, setRotation] = useState(0)
   const [showAdOverlay, setShowAdOverlay] = useState(false)
+  const [spinMultiplier, setSpinMultiplier] = useState(1)
+  const [multiResults, setMultiResults] = useState<{ prize: SpinPrize; revealed: boolean }[]>([])
+  const [allRevealed, setAllRevealed] = useState(false)
   const spinCountRef = useRef(0)
+  const timeoutRefs = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  const totalSpins = spinMultiplier === 10 ? 12 : spinMultiplier
+  const ticketCost = spinMultiplier
+
+  // Clear pending timeouts to prevent stale state after close
+  const clearPendingTimeouts = useCallback(() => {
+    timeoutRefs.current.forEach(t => clearTimeout(t))
+    timeoutRefs.current = []
+  }, [])
 
   const handleSpin = useCallback(() => {
-    if (spinTickets <= 0 || spinning) return
+    if (spinTickets < ticketCost || spinning) return
+    clearPendingTimeouts()
     setSpinning(true)
     setResult(null)
-    onUseTicket()
+    setMultiResults([])
+    setAllRevealed(false)
 
-    const win = pickPrize()
+    // Use tickets
+    for (let i = 0; i < ticketCost; i++) {
+      onUseTicket()
+    }
+
+    // For the visual wheel animation, pick a target slice to land on
+    const visualWin = pickPrize()
     spinCountRef.current += 1
-    // Each slice = 45 degrees. Target the winning slice center.
+
+    // === FIXED ROTATION CALCULATION ===
+    // SVG draws slices with startAngle - 90, so slice 0 starts at top (12 o'clock).
+    // The pointer is at the TOP of the wheel.
+    // When rotation = 0, pointer points at the top → start of slice 0.
+    // Slice i center in SVG coordinates = i * sliceAngle + sliceAngle/2 (clockwise from top).
+    // To bring slice i's center to the top, rotate clockwise by (360 - center_angle).
     const sliceAngle = 360 / PRIZE_POOL.length
-    const targetSliceCenter = win.index * sliceAngle + sliceAngle / 2
-    // The pointer is at the top (0 degrees). We need to rotate so the target slice is at the top.
-    const targetRotation = rotation + 360 * 5 + (360 - targetSliceCenter)
+    // Add a small random offset within ±25% of slice half-width to avoid edge hits
+    const offset = (Math.random() - 0.5) * sliceAngle * 0.5
+    const targetAngle = visualWin.index * sliceAngle + sliceAngle / 2 + offset
+    // Multiple full rotations for dramatic effect (5-7 full spins)
+    const fullRotations = 360 * (5 + Math.floor(Math.random() * 3))
+    // Snap base to next full rotation boundary to prevent accumulation drift
+    const baseRotation = Math.ceil(rotation / 360) * 360
+    const targetRotation = baseRotation + fullRotations + (360 - targetAngle)
 
     setRotation(targetRotation)
 
-    setTimeout(() => {
-      setResult(win)
-      setSpinning(false)
-    }, 3500)
-  }, [spinTickets, spinning, onUseTicket, rotation])
+    if (spinMultiplier === 1) {
+      // Single spin: the visual result IS the prize
+      const t1 = setTimeout(() => {
+        setResult(visualWin)
+        setSpinning(false)
+      }, 3500)
+      timeoutRefs.current.push(t1)
+    } else {
+      // Multi-spin: pick all prizes, show them in a reveal grid
+      const prizes: SpinPrize[] = []
+      for (let i = 0; i < totalSpins; i++) {
+        prizes.push(pickPrize().prize)
+      }
+      const t2 = setTimeout(() => {
+        setMultiResults(prizes.map(p => ({ prize: p, revealed: false })))
+        setSpinning(false)
+        // Reveal one by one with staggered delay
+        prizes.forEach((_, i) => {
+          const t3 = setTimeout(() => {
+            setMultiResults(prev => prev.map((r, idx) => idx === i ? { ...r, revealed: true } : r))
+            if (i === prizes.length - 1) {
+              const t4 = setTimeout(() => setAllRevealed(true), 350)
+              timeoutRefs.current.push(t4)
+            }
+          }, i * 250)
+          timeoutRefs.current.push(t3)
+        })
+      }, 2500)
+      timeoutRefs.current.push(t2)
+    }
+  }, [spinTickets, spinning, onUseTicket, rotation, spinMultiplier, ticketCost, totalSpins, clearPendingTimeouts])
 
   const handleClaim = useCallback(() => {
     if (!result) return
     onWinPrize(result.prize)
     setResult(null)
   }, [result, onWinPrize])
+
+  const handleClaimAll = useCallback(() => {
+    if (multiResults.length === 0) return
+    multiResults.forEach(r => onWinPrize(r.prize))
+    setMultiResults([])
+    setAllRevealed(false)
+  }, [multiResults, onWinPrize])
 
   // Watch ad for free spin - opens the ad overlay
   const handleWatchAd = useCallback(() => {
@@ -97,6 +164,24 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
     onWatchAdForSpin()
     setShowAdOverlay(false)
   }, [onWatchAdForSpin])
+
+  const hasResult = result !== null || multiResults.length > 0
+
+  // Auto-claim prizes when closing modal to prevent prize loss
+  const handleClose = useCallback(() => {
+    clearPendingTimeouts()
+    if (result) {
+      onWinPrize(result.prize)
+      setResult(null)
+    }
+    if (multiResults.length > 0) {
+      multiResults.forEach(r => onWinPrize(r.prize))
+      setMultiResults([])
+      setAllRevealed(false)
+    }
+    setSpinning(false)
+    onClose()
+  }, [result, multiResults, onWinPrize, onClose, clearPendingTimeouts])
 
   return (
     <>
@@ -119,27 +204,66 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
               {/* Header */}
               <div className="flex items-center justify-between p-4">
                 <h3 className="text-lg font-bold" style={{ color: '#FFFFFF' }}>🎰 Spin & Win</h3>
-                <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
+                <button onClick={handleClose} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
                   <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
                 </button>
               </div>
 
               <div className="px-4 pb-5">
-                <p className="text-center text-xs mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                <p className="text-center text-xs mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>
                   Tickets: <span style={{ color: '#EDC22E', fontWeight: 'bold' }}>{spinTickets}</span>
                 </p>
 
+                {/* Spin Multiplier Selector */}
+                {!hasResult && !spinning && (
+                  <div className="flex items-center justify-center gap-1.5 mb-3">
+                    {SPIN_COUNTS.map(count => {
+                      const isActive = spinMultiplier === count
+                      const isBonus = count === 10
+                      const canAfford = spinTickets >= count
+                      return (
+                        <button
+                          key={count}
+                          onClick={() => canAfford && setSpinMultiplier(count)}
+                          className="relative flex flex-col items-center px-2 py-1 rounded-lg transition-all"
+                          style={{
+                            backgroundColor: isActive ? 'rgba(237,194,46,0.2)' : canAfford ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)',
+                            border: isActive ? '1px solid rgba(237,194,46,0.5)' : canAfford ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.04)',
+                            opacity: canAfford ? 1 : 0.35,
+                            transform: isActive ? 'scale(1.05)' : 'scale(1)',
+                          }}
+                        >
+                          <span className="text-[10px] font-extrabold" style={{ color: isActive ? '#EDC22E' : 'rgba(255,255,255,0.6)' }}>{count}x</span>
+                          <span className="text-[7px]" style={{ color: isActive ? 'rgba(237,194,46,0.7)' : 'rgba(255,255,255,0.3)' }}>{count}🎫</span>
+                          {isBonus && (
+                            <span className="absolute -top-1.5 -right-1 text-[6px] font-bold px-1 rounded-full" style={{ backgroundColor: '#F65E3B', color: '#FFFFFF' }}>
+                              +2
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Multi-spin info */}
+                {!hasResult && !spinning && spinMultiplier > 1 && (
+                  <p className="text-center text-[10px] mb-2" style={{ color: '#00E676' }}>
+                    {spinMultiplier === 10 ? '10 tickets = 12 spins! (+2 FREE)' : `${spinMultiplier} spins for ${spinMultiplier} tickets`}
+                  </p>
+                )}
+
                 {/* Wheel */}
-                <div className="relative w-56 h-56 mx-auto mb-4">
+                <div className="relative w-48 h-48 mx-auto mb-3">
                   {/* Pointer */}
                   <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1 z-10">
-                    <div className="w-0 h-0 border-l-[10px] border-r-[10px] border-t-[18px] border-l-transparent border-r-transparent" style={{ borderTopColor: '#FF7A00', filter: 'drop-shadow(0 2px 4px rgba(255,122,0,0.5))' }} />
+                    <div className="w-0 h-0 border-l-[8px] border-r-[8px] border-t-[15px] border-l-transparent border-r-transparent" style={{ borderTopColor: '#FF7A00', filter: 'drop-shadow(0 2px 4px rgba(255,122,0,0.5))' }} />
                   </div>
 
                   {/* Center dot */}
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full z-20 flex items-center justify-center"
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full z-20 flex items-center justify-center"
                     style={{ backgroundColor: '#2d1b4e', border: '2px solid rgba(255,255,255,0.2)', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
-                    <span className="text-[8px]">🎯</span>
+                    <span className="text-[7px]">🎯</span>
                   </div>
 
                   {/* Rotating wheel */}
@@ -189,7 +313,7 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
                   </div>
                 </div>
 
-                {/* Result */}
+                {/* Single spin result */}
                 <AnimatePresence>
                   {result && !spinning && (
                     <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }} className="text-center mb-3">
@@ -207,21 +331,69 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
                   )}
                 </AnimatePresence>
 
+                {/* Multi-spin results grid */}
+                <AnimatePresence>
+                  {multiResults.length > 0 && (
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="mb-3">
+                      <p className="text-center text-xs font-bold mb-2" style={{ color: '#EDC22E' }}>
+                        🎉 {totalSpins} Spins Results!
+                      </p>
+                      <div className="grid grid-cols-4 gap-1.5 max-h-48 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.15) transparent' }}>
+                        {multiResults.map((r, i) => (
+                          <motion.div
+                            key={i}
+                            initial={{ scale: 0, rotateY: 180 }}
+                            animate={r.revealed ? { scale: 1, rotateY: 0 } : { scale: 0.8, rotateY: 180 }}
+                            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                            className="flex flex-col items-center justify-center py-2 px-1 rounded-lg"
+                            style={{
+                              backgroundColor: r.revealed ? `${r.prize.color}15` : 'rgba(255,255,255,0.06)',
+                              border: r.revealed ? `1px solid ${r.prize.color}40` : '1px solid rgba(255,255,255,0.1)',
+                              minHeight: '52px',
+                            }}
+                          >
+                            {r.revealed ? (
+                              <>
+                                <span className="text-base leading-none">{r.prize.emoji}</span>
+                                <span className="text-[7px] font-bold mt-0.5 leading-tight text-center" style={{ color: r.prize.color }}>{r.prize.label}</span>
+                              </>
+                            ) : (
+                              <span className="text-lg leading-none">❓</span>
+                            )}
+                          </motion.div>
+                        ))}
+                      </div>
+                      {/* Claim All button */}
+                      {allRevealed && (
+                        <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className="mt-2">
+                          <button
+                            onClick={handleClaimAll}
+                            className="w-full py-2.5 rounded-xl font-bold text-xs transition-transform hover:scale-[1.02] active:scale-95"
+                            style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF', boxShadow: '0 2px 12px rgba(237,194,46,0.4)' }}
+                          >
+                            CLAIM ALL ({totalSpins} prizes)
+                          </button>
+                        </motion.div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 {/* Spin Button */}
-                {!result && (
+                {!hasResult && (
                   <button
                     onClick={handleSpin}
-                    disabled={spinTickets <= 0 || spinning}
+                    disabled={spinTickets < ticketCost || spinning}
                     className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-40"
                     style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}
                   >
                     <Play className="w-4 h-4" />
-                    {spinning ? 'Spinning...' : `SPIN (${spinTickets} tickets)`}
+                    {spinning ? 'Spinning...' : `SPIN ${spinMultiplier > 1 ? `${totalSpins}x ` : ''}(${ticketCost} 🎫)`}
                   </button>
                 )}
 
                 {/* Watch Ad for Free Spin - ALWAYS visible when online and no result */}
-                {isOnline && !result && !spinning && (
+                {isOnline && !hasResult && !spinning && (
                   <button
                     onClick={handleWatchAd}
                     className="w-full py-2.5 mt-2 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
@@ -237,9 +409,9 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
                 )}
 
                 {/* No tickets and offline message */}
-                {!isOnline && spinTickets <= 0 && !result && (
+                {!isOnline && spinTickets <= 0 && !hasResult && (
                   <p className="text-center text-[10px] mt-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                    🔴 You're offline. Connect to internet to watch ads for free spins!
+                    🔴 You&apos;re offline. Connect to internet to watch ads for free spins!
                   </p>
                 )}
 

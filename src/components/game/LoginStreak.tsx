@@ -1,7 +1,9 @@
 'use client'
 
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X } from 'lucide-react'
+import { X, ArrowRight } from 'lucide-react'
+import { getRandomLink } from '@/components/ads/AdOverlay'
 
 interface LoginStreakProps {
   isOpen: boolean
@@ -9,6 +11,8 @@ interface LoginStreakProps {
   streakDay: number
   streakClaimed: boolean[]
   onClaim: (day: number) => void
+  onClaimStreakAdBonus: () => void
+  streakAdBonusClaimed?: boolean
 }
 
 const STREAK_REWARDS = [
@@ -21,7 +25,47 @@ const STREAK_REWARDS = [
   { day: 7, label: '5 Spins + 200🪙', emoji: '🎰', color: '#EDC22E', items: 'BIG REWARD! 5 spins + 200 coins + ALL Abilities! 🎉', coins: 200, abilities: ['⚡ 5x', '💫 2.5x', '⏱️ +10s'] },
 ]
 
-export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim }: LoginStreakProps) {
+export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim, onClaimStreakAdBonus, streakAdBonusClaimed = false }: LoginStreakProps) {
+  const [adBonusClaimed, setAdBonusClaimed] = useState(streakAdBonusClaimed)
+  const [adBonusPending, setAdBonusPending] = useState(false)
+  const adOpenedRef = useRef(false)
+
+  // Sync with prop
+  useEffect(() => {
+    setAdBonusClaimed(streakAdBonusClaimed)
+  }, [streakAdBonusClaimed])
+
+  // Listen for visibility change to detect when user returns from ad
+  useEffect(() => {
+    if (!adBonusPending) return
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && adOpenedRef.current) {
+        // User returned from ad - claim the bonus
+        adOpenedRef.current = false
+        setAdBonusPending(false)
+        onClaimStreakAdBonus()
+        setAdBonusClaimed(true)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [adBonusPending, onClaimStreakAdBonus])
+
+  const handleAdBonusClick = useCallback(() => {
+    if (adBonusClaimed || adBonusPending) return
+    try {
+      window.open(getRandomLink(), '_blank')
+      adOpenedRef.current = true
+      setAdBonusPending(true)
+    } catch {
+      // Popup blocked - skip
+    }
+  }, [adBonusClaimed, adBonusPending])
+
+  const isCurrentDayClaimable = streakDay < 7 && !streakClaimed[streakDay]
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -151,7 +195,7 @@ export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim
               </div>
 
               {/* Claim button for current day */}
-              {streakDay < 7 && !streakClaimed[streakDay] && (
+              {isCurrentDayClaimable && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -206,7 +250,78 @@ export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim
                       CLAIM
                     </button>
                   </div>
+
+                  {/* Ad Bonus Buttons Row */}
+                  <div className="flex items-center gap-2 mt-2 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                    {/* Claim Coins - shows the coin reward for that day */}
+                    <div className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg"
+                      style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                      <span className="text-[10px]">🪙</span>
+                      <span className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>{STREAK_REWARDS[streakDay].coins} Coins</span>
+                    </div>
+
+                    {/* Get +100 Coins via Ad */}
+                    <button
+                      onClick={handleAdBonusClick}
+                      disabled={adBonusClaimed || adBonusPending}
+                      className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg transition-transform active:scale-95"
+                      style={{
+                        backgroundColor: adBonusClaimed ? 'rgba(0,230,118,0.08)' : adBonusPending ? 'rgba(255,255,255,0.04)' : 'rgba(246,94,59,0.1)',
+                        border: adBonusClaimed ? '1px solid rgba(0,230,118,0.2)' : adBonusPending ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(246,94,59,0.25)',
+                        opacity: adBonusPending ? 0.7 : 1,
+                      }}
+                    >
+                      {adBonusClaimed ? (
+                        <>
+                          <span className="text-[9px] font-bold" style={{ color: '#00E676' }}>✓ Claimed</span>
+                        </>
+                      ) : adBonusPending ? (
+                        <>
+                          <span className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Waiting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-[9px] font-bold" style={{ color: '#F65E3B' }}>+100🪙</span>
+                          <ArrowRight className="w-2.5 h-2.5" style={{ color: '#F65E3B' }} />
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </motion.div>
+              )}
+
+              {/* Ad bonus also available after current day is already claimed */}
+              {!isCurrentDayClaimable && !adBonusClaimed && streakDay < 7 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-3 rounded-xl mb-2"
+                  style={{ backgroundColor: 'rgba(246,94,59,0.06)', border: '1px solid rgba(246,94,59,0.15)' }}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">📺</span>
+                    <div className="flex-1">
+                      <p className="text-xs font-bold" style={{ color: '#F65E3B' }}>Bonus: Get +100 Coins!</p>
+                      <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Visit our sponsor to earn extra coins</p>
+                    </div>
+                    <button
+                      onClick={handleAdBonusClick}
+                      disabled={adBonusPending}
+                      className="px-3 py-1.5 rounded-lg text-[10px] font-bold transition-transform hover:scale-105 active:scale-95 flex items-center gap-1"
+                      style={{ backgroundColor: '#F65E3B', color: '#FFFFFF', opacity: adBonusPending ? 0.7 : 1 }}
+                    >
+                      {adBonusPending ? 'Waiting...' : <>+100 <ArrowRight className="w-2.5 h-2.5" /></>}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Ad bonus already claimed today */}
+              {adBonusClaimed && !isCurrentDayClaimable && (
+                <div className="p-2 rounded-xl mb-2 text-center"
+                  style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.12)' }}>
+                  <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>✓ +100 coins ad bonus claimed today!</p>
+                </div>
               )}
 
               {/* All claimed message */}

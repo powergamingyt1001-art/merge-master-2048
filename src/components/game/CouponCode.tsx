@@ -1,373 +1,849 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Copy, Check, Sun, Moon, Clock, Ticket } from 'lucide-react'
+import { X, Gift, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap } from 'lucide-react'
 
 interface CouponCodeProps {
   isOpen: boolean
   onClose: () => void
+  coins: number
+  hammerCount: number
+  magnetCount: number
+  blastCount: number
+  spinTickets: number
   onAddCoins: (amount: number) => void
-  onAddPowerUp: (pu: 'hammer' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x' | 'extraTime', count: number) => void
+  onAddPowerUp: (pu: 'hammer' | 'magnet' | 'blast', count: number) => void
   onAddSpinTickets: (count: number) => void
   onAddNotification: (title: string, message: string, type: string, emoji: string) => void
 }
 
-// ── Seeded PRNG (mulberry32) ──────────────────────────────────────
-function mulberry32(seed: number): () => number {
-  return function () {
-    seed |= 0
-    seed = (seed + 0x6d2b79f5) | 0
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
+interface ClaimedCoupon {
+  code: string
+  date: string
+  reward: string
+  timestamp: number
 }
 
-// Convert a string seed to a numeric hash
-function hashString(str: string): number {
-  let hash = 0
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i)
-    hash = ((hash << 5) - hash + char) | 0
-  }
-  return hash
-}
+// Reward types
+type RewardType = 'spins' | 'coins' | 'magnets' | 'bombs' | 'hammers' | '5x' | '2.5x'
 
-// Generate a 6-character alphanumeric code from a string seed
-function generateCode(seedStr: string): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // No ambiguous chars: 0/O, 1/I/L
-  const rng = mulberry32(hashString(seedStr))
-  let code = ''
-  for (let i = 0; i < 6; i++) {
-    code += chars[Math.floor(rng() * chars.length)]
-  }
-  return code
-}
-
-// ── Day of Year helper ────────────────────────────────────────────
-function getDayOfYear(date: Date): number {
-  const start = new Date(date.getFullYear(), 0, 0)
-  const diff = date.getTime() - start.getTime()
-  const oneDay = 1000 * 60 * 60 * 24
-  return Math.floor(diff / oneDay)
-}
-
-// ── Rewards Pool ──────────────────────────────────────────────────
-interface RewardInfo {
-  type: 'spin' | 'coin' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x'
-  count: number
+interface RewardOption {
+  type: RewardType
   label: string
   emoji: string
-  color: string
+  weight: number
 }
 
-const REWARDS_POOL: RewardInfo[] = [
-  { type: 'spin', count: 5, label: '5 Spins', emoji: '🎫', color: '#00FFFF' },
-  { type: 'coin', count: 300, label: '300 Coins', emoji: '💰', color: '#EDC22E' },
-  { type: 'magnet', count: 5, label: '5 Magnets', emoji: '🧲', color: '#00E676' },
-  { type: 'blast', count: 1, label: '1 Bomb', emoji: '💣', color: '#FF7A00' },
-  { type: 'multiplier5x', count: 1, label: '1 5x Ability', emoji: '⚡', color: '#F65E3B' },
-  { type: 'multiplier2_5x', count: 1, label: '1 2.5x Ability', emoji: '🔥', color: '#FF7A00' },
-  { type: 'coin', count: 500, label: '500 Coins', emoji: '💰', color: '#EDC22E' },
+const REWARD_POOL: RewardOption[] = [
+  { type: 'spins', label: '5 Spin Tickets', emoji: '🎫', weight: 30 },
+  { type: 'coins', label: '300 Coins', emoji: '💰', weight: 25 },
+  { type: 'magnets', label: '5 Magnets', emoji: '🧲', weight: 15 },
+  { type: 'bombs', label: '5 Bombs', emoji: '💣', weight: 15 },
+  { type: '5x', label: '5x Multiplier', emoji: '✨', weight: 7.5 },
+  { type: '2.5x', label: '2.5x Multiplier', emoji: '🌟', weight: 7.5 },
 ]
 
-function getCurrentReward(date: Date): RewardInfo {
-  const dayOfYear = getDayOfYear(date)
-  const weekIndex = Math.floor(dayOfYear / 7) % 7
-  return REWARDS_POOL[weekIndex]
+interface AdminCodeDef {
+  reward: RewardType
+  label: string
+  emoji: string
+  uses: number
 }
 
-function getDaysUntilRewardChange(date: Date): number {
-  const dayOfYear = getDayOfYear(date)
-  const daysIntoWeek = dayOfYear % 7
-  return 7 - daysIntoWeek
+const BUILT_IN_ADMIN_CODES: Record<string, AdminCodeDef> = {
+  '100Boom': { reward: 'bombs', label: '100 Bombs', emoji: '💣', uses: 1 },
+  '1005x': { reward: '5x', label: '5x × 10 Uses', emoji: '✨', uses: 10 },
+  '1002.5x': { reward: '2.5x', label: '2.5x × 10 Uses', emoji: '🌟', uses: 10 },
 }
 
-// ── Special Hidden Codes ──────────────────────────────────────────
-const SPECIAL_CODES: Record<string, { type: 'blast' | 'multiplier5x' | 'multiplier2_5x'; count: number; label: string; emoji: string }> = {
-  '100Boom': { type: 'blast', count: 100, label: '100 Bombs', emoji: '💣' },
-  '1005x': { type: 'multiplier5x', count: 100, label: '100 5x Abilities', emoji: '⚡' },
-  '1002.5x': { type: 'multiplier2_5x', count: 100, label: '100 2.5x Abilities', emoji: '🔥' },
+const MAX_COINS_PER_COUPON = 500
+const MAX_MULTIPLIER_COUNT = 2
+
+// Secret admin access code - NEVER displayed in UI
+const ADMIN_ACCESS_CODE = 'ADMIN.IN'
+
+function getTodayStr(): string {
+  return new Date().toISOString().split('T')[0]
 }
 
-// ── LocalStorage helpers ──────────────────────────────────────────
-const STORAGE_KEY = 'mergeMaster2048_couponClaimed'
-
-interface ClaimedData {
-  [code: string]: string // code -> date string (YYYY-MM-DD) when claimed
+// Generate day/night codes based on date
+function generateDayCode(): string {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `DAY${y}${m}${d}`
 }
 
-function getClaimedData(): ClaimedData {
+function generateNightCode(): string {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `NIGHT${y}${m}${d}`
+}
+
+// 7-day rotation - offset the code by day of week
+function getDayRotationIndex(): number {
+  const now = new Date()
+  return now.getDay() // 0-6
+}
+
+function getRotationSuffix(): string {
+  const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+  return dayNames[getDayRotationIndex()]
+}
+
+function getTodayValidCodes(): string[] {
+  const dayCode = generateDayCode()
+  const nightCode = generateNightCode()
+  return [dayCode, nightCode]
+}
+
+function getRandomReward(): RewardOption {
+  const totalWeight = REWARD_POOL.reduce((sum, r) => sum + r.weight, 0)
+  let random = Math.random() * totalWeight
+  for (const reward of REWARD_POOL) {
+    random -= reward.weight
+    if (random <= 0) return reward
+  }
+  return REWARD_POOL[0]
+}
+
+function loadClaimedCoupons(): ClaimedCoupon[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const data = localStorage.getItem('claimedCoupons')
+    return data ? JSON.parse(data) : []
+  } catch {
+    return []
+  }
+}
+
+function saveClaimedCoupons(coupons: ClaimedCoupon[]) {
+  localStorage.setItem('claimedCoupons', JSON.stringify(coupons))
+}
+
+function loadAdminCodesClaimed(): Record<string, boolean> {
   if (typeof window === 'undefined') return {}
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : {}
+    const data = localStorage.getItem('claimedAdminCoupons')
+    return data ? JSON.parse(data) : {}
   } catch {
     return {}
   }
 }
 
-function setClaimedData(data: ClaimedData): void {
+function saveAdminCodesClaimed(codes: Record<string, boolean>) {
+  localStorage.setItem('claimedAdminCoupons', JSON.stringify(codes))
+}
+
+function loadMultiplierCount(): { '5x': number; '2.5x': number } {
+  if (typeof window === 'undefined') return { '5x': 0, '2.5x': 0 }
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+    const data = localStorage.getItem('multiplierCouponCount')
+    return data ? JSON.parse(data) : { '5x': 0, '2.5x': 0 }
   } catch {
-    // Storage full or unavailable
+    return { '5x': 0, '2.5x': 0 }
   }
 }
 
-function isCodeClaimed(code: string, dateStr: string): boolean {
-  const data = getClaimedData()
-  return data[code] === dateStr
+function saveMultiplierCount(counts: { '5x': number; '2.5x': number }) {
+  localStorage.setItem('multiplierCouponCount', JSON.stringify(counts))
 }
 
-function markCodeClaimed(code: string, dateStr: string): void {
-  const data = getClaimedData()
-  data[code] = dateStr
-  setClaimedData(data)
+// Purchase history type matching Store.tsx
+interface PurchaseHistoryEntry {
+  id: string
+  date: string
+  item: string
+  amount: string
+  status: 'Pending' | 'Delivered' | 'Denied'
+  type: 'coins' | 'ability' | 'inr_ability'
+  transactionId?: string
+  whatsappNumber?: string
+  buyerName?: string
+  screenshotDataUrl?: string
+  coinAmount?: number
+  abilityType?: string
+  abilityCount?: number
 }
 
-// ── Time helpers ──────────────────────────────────────────────────
-function isDayCodeActive(now: Date): boolean {
-  const h = now.getHours()
-  return h >= 12 // 12PM to 11:59PM
-}
-
-function isNightCodeActive(now: Date): boolean {
-  const h = now.getHours()
-  return h < 12 // 12AM to 11:59AM
-}
-
-function getTimeUntilNextPeriod(now: Date): { dayCodeIn: string; nightCodeIn: string } {
-  const h = now.getHours()
-  const m = now.getMinutes()
-  const s = now.getSeconds()
-
-  // Day code starts at 12PM (noon)
-  let dayHours: number, dayMins: number, daySecs: number
-  if (h < 12) {
-    dayHours = 11 - h
-    dayMins = 59 - m
-    daySecs = 59 - s
-  } else {
-    dayHours = 0
-    dayMins = 0
-    daySecs = 0
-  }
-
-  // Night code starts at 12AM (midnight)
-  let nightHours: number, nightMins: number, nightSecs: number
-  nightHours = 23 - h
-  nightMins = 59 - m
-  nightSecs = 59 - s
-
-  const pad = (n: number) => n.toString().padStart(2, '0')
-
-  return {
-    dayCodeIn: h < 12 ? `${pad(dayHours)}:${pad(dayMins)}:${pad(daySecs)}` : 'Active Now!',
-    nightCodeIn: h >= 12 ? `${pad(nightHours)}:${pad(nightMins)}:${pad(nightSecs)}` : 'Active Now!',
+function loadPurchaseHistory(): PurchaseHistoryEntry[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const data = localStorage.getItem('purchaseHistory')
+    return data ? JSON.parse(data) : []
+  } catch {
+    return []
   }
 }
 
-// ── Main Component ────────────────────────────────────────────────
+function savePurchaseHistory(history: PurchaseHistoryEntry[]) {
+  localStorage.setItem('purchaseHistory', JSON.stringify(history))
+}
+
+// Custom admin-created coupon codes
+interface CustomCouponCode {
+  code: string
+  reward: RewardType
+  rewardAmount: number
+  label: string
+  emoji: string
+  maxUses: number
+  currentUses: number
+  isDayCode: boolean
+  isNightCode: boolean
+  createdAt: number
+}
+
+function loadCustomCouponCodes(): CustomCouponCode[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const data = localStorage.getItem('adminCustomCouponCodes')
+    return data ? JSON.parse(data) : []
+  } catch {
+    return []
+  }
+}
+
+function saveCustomCouponCodes(codes: CustomCouponCode[]) {
+  localStorage.setItem('adminCustomCouponCodes', JSON.stringify(codes))
+}
+
+// Night code settings
+interface NightCodeSettings {
+  rewardType: RewardType
+  rewardAmount: number
+  label: string
+  emoji: string
+}
+
+function loadNightCodeSettings(): NightCodeSettings {
+  if (typeof window === 'undefined') return { rewardType: 'coins', rewardAmount: 300, label: '300 Coins', emoji: '💰' }
+  try {
+    const data = localStorage.getItem('adminNightCodeSettings')
+    return data ? JSON.parse(data) : { rewardType: 'coins', rewardAmount: 300, label: '300 Coins', emoji: '💰' }
+  } catch {
+    return { rewardType: 'coins', rewardAmount: 300, label: '300 Coins', emoji: '💰' }
+  }
+}
+
+function saveNightCodeSettings(settings: NightCodeSettings) {
+  localStorage.setItem('adminNightCodeSettings', JSON.stringify(settings))
+}
+
+// Coin amount mapping for purchases
+function getCoinAmountFromItem(item: string): number {
+  // New INR coin packages
+  if (item.includes('1,20,000')) return 120000
+  if (item.includes('62,000')) return 62000
+  if (item.includes('25,000')) return 25000
+  if (item.includes('11,999')) return 11999
+  if (item.includes('4,999')) return 4999
+  if (item.includes('2,500')) return 2500
+  // Legacy coin packages (kept for backward compatibility)
+  if (item.includes('50,000')) return 50000
+  if (item.includes('15,000')) return 15000
+  if (item.includes('5,000')) return 5000
+  if (item.includes('1,500')) return 1500
+  if (item.includes('500')) return 500
+  // Default: try to parse number from item string
+  const match = item.match(/(\d[\d,]*)/)
+  if (match) return parseInt(match[1].replace(/,/g, ''), 10)
+  return 500
+}
+
+type AdminTab = 'payments' | 'coupons' | 'prices' | 'history'
+
+// Custom price overrides stored in localStorage
+interface CustomPriceOverride {
+  coinPackages: { coins: number; price: number; label?: string }[]
+  inrAbilityPackages: { type: string; uses: number; price: number }[]
+}
+
+function loadCustomPrices(): CustomPriceOverride | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const data = localStorage.getItem('adminCustomPrices')
+    return data ? JSON.parse(data) : null
+  } catch { return null }
+}
+
+function saveCustomPrices(prices: CustomPriceOverride) {
+  localStorage.setItem('adminCustomPrices', JSON.stringify(prices))
+}
+
+// Default COIN_PACKAGES (matching Store.tsx)
+const DEFAULT_COIN_PACKAGES = [
+  { coins: 2500, price: 3 },
+  { coins: 4999, price: 5 },
+  { coins: 11999, price: 10 },
+  { coins: 25000, price: 19 },
+  { coins: 62000, price: 49 },
+  { coins: 120000, price: 99 },
+]
+
+// Default INR_ABILITY_PACKAGES (matching Store.tsx)
+const DEFAULT_INR_ABILITY_PACKAGES = [
+  { type: '5x', uses: 1, price: 20 },
+  { type: '5x', uses: 5, price: 80 },
+  { type: '5x', uses: 10, price: 149 },
+  { type: '2.5x', uses: 1, price: 10 },
+  { type: '2.5x', uses: 5, price: 40 },
+  { type: '2.5x', uses: 10, price: 75 },
+]
+
 export function CouponCode({
   isOpen,
   onClose,
+  coins,
+  hammerCount,
+  magnetCount,
+  blastCount,
+  spinTickets,
   onAddCoins,
   onAddPowerUp,
   onAddSpinTickets,
   onAddNotification,
 }: CouponCodeProps) {
-  const [now, setNow] = useState<Date>(new Date())
-  const [inputCode, setInputCode] = useState('')
-  const [copiedCode, setCopiedCode] = useState<string | null>(null)
-  const [claimingCode, setClaimingCode] = useState<string | null>(null)
-  const [inputError, setInputError] = useState('')
-  const [inputSuccess, setInputSuccess] = useState('')
-  const [prevIsOpen, setPrevIsOpen] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  // Reset input state when modal opens (React-recommended pattern for syncing state with props)
-  if (isOpen && !prevIsOpen) {
-    setPrevIsOpen(true)
-    setInputCode('')
-    setInputError('')
-    setInputSuccess('')
-  }
-  if (!isOpen && prevIsOpen) {
-    setPrevIsOpen(false)
-  }
-
-  // Update time every second via interval callback
-  useEffect(() => {
-    if (!isOpen) return
-    timerRef.current = setInterval(() => setNow(new Date()), 1000)
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
-    }
-  }, [isOpen])
-
-  // Current date string (YYYY-MM-DD)
-  const dateStr = now.toISOString().split('T')[0]
-
-  // Generate today's codes
-  const dayCode = generateCode(`DAY-${dateStr}`)
-  const nightCode = generateCode(`NIGHT-${dateStr}`)
-
-  // Current reward
-  const currentReward = getCurrentReward(now)
-  const daysUntilChange = getDaysUntilRewardChange(now)
-
-  // Active states
-  const dayActive = isDayCodeActive(now)
-  const nightActive = isNightCodeActive(now)
-
-  // Claimed states
-  const dayClaimed = isCodeClaimed(dayCode, dateStr)
-  const nightClaimed = isCodeClaimed(nightCode, dateStr)
-
-  // Time remaining
-  const { dayCodeIn, nightCodeIn } = getTimeUntilNextPeriod(now)
-
-  // Copy to clipboard
-  const handleCopy = useCallback(async (code: string) => {
+  const [codeInput, setCodeInput] = useState('')
+  const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
+  const [showReward, setShowReward] = useState<{ label: string; emoji: string } | null>(null)
+  const [claimHistory, setClaimHistory] = useState<ClaimedCoupon[]>(() => {
+    if (typeof window === 'undefined') return []
     try {
-      await navigator.clipboard.writeText(code)
-      setCopiedCode(code)
-      setTimeout(() => setCopiedCode(null), 2000)
-    } catch {
-      // Fallback for older browsers
-      const textarea = document.createElement('textarea')
-      textarea.value = code
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-      setCopiedCode(code)
-      setTimeout(() => setCopiedCode(null), 2000)
+      const saved = localStorage.getItem('claimedCoupons')
+      return saved ? JSON.parse(saved) : []
+    } catch { return [] }
+  })
+
+  // Admin panel state
+  const [showAdminPanel, setShowAdminPanel] = useState(false)
+  const [adminTab, setAdminTab] = useState<AdminTab>('payments')
+  const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryEntry[]>(() => loadPurchaseHistory())
+  const [customCodes, setCustomCodes] = useState<CustomCouponCode[]>(() => loadCustomCouponCodes())
+  const [nightCodeSettings, setNightCodeSettings] = useState<NightCodeSettings>(() => loadNightCodeSettings())
+  const [customPrices, setCustomPrices] = useState<CustomPriceOverride | null>(() => loadCustomPrices())
+
+  // New coupon form state
+  const [newCodeInput, setNewCodeInput] = useState('')
+  const [newCodeRewardType, setNewCodeRewardType] = useState<RewardType>('coins')
+  const [newCodeRewardAmount, setNewCodeRewardAmount] = useState(300)
+  const [newCodeMaxUses, setNewCodeMaxUses] = useState(1)
+  const [newCodeIsDay, setNewCodeIsDay] = useState(false)
+  const [newCodeIsNight, setNewCodeIsNight] = useState(false)
+
+  // Night code settings form
+  const [ncRewardType, setNcRewardType] = useState<RewardType>(nightCodeSettings.rewardType)
+  const [ncRewardAmount, setNcRewardAmount] = useState(nightCodeSettings.rewardAmount)
+
+  // Day/Night code toggle in Coupons tab
+  const [dnToggle, setDnToggle] = useState<'day' | 'night'>('day')
+  const [dayCodeCustom, setDayCodeCustom] = useState('')
+  const [nightCodeCustom, setNightCodeCustom] = useState('')
+  const [viewingScreenshot, setViewingScreenshot] = useState<string | null>(null)
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
+
+  // Day code settings (for real-time update when admin changes it)
+  interface DayCodeSettings {
+    rewardType: RewardType
+    rewardAmount: number
+    label: string
+    emoji: string
+  }
+  const [dayCodeSettings, setDayCodeSettings] = useState<DayCodeSettings>(() => {
+    if (typeof window === 'undefined') return { rewardType: 'coins', rewardAmount: 300, label: '300 Coins', emoji: '💰' }
+    try {
+      const data = localStorage.getItem('adminDayCodeSettings')
+      return data ? JSON.parse(data) : { rewardType: 'coins', rewardAmount: 300, label: '300 Coins', emoji: '💰' }
+    } catch { return { rewardType: 'coins', rewardAmount: 300, label: '300 Coins', emoji: '💰' } }
+  })
+  const [dcRewardType, setDcRewardType] = useState<RewardType>(dayCodeSettings.rewardType)
+  const [dcRewardAmount, setDcRewardAmount] = useState(dayCodeSettings.rewardAmount)
+
+  function saveDayCodeSettings(settings: DayCodeSettings) {
+    localStorage.setItem('adminDayCodeSettings', JSON.stringify(settings))
+    setDayCodeSettings(settings)
+  }
+
+  // Refresh admin data when panel opens
+  useEffect(() => {
+    if (showAdminPanel) {
+      setPurchaseHistory(loadPurchaseHistory())
+      setCustomCodes(loadCustomCouponCodes())
+      setNightCodeSettings(loadNightCodeSettings())
+      setNcRewardType(loadNightCodeSettings().rewardType)
+      setNcRewardAmount(loadNightCodeSettings().rewardAmount)
+      setCustomPrices(loadCustomPrices())
+      // Also reload day code settings
+      try {
+        const dcData = localStorage.getItem('adminDayCodeSettings')
+        if (dcData) {
+          const parsed = JSON.parse(dcData)
+          setDayCodeSettings(parsed)
+          setDcRewardType(parsed.rewardType)
+          setDcRewardAmount(parsed.rewardAmount)
+        }
+      } catch { /* ignore */ }
     }
+  }, [showAdminPanel])
+
+  // Pick a random reward based on weights
+  const pickRandomReward = useCallback((): RewardOption => {
+    const totalWeight = REWARD_POOL.reduce((sum, r) => sum + r.weight, 0)
+    let random = Math.random() * totalWeight
+    for (const reward of REWARD_POOL) {
+      random -= reward.weight
+      if (random <= 0) return reward
+    }
+    return REWARD_POOL[0]
   }, [])
 
-  // Grant reward helper
-  const grantReward = useCallback(
-    (reward: RewardInfo | (typeof SPECIAL_CODES)[string]) => {
-      switch (reward.type) {
-        case 'coin':
-          onAddCoins(reward.count)
-          break
-        case 'spin':
-          onAddSpinTickets(reward.count)
-          break
-        case 'magnet':
-          onAddPowerUp('magnet', reward.count)
-          break
-        case 'blast':
-          onAddPowerUp('blast', reward.count)
-          break
-        case 'multiplier5x':
-          onAddPowerUp('multiplier5x', reward.count)
-          break
-        case 'multiplier2_5x':
-          onAddPowerUp('multiplier2_5x', reward.count)
-          break
+  // Apply a reward
+  const applyReward = useCallback((reward: RewardOption) => {
+    const multiplierCounts = loadMultiplierCount()
+
+    switch (reward.type) {
+      case 'spins':
+        onAddSpinTickets(5)
+        break
+      case 'coins': {
+        const coinAmount = Math.min(300, MAX_COINS_PER_COUPON)
+        onAddCoins(coinAmount)
+        break
       }
-      onAddNotification(
-        'Coupon Claimed!',
-        `You received ${reward.label} ${reward.emoji}`,
-        'reward',
-        reward.emoji
+      case 'magnets':
+        onAddPowerUp('magnet', 5)
+        break
+      case 'bombs':
+        onAddPowerUp('blast', 5)
+        break
+      case '5x': {
+        if (multiplierCounts['5x'] >= MAX_MULTIPLIER_COUNT) {
+          onAddCoins(200)
+          onAddNotification('Coupon Reward', '5x multiplier max reached! Got 200 coins instead.', 'reward', '💰')
+          return
+        }
+        multiplierCounts['5x']++
+        saveMultiplierCount(multiplierCounts)
+        onAddCoins(500)
+        onAddNotification('5x Multiplier!', 'You received a 5x multiplier reward! (+500 coins)', 'reward', '✨')
+        break
+      }
+      case '2.5x': {
+        if (multiplierCounts['2.5x'] >= MAX_MULTIPLIER_COUNT) {
+          onAddCoins(150)
+          onAddNotification('Coupon Reward', '2.5x multiplier max reached! Got 150 coins instead.', 'reward', '💰')
+          return
+        }
+        multiplierCounts['2.5x']++
+        saveMultiplierCount(multiplierCounts)
+        onAddCoins(250)
+        onAddNotification('2.5x Multiplier!', 'You received a 2.5x multiplier reward! (+250 coins)', 'reward', '🌟')
+        break
+      }
+    }
+
+    if (reward.type !== '5x' && reward.type !== '2.5x') {
+      onAddNotification('Coupon Reward! 🎉', `You received ${reward.emoji} ${reward.label}!`, 'reward', '🎁')
+    }
+  }, [onAddCoins, onAddPowerUp, onAddSpinTickets, onAddNotification])
+
+  // Apply custom coupon reward
+  const applyCustomReward = useCallback((code: CustomCouponCode) => {
+    switch (code.reward) {
+      case 'spins':
+        onAddSpinTickets(code.rewardAmount)
+        break
+      case 'coins':
+        onAddCoins(code.rewardAmount)
+        break
+      case 'magnets':
+        onAddPowerUp('magnet', code.rewardAmount)
+        break
+      case 'bombs':
+        onAddPowerUp('blast', code.rewardAmount)
+        break
+      case 'hammers':
+        onAddPowerUp('hammer', code.rewardAmount)
+        break
+      case '5x':
+        onAddCoins(code.rewardAmount)
+        break
+      case '2.5x':
+        onAddCoins(code.rewardAmount)
+        break
+    }
+    onAddNotification('Coupon Reward! 🎉', `You received ${code.emoji} ${code.label}!`, 'reward', '🎁')
+  }, [onAddCoins, onAddPowerUp, onAddSpinTickets, onAddNotification])
+
+  // Handle admin code rewards (built-in)
+  const applyAdminReward = useCallback((code: string) => {
+    const adminCode = BUILT_IN_ADMIN_CODES[code]
+    if (!adminCode) return false
+
+    // Check if already used
+    try {
+      const usedAdminCodes = JSON.parse(localStorage.getItem('usedAdminCoupons') || '{}')
+      if (usedAdminCodes[code]) {
+        setStatusMessage({ text: 'This admin code has already been used!', type: 'error' })
+        return true
+      }
+      usedAdminCodes[code] = Date.now()
+      localStorage.setItem('usedAdminCoupons', JSON.stringify(usedAdminCodes))
+    } catch { /* ignore */ }
+
+    // Apply reward based on admin code type
+    switch (adminCode.reward) {
+      case 'bombs':
+        onAddPowerUp('blast', 100)
+        break
+      case '5x':
+        onAddCoins(5000)
+        break
+      case '2.5x':
+        onAddCoins(2500)
+        break
+      case 'hammers':
+        onAddPowerUp('hammer', 100)
+        break
+      case 'magnets':
+        onAddPowerUp('magnet', 100)
+        break
+      case 'spins':
+        onAddSpinTickets(50)
+        break
+      case 'coins':
+        onAddCoins(5000)
+        break
+    }
+
+    setShowReward({ label: adminCode.label, emoji: adminCode.emoji })
+    onAddNotification('Admin Reward! 🎉', `You received ${adminCode.emoji} ${adminCode.label}!`, 'reward', '🎁')
+    return true
+  }, [onAddCoins, onAddPowerUp, onAddSpinTickets, onAddNotification])
+
+  // Handle claim
+  const handleClaim = useCallback(() => {
+    const code = codeInput.trim().toUpperCase()
+    if (!code) {
+      setStatusMessage({ text: 'Please enter a coupon code', type: 'error' })
+      return
+    }
+
+    // Check for admin access code FIRST (before any other check)
+    if (code === ADMIN_ACCESS_CODE) {
+      setShowAdminPanel(true)
+      setCodeInput('')
+      setStatusMessage(null)
+      return
+    }
+
+    // Check built-in admin codes
+    if (BUILT_IN_ADMIN_CODES[code]) {
+      const handled = applyAdminReward(code)
+      if (handled) {
+        setCodeInput('')
+        return
+      }
+    }
+
+    // Check custom coupon codes
+    const customCode = customCodes.find(c => c.code.toUpperCase() === code)
+    if (customCode) {
+      if (customCode.currentUses >= customCode.maxUses) {
+        setStatusMessage({ text: 'This code has reached its max uses!', type: 'error' })
+        return
+      }
+      // Apply the custom reward
+      applyCustomReward(customCode)
+      // Update usage count
+      const updatedCodes = customCodes.map(c =>
+        c.code === customCode.code ? { ...c, currentUses: c.currentUses + 1 } : c
       )
-    },
-    [onAddCoins, onAddPowerUp, onAddSpinTickets, onAddNotification]
-  )
+      setCustomCodes(updatedCodes)
+      saveCustomCouponCodes(updatedCodes)
 
-  // Claim a daily code
-  const handleClaimCode = useCallback(
-    (code: string, type: 'day' | 'night') => {
-      if (claimingCode) return
-      const isActive = type === 'day' ? dayActive : nightActive
-      const isClaimed = type === 'day' ? dayClaimed : nightClaimed
-      if (!isActive || isClaimed) return
+      // Save to claim history
+      const today = getTodayStr()
+      const newClaim: ClaimedCoupon = {
+        code,
+        date: today,
+        reward: `${customCode.emoji} ${customCode.label}`,
+        timestamp: Date.now(),
+      }
+      const updatedHistory = [newClaim, ...claimHistory].slice(0, 50)
+      setClaimHistory(updatedHistory)
+      saveClaimedCoupons(updatedHistory)
 
-      setClaimingCode(code)
-      markCodeClaimed(code, dateStr)
-      grantReward(currentReward)
-
-      setTimeout(() => setClaimingCode(null), 600)
-    },
-    [claimingCode, dayActive, nightActive, dayClaimed, nightClaimed, dateStr, currentReward, grantReward]
-  )
-
-  // Apply code from input
-  const handleApplyCode = useCallback(() => {
-    const trimmed = inputCode.trim().toUpperCase()
-    setInputError('')
-    setInputSuccess('')
-
-    if (!trimmed) {
-      setInputError('Please enter a code')
+      setShowReward({ label: customCode.label, emoji: customCode.emoji })
+      setStatusMessage({ text: `Code redeemed! ${customCode.emoji} ${customCode.label}`, type: 'success' })
+      setCodeInput('')
       return
     }
 
-    // Check special hidden codes first (case-insensitive, but "1002.5x" has a dot)
-    const specialKey = Object.keys(SPECIAL_CODES).find(
-      (k) => k.toUpperCase() === trimmed
+    // Check daily codes
+    const validCodes = getTodayValidCodes()
+    if (!validCodes.includes(code)) {
+      setStatusMessage({ text: 'Invalid coupon code! Try today\'s code.', type: 'error' })
+      return
+    }
+
+    // Check if already claimed today
+    const today = getTodayStr()
+    const alreadyClaimed = claimHistory.some(c => c.code === code && c.date === today)
+    if (alreadyClaimed) {
+      setStatusMessage({ text: 'You already claimed this code today!', type: 'error' })
+      return
+    }
+
+    // Use admin-configured reward for day/night codes (real-time)
+    // If admin didn't set a custom reward, auto-generate one with lower reward
+    const isDayCode = code.startsWith('DAY')
+    const isNightCode = code.startsWith('NIGHT')
+
+    if (isDayCode) {
+      const daySettings = dayCodeSettings
+      // Auto-generate lower reward if admin forgot to configure
+      const rewardToUse: RewardOption = daySettings.rewardAmount > 0
+        ? { type: daySettings.rewardType, label: daySettings.label, emoji: daySettings.emoji, weight: 100 }
+        : { type: 'coins', label: '150 Coins (Auto)', emoji: '💰', weight: 100 } // Auto-generated with lower reward
+      applyReward(rewardToUse)
+      const newClaim: ClaimedCoupon = {
+        code,
+        date: today,
+        reward: `${rewardToUse.emoji} ${rewardToUse.label}`,
+        timestamp: Date.now(),
+      }
+      const updatedHistory = [newClaim, ...claimHistory].slice(0, 50)
+      setClaimHistory(updatedHistory)
+      saveClaimedCoupons(updatedHistory)
+      setShowReward({ label: rewardToUse.label, emoji: rewardToUse.emoji })
+      setStatusMessage({ text: `Day code redeemed! ${rewardToUse.emoji} ${rewardToUse.label}`, type: 'success' })
+      setCodeInput('')
+      return
+    }
+
+    if (isNightCode) {
+      const nightSettings = nightCodeSettings
+      const rewardToUse: RewardOption = nightSettings.rewardAmount > 0
+        ? { type: nightSettings.rewardType, label: nightSettings.label, emoji: nightSettings.emoji, weight: 100 }
+        : { type: 'coins', label: '150 Coins (Auto)', emoji: '💰', weight: 100 }
+      applyReward(rewardToUse)
+      const newClaim: ClaimedCoupon = {
+        code,
+        date: today,
+        reward: `${rewardToUse.emoji} ${rewardToUse.label}`,
+        timestamp: Date.now(),
+      }
+      const updatedHistory = [newClaim, ...claimHistory].slice(0, 50)
+      setClaimHistory(updatedHistory)
+      saveClaimedCoupons(updatedHistory)
+      setShowReward({ label: rewardToUse.label, emoji: rewardToUse.emoji })
+      setStatusMessage({ text: `Night code redeemed! ${rewardToUse.emoji} ${rewardToUse.label}`, type: 'success' })
+      setCodeInput('')
+      return
+    }
+
+    // Fallback: Pick and apply random reward
+    const reward = pickRandomReward()
+    applyReward(reward)
+
+    // Save to history
+    const newClaim: ClaimedCoupon = {
+      code,
+      date: today,
+      reward: `${reward.emoji} ${reward.label}`,
+      timestamp: Date.now(),
+    }
+    const updatedHistory = [newClaim, ...claimHistory].slice(0, 50)
+    setClaimHistory(updatedHistory)
+    saveClaimedCoupons(updatedHistory)
+
+    // Show reward animation
+    setShowReward({ label: reward.label, emoji: reward.emoji })
+    setStatusMessage({ text: `Code redeemed! ${reward.emoji} ${reward.label}`, type: 'success' })
+    setCodeInput('')
+  }, [codeInput, claimHistory, customCodes, pickRandomReward, applyReward, applyAdminReward, applyCustomReward])
+
+  // ===== ADMIN PANEL HANDLERS =====
+
+  // Approve a purchase
+  const handleApprovePurchase = useCallback((entry: PurchaseHistoryEntry) => {
+    const purchaseDate = new Date(entry.date).getTime()
+    const now = Date.now()
+    const hoursSincePurchase = (now - purchaseDate) / (1000 * 60 * 60)
+    const isDelayed = hoursSincePurchase > 12
+
+    if (entry.type === 'inr_ability') {
+      // INR ability purchase (5x/2.5x) - mark as delivered
+      const updated = purchaseHistory.map(p =>
+        p.id === entry.id ? { ...p, status: 'Delivered' as const } : p
+      )
+      setPurchaseHistory(updated)
+      savePurchaseHistory(updated)
+
+      const bonusText = isDelayed ? ` (+50% bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
+      onAddNotification(
+        'Ability Approved! ✅',
+        `${entry.item} delivered!${bonusText}`,
+        'reward',
+        '📦'
+      )
+    } else {
+      // Coin or coin-price ability purchase
+      let coinAmount = entry.coinAmount || getCoinAmountFromItem(entry.item)
+      if (isDelayed) {
+        coinAmount = Math.floor(coinAmount * 1.5) // 50% bonus for delayed
+      }
+
+      onAddCoins(coinAmount)
+
+      // Update purchase status
+      const updated = purchaseHistory.map(p =>
+        p.id === entry.id ? { ...p, status: 'Delivered' as const } : p
+      )
+      setPurchaseHistory(updated)
+      savePurchaseHistory(updated)
+
+      const bonusText = isDelayed ? ` (+50% bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
+      onAddNotification(
+        'Order Approved! ✅',
+        `${entry.item} delivered! ${coinAmount} coins added${bonusText}`,
+        'reward',
+        '📦'
+      )
+    }
+  }, [purchaseHistory, onAddCoins, onAddNotification])
+
+  // Deny a purchase
+  const handleDenyPurchase = useCallback((entry: PurchaseHistoryEntry) => {
+    const updated = purchaseHistory.map(p =>
+      p.id === entry.id ? { ...p, status: 'Denied' as const } : p
     )
-    if (specialKey) {
-      const special = SPECIAL_CODES[specialKey]
-      grantReward(special)
-      setInputSuccess(`🎉 Claimed: ${special.label} ${special.emoji}`)
-      setInputCode('')
-      return
+    setPurchaseHistory(updated)
+    savePurchaseHistory(updated)
+  }, [purchaseHistory])
+
+  // Disapprove (undo) a previously approved purchase - only within 24 hours
+  const handleDisapprovePurchase = useCallback((entry: PurchaseHistoryEntry) => {
+    const hoursSince = (Date.now() - new Date(entry.date).getTime()) / (1000 * 60 * 60)
+    if (hoursSince > 24) return // Can only undo within 24 hours
+    const updated = purchaseHistory.map(p =>
+      p.id === entry.id ? { ...p, status: 'Denied' as const } : p
+    )
+    setPurchaseHistory(updated)
+    savePurchaseHistory(updated)
+  }, [purchaseHistory])
+
+  // Create a custom coupon code
+  const handleCreateCoupon = useCallback(() => {
+    const code = newCodeInput.trim().toUpperCase()
+    if (!code) return
+    if (BUILT_IN_ADMIN_CODES[code]) return
+    if (customCodes.some(c => c.code === code)) return
+
+    const emojiMap: Record<RewardType, string> = {
+      coins: '💰', spins: '🎫', magnets: '🧲', bombs: '💣', hammers: '🔨', '5x': '✨', '2.5x': '🌟',
+    }
+    const labelMap: Record<RewardType, string> = {
+      coins: `${newCodeRewardAmount} Coins`,
+      spins: `${newCodeRewardAmount} Spin Tickets`,
+      magnets: `${newCodeRewardAmount} Magnets`,
+      bombs: `${newCodeRewardAmount} Bombs`,
+      hammers: `${newCodeRewardAmount} Hammers`,
+      '5x': `5x × ${newCodeRewardAmount} Uses`,
+      '2.5x': `2.5x × ${newCodeRewardAmount} Uses`,
     }
 
-    // Check if it matches today's day code
-    if (trimmed === dayCode) {
-      if (dayClaimed) {
-        setInputError('This code has already been claimed today')
-        return
-      }
-      if (!dayActive) {
-        setInputError('Day code is not active yet (available 12PM-12AM)')
-        return
-      }
-      markCodeClaimed(dayCode, dateStr)
-      grantReward(currentReward)
-      setInputSuccess(`🎉 Claimed: ${currentReward.label} ${currentReward.emoji}`)
-      setInputCode('')
-      return
+    const newCode: CustomCouponCode = {
+      code,
+      reward: newCodeRewardType,
+      rewardAmount: newCodeRewardAmount,
+      label: labelMap[newCodeRewardType],
+      emoji: emojiMap[newCodeRewardType],
+      maxUses: newCodeMaxUses,
+      currentUses: 0,
+      isDayCode: newCodeIsDay,
+      isNightCode: newCodeIsNight,
+      createdAt: Date.now(),
     }
 
-    // Check if it matches today's night code
-    if (trimmed === nightCode) {
-      if (nightClaimed) {
-        setInputError('This code has already been claimed today')
-        return
-      }
-      if (!nightActive) {
-        setInputError('Night code is not active yet (available 12AM-12PM)')
-        return
-      }
-      markCodeClaimed(nightCode, dateStr)
-      grantReward(currentReward)
-      setInputSuccess(`🎉 Claimed: ${currentReward.label} ${currentReward.emoji}`)
-      setInputCode('')
-      return
-    }
+    const updated = [...customCodes, newCode]
+    setCustomCodes(updated)
+    saveCustomCouponCodes(updated)
 
-    setInputError('Invalid code. Check the code and try again.')
-  }, [
-    inputCode,
-    dayCode,
-    nightCode,
-    dayClaimed,
-    nightClaimed,
-    dayActive,
-    nightActive,
-    dateStr,
-    currentReward,
-    grantReward,
-  ])
+    // Reset form
+    setNewCodeInput('')
+    setNewCodeRewardType('coins')
+    setNewCodeRewardAmount(300)
+    setNewCodeMaxUses(1)
+    setNewCodeIsDay(false)
+    setNewCodeIsNight(false)
+  }, [newCodeInput, newCodeRewardType, newCodeRewardAmount, newCodeMaxUses, newCodeIsDay, newCodeIsNight, customCodes])
+
+  // Delete a custom coupon code
+  const handleDeleteCoupon = useCallback((code: string) => {
+    const updated = customCodes.filter(c => c.code !== code)
+    setCustomCodes(updated)
+    saveCustomCouponCodes(updated)
+  }, [customCodes])
+
+  // Save night code settings
+  const handleSaveNightCodeSettings = useCallback(() => {
+    const emojiMap: Record<RewardType, string> = {
+      coins: '💰', spins: '🎫', magnets: '🧲', bombs: '💣', hammers: '🔨', '5x': '✨', '2.5x': '🌟',
+    }
+    const labelMap: Record<RewardType, string> = {
+      coins: `${ncRewardAmount} Coins`,
+      spins: `${ncRewardAmount} Spin Tickets`,
+      magnets: `${ncRewardAmount} Magnets`,
+      bombs: `${ncRewardAmount} Bombs`,
+      hammers: `${ncRewardAmount} Hammers`,
+      '5x': `5x × ${ncRewardAmount} Uses`,
+      '2.5x': `2.5x × ${ncRewardAmount} Uses`,
+    }
+    const settings: NightCodeSettings = {
+      rewardType: ncRewardType,
+      rewardAmount: ncRewardAmount,
+      label: labelMap[ncRewardType],
+      emoji: emojiMap[ncRewardType],
+    }
+    setNightCodeSettings(settings)
+    saveNightCodeSettings(settings)
+  }, [ncRewardType, ncRewardAmount])
+
+  // Save day code settings (real-time update)
+  const handleSaveDayCodeSettings = useCallback(() => {
+    const emojiMap: Record<RewardType, string> = {
+      coins: '💰', spins: '🎫', magnets: '🧲', bombs: '💣', hammers: '🔨', '5x': '✨', '2.5x': '🌟',
+    }
+    const labelMap: Record<RewardType, string> = {
+      coins: `${dcRewardAmount} Coins`,
+      spins: `${dcRewardAmount} Spin Tickets`,
+      magnets: `${dcRewardAmount} Magnets`,
+      bombs: `${dcRewardAmount} Bombs`,
+      hammers: `${dcRewardAmount} Hammers`,
+      '5x': `5x × ${dcRewardAmount} Uses`,
+      '2.5x': `2.5x × ${dcRewardAmount} Uses`,
+    }
+    const settings: DayCodeSettings = {
+      rewardType: dcRewardType,
+      rewardAmount: dcRewardAmount,
+      label: labelMap[dcRewardType],
+      emoji: emojiMap[dcRewardType],
+    }
+    saveDayCodeSettings(settings)
+  }, [dcRewardType, dcRewardAmount])
+
+  const dayCode = generateDayCode()
+  const nightCode = generateNightCode()
+  const rotationDay = getRotationSuffix()
+
+  const pendingPurchases = purchaseHistory.filter(p => p.status === 'Pending')
+  const allPurchases = purchaseHistory
 
   return (
     <AnimatePresence>
@@ -376,355 +852,1055 @@ export function CouponCode({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[200] flex items-center justify-center px-3 py-4"
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-[200] flex items-center justify-center px-4"
           style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
         >
           <motion.div
-            initial={{ scale: 0.8, y: 30 }}
+            initial={{ scale: 0.85, y: 20 }}
             animate={{ scale: 1, y: 0 }}
-            exit={{ scale: 0.8 }}
-            transition={{ type: 'spring', stiffness: 220, damping: 22 }}
-            className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl"
-            style={{
-              background: 'linear-gradient(135deg, #1a0533, #0d1b3e)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              boxShadow: '0 0 60px rgba(237,194,46,0.08), 0 0 120px rgba(13,27,62,0.5)',
-            }}
+            exit={{ scale: 0.85, y: 20 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+            className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl"
+            style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
           >
-            {/* ── Header ── */}
-            <div className="flex items-center justify-between p-4 pb-2">
+            {/* Header */}
+            <div className="flex items-center justify-between p-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
               <div className="flex items-center gap-2">
-                <Ticket className="w-5 h-5" style={{ color: '#EDC22E' }} />
-                <h3 className="text-lg font-bold" style={{ color: '#FFFFFF' }}>
-                  🎟️ Coupon Code
-                </h3>
+                <Ticket className="w-4 h-4" style={{ color: '#EDC22E' }} />
+                <h3 className="text-sm font-bold" style={{ color: '#FFFFFF' }}>Coupon Code</h3>
               </div>
-              <button
-                onClick={onClose}
-                className="w-8 h-8 rounded-full flex items-center justify-center transition-transform hover:scale-110 active:scale-90"
-                style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}
-              >
-                <X className="w-4 h-4" style={{ color: 'rgba(255,255,255,0.5)' }} />
+              <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center"
+                style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
               </button>
             </div>
 
-            <div className="px-4 pb-5">
-              {/* ── Two Code Cards ── */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-                {/* Day Code Card */}
-                <CodeCard
-                  type="day"
-                  code={dayCode}
-                  isActive={dayActive}
-                  isClaimed={dayClaimed}
-                  timeLabel={dayCodeIn}
-                  reward={currentReward}
-                  copiedCode={copiedCode}
-                  claimingCode={claimingCode}
-                  onCopy={handleCopy}
-                  onClaim={handleClaimCode}
-                />
-
-                {/* Night Code Card */}
-                <CodeCard
-                  type="night"
-                  code={nightCode}
-                  isActive={nightActive}
-                  isClaimed={nightClaimed}
-                  timeLabel={nightCodeIn}
-                  reward={currentReward}
-                  copiedCode={copiedCode}
-                  claimingCode={claimingCode}
-                  onCopy={handleCopy}
-                  onClaim={handleClaimCode}
-                />
-              </div>
-
-              {/* ── Enter Code Section ── */}
-              <div
-                className="rounded-xl p-4 mb-4"
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                }}
-              >
-                <p className="text-xs font-bold mb-3" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                  ✏️ Enter Code
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={inputCode}
-                    onChange={(e) => {
-                      setInputCode(e.target.value)
-                      setInputError('')
-                      setInputSuccess('')
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleApplyCode()
-                    }}
-                    placeholder="Paste or type code..."
-                    maxLength={10}
-                    className="flex-1 px-3 py-2.5 rounded-lg text-sm font-mono font-bold uppercase outline-none transition-all"
-                    style={{
-                      backgroundColor: 'rgba(255,255,255,0.06)',
-                      border: '1px solid rgba(255,255,255,0.12)',
-                      color: '#FFFFFF',
-                    }}
-                  />
-                  <button
-                    onClick={handleApplyCode}
-                    className="px-5 py-2.5 rounded-lg font-bold text-xs transition-transform hover:scale-105 active:scale-95 whitespace-nowrap"
-                    style={{
-                      background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
-                      color: '#FFFFFF',
-                      boxShadow: '0 2px 10px rgba(237,194,46,0.3)',
-                    }}
+            {/* Reward animation overlay */}
+            <AnimatePresence>
+              {showReward && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.5 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.5 }}
+                  className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl"
+                  style={{ backgroundColor: 'rgba(0,0,0,0.8)' }}
+                  onClick={() => setShowReward(null)}
+                >
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: [0, 1.2, 1] }}
+                    transition={{ duration: 0.5 }}
+                    className="text-center p-6"
                   >
-                    APPLY
-                  </button>
+                    <span className="text-6xl block mb-3">{showReward.emoji}</span>
+                    <p className="text-lg font-bold" style={{ color: '#EDC22E' }}>{showReward.label}</p>
+                    <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.5)' }}>Tap to continue</p>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Admin Panel Overlay */}
+            <AnimatePresence>
+              {showAdminPanel && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-20 rounded-2xl overflow-hidden"
+                  style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)' }}
+                >
+                  {/* Admin Header */}
+                  <div className="flex items-center justify-between p-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-4 h-4" style={{ color: '#FF7A00' }} />
+                      <h3 className="text-sm font-bold" style={{ color: '#FF7A00' }}>Admin Panel</h3>
+                    </div>
+                    <button onClick={() => setShowAdminPanel(false)} className="w-7 h-7 rounded-full flex items-center justify-center"
+                      style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                      <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                    </button>
+                  </div>
+
+                  {/* Admin Tabs */}
+                  <div className="flex border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                    {[
+                      { key: 'payments' as AdminTab, label: 'Payments', icon: <Clock className="w-3 h-3" /> },
+                      { key: 'coupons' as AdminTab, label: 'Coupons', icon: <Ticket className="w-3 h-3" /> },
+                      { key: 'prices' as AdminTab, label: 'Prices', icon: <Coins className="w-3 h-3" /> },
+                      { key: 'history' as AdminTab, label: 'History', icon: <ChevronRight className="w-3 h-3" /> },
+                    ].map(tab => (
+                      <button
+                        key={tab.key}
+                        onClick={() => setAdminTab(tab.key)}
+                        className="flex-1 flex items-center justify-center gap-1 py-2 transition-all"
+                        style={{
+                          borderBottom: adminTab === tab.key ? '2px solid #FF7A00' : '2px solid transparent',
+                          color: adminTab === tab.key ? '#FF7A00' : 'rgba(255,255,255,0.35)',
+                        }}
+                      >
+                        {tab.icon}
+                        <span className="text-[8px] font-bold">{tab.label}</span>
+                        {tab.key === 'payments' && pendingPurchases.length > 0 && (
+                          <span className="text-[6px] px-1 py-0.5 rounded-full" style={{ backgroundColor: '#F65E3B', color: '#FFFFFF' }}>
+                            {pendingPurchases.length}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="p-3 overflow-y-auto" style={{ maxHeight: 'calc(85vh - 100px)' }}>
+                    {/* ====== PAYMENTS TAB ====== */}
+                    {adminTab === 'payments' && (
+                      <div className="space-y-2">
+                        <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                          Pending Approvals ({pendingPurchases.length})
+                        </p>
+
+                        {pendingPurchases.length === 0 ? (
+                          <div className="text-center py-4">
+                            <span className="text-2xl block mb-1">✅</span>
+                            <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No pending purchases</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5 max-h-[60vh] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                            {pendingPurchases.map(entry => {
+                              const hoursSince = (Date.now() - new Date(entry.date).getTime()) / (1000 * 60 * 60)
+                              const isDelayed = hoursSince > 12
+                              const coinAmount = entry.coinAmount || getCoinAmountFromItem(entry.item)
+                              const bonusAmount = isDelayed ? Math.floor(coinAmount * 0.5) : 0
+
+                              return (
+                                <div key={entry.id} className="p-2.5 rounded-lg"
+                                  style={{
+                                    backgroundColor: isDelayed ? 'rgba(246,94,59,0.08)' : 'rgba(255,255,255,0.03)',
+                                    border: `1px solid ${isDelayed ? 'rgba(246,94,59,0.25)' : 'rgba(255,255,255,0.06)'}`,
+                                  }}>
+                                  {/* Delayed warning */}
+                                  {isDelayed && (
+                                    <div className="flex items-center gap-1 mb-1.5 px-1.5 py-1 rounded"
+                                      style={{ backgroundColor: 'rgba(246,94,59,0.1)' }}>
+                                      <span className="text-[10px]">⚠️</span>
+                                      <span className="text-[7px] font-bold" style={{ color: '#F65E3B' }}>
+                                        12hr+ delay - give 50% bonus! (+{bonusAmount} coins)
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  <div className="flex items-start justify-between mb-1.5">
+                                    <div>
+                                      <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>{entry.item}</p>
+                                      <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                        {entry.amount} • {new Date(entry.date).toLocaleDateString()} {new Date(entry.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                      </p>
+                                    </div>
+                                    <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full"
+                                      style={{ backgroundColor: 'rgba(237,194,46,0.1)', color: '#EDC22E' }}>
+                                      {Math.floor(hoursSince)}h ago
+                                    </span>
+                                  </div>
+
+                                  {/* Details */}
+                                  <div className="space-y-0.5 mb-2">
+                                    {entry.transactionId && (
+                                      <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                        📋 TXN: <span className="font-mono" style={{ color: 'rgba(255,255,255,0.6)' }}>{entry.transactionId}</span>
+                                      </p>
+                                    )}
+                                    {entry.whatsappNumber && (
+                                      <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                        📱 WhatsApp: <span style={{ color: '#00E676' }}>{entry.whatsappNumber}</span>
+                                      </p>
+                                    )}
+                                    {(entry.buyerName || entry.name) && (
+                                      <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                        👤 Name: <span style={{ color: 'rgba(255,255,255,0.6)' }}>{entry.buyerName || entry.name}</span>
+                                      </p>
+                                    )}
+                                    {entry.type === 'inr_ability' ? (
+                                      <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                        ⚡ Ability: <span style={{ color: '#FF6D00' }}>{entry.abilityType}</span>
+                                        {entry.abilityCount && <span style={{ color: 'rgba(255,255,255,0.5)' }}> × {entry.abilityCount}</span>}
+                                      </p>
+                                    ) : (
+                                      <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                        💰 Coins: <span style={{ color: '#EDC22E' }}>{coinAmount}</span>
+                                        {isDelayed && <span style={{ color: '#00E676' }}> + {bonusAmount} bonus</span>}
+                                      </p>
+                                    )}
+                                    {entry.screenshotDataUrl && (
+                                      <div className="mt-1.5">
+                                        <p className="text-[7px] mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>📸 Payment Proof:</p>
+                                        <div className="rounded-lg overflow-hidden mb-1.5 cursor-pointer" style={{ border: '1px solid rgba(255,255,255,0.1)', maxHeight: 150 }}
+                                          onClick={() => setViewingScreenshot(entry.screenshotDataUrl!)}>
+                                          <img src={entry.screenshotDataUrl} alt="Proof" className="w-full h-auto object-contain" style={{ backgroundColor: '#FFFFFF' }} />
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                          <button onClick={() => setViewingScreenshot(entry.screenshotDataUrl!)}
+                                            className="text-[7px] font-bold px-2 py-1 rounded"
+                                            style={{ backgroundColor: 'rgba(0,230,118,0.1)', color: '#00E676' }}>
+                                            <Eye className="w-3 h-3 inline" /> View Full Size
+                                          </button>
+                                          <button onClick={() => { const a = document.createElement('a'); a.href = entry.screenshotDataUrl!; a.download = `payment-${entry.id}.jpg`; a.click(); }}
+                                            className="text-[7px] font-bold px-2 py-1 rounded"
+                                            style={{ backgroundColor: 'rgba(237,194,46,0.1)', color: '#EDC22E' }}>
+                                            ⬇️ Download
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Action buttons */}
+                                  <div className="flex gap-1.5">
+                                    <button
+                                      onClick={() => handleApprovePurchase(entry)}
+                                      className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                                      style={{
+                                        background: 'linear-gradient(135deg, #00E676, #00C853)',
+                                        color: '#FFFFFF',
+                                        boxShadow: '0 2px 8px rgba(0,230,118,0.3)',
+                                      }}
+                                    >
+                                      <ThumbsUp className="w-3 h-3" /> APPROVE
+                                    </button>
+                                    <button
+                                      onClick={() => handleDenyPurchase(entry)}
+                                      className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                                      style={{
+                                        background: 'linear-gradient(135deg, #F65E3B, #D32F2F)',
+                                        color: '#FFFFFF',
+                                        boxShadow: '0 2px 8px rgba(246,94,59,0.3)',
+                                      }}
+                                    >
+                                      <Ban className="w-3 h-3" /> DENY
+                                    </button>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+
+                        {/* All purchase history (non-pending) */}
+                        {allPurchases.filter(p => p.status !== 'Pending').length > 0 && (
+                          <div className="mt-3">
+                            <p className="text-[9px] font-bold mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                              Recent Processed
+                            </p>
+                            <div className="max-h-[60vh] overflow-y-auto space-y-1" style={{ scrollbarWidth: 'thin' }}>
+                              {allPurchases.filter(p => p.status !== 'Pending').slice(0, 15).map(entry => {
+                                const hoursSinceDelivered = entry.status === 'Delivered'
+                                  ? (Date.now() - new Date(entry.date).getTime()) / (1000 * 60 * 60)
+                                  : 999
+                                const canUndoApproval = entry.status === 'Delivered' && hoursSinceDelivered <= 24
+                                return (
+                                <div key={entry.id} className="flex items-center justify-between px-2 py-1.5 rounded-lg"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[8px] font-semibold truncate" style={{ color: 'rgba(255,255,255,0.6)' }}>{entry.item}</p>
+                                    <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                      {new Date(entry.date).toLocaleDateString()} • {entry.amount}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full"
+                                      style={{
+                                        backgroundColor: entry.status === 'Delivered' ? 'rgba(0,230,118,0.1)' : 'rgba(246,94,59,0.1)',
+                                        color: entry.status === 'Delivered' ? '#00E676' : '#F65E3B',
+                                      }}>
+                                      {entry.status}
+                                    </span>
+                                    {canUndoApproval && (
+                                      <button
+                                        onClick={() => handleDisapprovePurchase(entry)}
+                                        className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-95"
+                                        style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)' }}
+                                        title="Undo approval (within 24h)"
+                                      >
+                                        <RotateCcw className="w-2.5 h-2.5" style={{ color: '#F65E3B' }} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ====== COUPONS TAB ====== */}
+                    {adminTab === 'coupons' && (
+                      <div className="space-y-3">
+                        {/* Day/Night Code Management Section */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-1.5">
+                              <Sparkles className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                              <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Day/Night Codes</p>
+                            </div>
+                            <div className="flex rounded-full overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                              <button onClick={() => setDnToggle('day')}
+                                className="px-2.5 py-1 text-[8px] font-bold transition-all"
+                                style={{ backgroundColor: dnToggle === 'day' ? '#FFD700' : 'rgba(255,255,255,0.05)', color: dnToggle === 'day' ? '#000000' : 'rgba(255,255,255,0.4)' }}>
+                                ☀️ Day
+                              </button>
+                              <button onClick={() => setDnToggle('night')}
+                                className="px-2.5 py-1 text-[8px] font-bold transition-all"
+                                style={{ backgroundColor: dnToggle === 'night' ? '#7C4DFF' : 'rgba(255,255,255,0.05)', color: dnToggle === 'night' ? '#FFFFFF' : 'rgba(255,255,255,0.4)' }}>
+                                🌙 Night
+                              </button>
+                            </div>
+                          </div>
+
+                          {dnToggle === 'day' ? (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between px-2 py-1.5 rounded-lg"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(255,215,0,0.2)' }}>
+                                <div>
+                                  <p className="text-[10px] font-bold font-mono" style={{ color: '#FFD700' }}>{dayCode}</p>
+                                  <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Today&apos;s Day Code (auto-generated)</p>
+                                </div>
+                                <span className="text-lg">☀️</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Custom:</p>
+                                <input
+                                  type="text"
+                                  value={dayCodeCustom}
+                                  onChange={(e) => setDayCodeCustom(e.target.value.toUpperCase())}
+                                  placeholder="Override code text..."
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                                />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Reward:</p>
+                                <select
+                                  value={dcRewardType}
+                                  onChange={(e) => setDcRewardType(e.target.value as RewardType)}
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                                >
+                                  <option value="coins">💰 Coins</option>
+                                  <option value="spins">🎫 Spin Tickets</option>
+                                  <option value="magnets">🧲 Magnets</option>
+                                  <option value="bombs">💣 Bombs</option>
+                                  <option value="hammers">🔨 Hammers</option>
+                                  <option value="5x">✨ 5x Multiplier</option>
+                                  <option value="2.5x">🌟 2.5x Multiplier</option>
+                                </select>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Amount:</p>
+                                <input
+                                  type="number"
+                                  value={dcRewardAmount}
+                                  onChange={(e) => setDcRewardAmount(parseInt(e.target.value) || 0)}
+                                  min={1}
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                                />
+                              </div>
+                              <button
+                                onClick={handleSaveDayCodeSettings}
+                                className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                                style={{ background: 'linear-gradient(135deg, #FFD700, #FF7A00)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(255,165,0,0.3)' }}
+                              >
+                                ☀️ SAVE DAY CODE (Real-time)
+                              </button>
+                              <p className="text-[7px] text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                Changes take effect immediately in the game
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between px-2 py-1.5 rounded-lg"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(124,77,255,0.2)' }}>
+                                <div>
+                                  <p className="text-[10px] font-bold font-mono" style={{ color: '#7C4DFF' }}>{nightCode}</p>
+                                  <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Tonight&apos;s Night Code (auto-generated)</p>
+                                </div>
+                                <span className="text-lg">🌙</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Custom:</p>
+                                <input
+                                  type="text"
+                                  value={nightCodeCustom}
+                                  onChange={(e) => setNightCodeCustom(e.target.value.toUpperCase())}
+                                  placeholder="Override code text..."
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                                />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Reward:</p>
+                                <select
+                                  value={ncRewardType}
+                                  onChange={(e) => setNcRewardType(e.target.value as RewardType)}
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                                >
+                                  <option value="coins">💰 Coins</option>
+                                  <option value="spins">🎫 Spin Tickets</option>
+                                  <option value="magnets">🧲 Magnets</option>
+                                  <option value="bombs">💣 Bombs</option>
+                                  <option value="hammers">🔨 Hammers</option>
+                                  <option value="5x">✨ 5x Multiplier</option>
+                                  <option value="2.5x">🌟 2.5x Multiplier</option>
+                                </select>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Amount:</p>
+                                <input
+                                  type="number"
+                                  value={ncRewardAmount}
+                                  onChange={(e) => setNcRewardAmount(parseInt(e.target.value) || 0)}
+                                  min={1}
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                                />
+                              </div>
+                              <button
+                                onClick={handleSaveNightCodeSettings}
+                                className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                                style={{ background: 'linear-gradient(135deg, #7C4DFF, #651FFF)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(124,77,255,0.3)' }}
+                              >
+                                🌙 SAVE NIGHT CODE (Real-time)
+                              </button>
+                              <p className="text-[7px] text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                Changes take effect immediately in the game
+                              </p>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-1.5 mt-2">
+                            <div className="px-2 py-1.5 rounded-lg text-center"
+                              style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                              <p className="text-lg">{nightCodeSettings.emoji}</p>
+                              <p className="text-[8px] font-bold" style={{ color: '#FFFFFF' }}>{nightCodeSettings.label}</p>
+                            </div>
+                            <div className="px-2 py-1.5 rounded-lg text-center"
+                              style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                              <p className="text-lg">{dnToggle === 'day' ? '☀️' : '🌙'}</p>
+                              <p className="text-[8px] font-bold" style={{ color: dnToggle === 'day' ? '#FFD700' : '#7C4DFF' }}>{dnToggle === 'day' ? 'Day Code' : 'Night Code'}</p>
+                              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Changes daily</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Built-in admin codes */}
+                        <div>
+                          <p className="text-[9px] font-bold mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                            Built-in Admin Codes
+                          </p>
+                          <div className="space-y-1">
+                            {Object.entries(BUILT_IN_ADMIN_CODES).map(([code, def]) => {
+                              const usedCount = (() => {
+                                try {
+                                  const used = JSON.parse(localStorage.getItem('usedAdminCoupons') || '{}')
+                                  return used[code] ? 1 : 0
+                                } catch { return 0 }
+                              })()
+                              return (
+                                <div key={code} className="flex items-center justify-between px-2.5 py-2 rounded-lg"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm">{def.emoji}</span>
+                                    <div>
+                                      <p className="text-[9px] font-bold font-mono" style={{ color: '#EDC22E' }}>{code}</p>
+                                      <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                        {def.label} • Uses: {usedCount}/{def.uses}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full"
+                                    style={{
+                                      backgroundColor: usedCount >= def.uses ? 'rgba(246,94,59,0.1)' : 'rgba(0,230,118,0.1)',
+                                      color: usedCount >= def.uses ? '#F65E3B' : '#00E676',
+                                    }}>
+                                    {usedCount >= def.uses ? 'Used' : 'Active'}
+                                  </span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Create new coupon code */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(255,165,0,0.05)', border: '1px solid rgba(255,165,0,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Plus className="w-3 h-3" style={{ color: '#FF7A00' }} />
+                            <p className="text-[9px] font-bold" style={{ color: '#FF7A00' }}>Create New Code</p>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            {/* Code name */}
+                            <input
+                              type="text"
+                              value={newCodeInput}
+                              onChange={(e) => setNewCodeInput(e.target.value.toUpperCase())}
+                              placeholder="Code name (e.g. FREE500)"
+                              className="w-full px-2.5 py-1.5 rounded-lg text-[9px] font-semibold outline-none"
+                              style={{
+                                backgroundColor: 'rgba(255,255,255,0.06)',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                color: '#FFFFFF',
+                              }}
+                            />
+
+                            {/* Reward type */}
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Reward:</p>
+                              <select
+                                value={newCodeRewardType}
+                                onChange={(e) => setNewCodeRewardType(e.target.value as RewardType)}
+                                className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                style={{
+                                  backgroundColor: 'rgba(255,255,255,0.06)',
+                                  border: '1px solid rgba(255,255,255,0.1)',
+                                  color: '#FFFFFF',
+                                }}
+                              >
+                                <option value="coins">💰 Coins</option>
+                                <option value="spins">🎫 Spin Tickets</option>
+                                <option value="magnets">🧲 Magnets</option>
+                                <option value="bombs">💣 Bombs</option>
+                                <option value="hammers">🔨 Hammers</option>
+                                <option value="5x">✨ 5x Multiplier</option>
+                                <option value="2.5x">🌟 2.5x Multiplier</option>
+                              </select>
+                            </div>
+
+                            {/* Reward amount */}
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Amount:</p>
+                              <input
+                                type="number"
+                                value={newCodeRewardAmount}
+                                onChange={(e) => setNewCodeRewardAmount(parseInt(e.target.value) || 0)}
+                                min={1}
+                                className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                style={{
+                                  backgroundColor: 'rgba(255,255,255,0.06)',
+                                  border: '1px solid rgba(255,255,255,0.1)',
+                                  color: '#FFFFFF',
+                                }}
+                              />
+                            </div>
+
+                            {/* Max uses */}
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Max Uses:</p>
+                              <input
+                                type="number"
+                                value={newCodeMaxUses}
+                                onChange={(e) => setNewCodeMaxUses(parseInt(e.target.value) || 1)}
+                                min={1}
+                                className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                style={{
+                                  backgroundColor: 'rgba(255,255,255,0.06)',
+                                  border: '1px solid rgba(255,255,255,0.1)',
+                                  color: '#FFFFFF',
+                                }}
+                              />
+                            </div>
+
+                            {/* Day/Night code toggles */}
+                            <div className="flex items-center gap-3">
+                              <label className="flex items-center gap-1 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={newCodeIsDay}
+                                  onChange={(e) => setNewCodeIsDay(e.target.checked)}
+                                  className="w-3 h-3 accent-yellow-500"
+                                />
+                                <span className="text-[7px] font-semibold" style={{ color: '#FFD700' }}>Day Code</span>
+                              </label>
+                              <label className="flex items-center gap-1 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={newCodeIsNight}
+                                  onChange={(e) => setNewCodeIsNight(e.target.checked)}
+                                  className="w-3 h-3 accent-green-500"
+                                />
+                                <span className="text-[7px] font-semibold" style={{ color: '#00E676' }}>Night Code</span>
+                              </label>
+                            </div>
+
+                            <button
+                              onClick={handleCreateCoupon}
+                              disabled={!newCodeInput.trim()}
+                              className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                              style={{
+                                background: newCodeInput.trim() ? 'linear-gradient(135deg, #FF7A00, #EDC22E)' : 'rgba(255,255,255,0.06)',
+                                color: newCodeInput.trim() ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
+                                boxShadow: newCodeInput.trim() ? '0 2px 10px rgba(255,165,0,0.3)' : 'none',
+                              }}
+                            >
+                              CREATE CODE
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Custom codes list */}
+                        {customCodes.length > 0 && (
+                          <div>
+                            <p className="text-[9px] font-bold mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                              Custom Codes ({customCodes.length})
+                            </p>
+                            <div className="space-y-1 max-h-48 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                              {customCodes.map(code => (
+                                <div key={code.code} className="flex items-center justify-between px-2.5 py-2 rounded-lg"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm">{code.emoji}</span>
+                                    <div>
+                                      <div className="flex items-center gap-1">
+                                        <p className="text-[9px] font-bold font-mono" style={{ color: '#EDC22E' }}>{code.code}</p>
+                                        {code.isDayCode && (
+                                          <span className="text-[6px] px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,215,0,0.1)', color: '#FFD700' }}>DAY</span>
+                                        )}
+                                        {code.isNightCode && (
+                                          <span className="text-[6px] px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(0,230,118,0.1)', color: '#00E676' }}>NIGHT</span>
+                                        )}
+                                      </div>
+                                      <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                        {code.label} • Uses: {code.currentUses}/{code.maxUses}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => handleDeleteCoupon(code.code)}
+                                    className="w-6 h-6 rounded-lg flex items-center justify-center transition-transform active:scale-95"
+                                    style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)' }}
+                                  >
+                                    <Trash2 className="w-3 h-3" style={{ color: '#F65E3B' }} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ====== PRICES TAB ====== */}
+                    {adminTab === 'prices' && (
+                      <div className="space-y-3">
+                        {/* Coin Package Prices */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(237,194,46,0.05)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                            <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Coin Packages</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            {(customPrices?.coinPackages || DEFAULT_COIN_PACKAGES).map((pkg, idx) => (
+                              <div key={idx} className="flex items-center gap-1.5">
+                                <span className="text-[7px] font-semibold w-14 truncate" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                                  {DEFAULT_COIN_PACKAGES[idx]?.coins?.toLocaleString() || pkg.coins?.toLocaleString()}
+                                </span>
+                                <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Coins:</span>
+                                <input
+                                  type="number"
+                                  value={pkg.coins}
+                                  onChange={(e) => {
+                                    const newCoins = parseInt(e.target.value) || 0
+                                    const currentPackages = customPrices?.coinPackages || DEFAULT_COIN_PACKAGES
+                                    const updated = [...currentPackages]
+                                    updated[idx] = { ...updated[idx], coins: newCoins }
+                                    const newPrices: CustomPriceOverride = {
+                                      coinPackages: updated,
+                                      inrAbilityPackages: customPrices?.inrAbilityPackages || DEFAULT_INR_ABILITY_PACKAGES,
+                                    }
+                                    setCustomPrices(newPrices)
+                                    saveCustomPrices(newPrices)
+                                  }}
+                                  min={1}
+                                  className="w-14 px-1.5 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{
+                                    backgroundColor: 'rgba(255,255,255,0.06)',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    color: '#00E676',
+                                  }}
+                                />
+                                <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>₹</span>
+                                <input
+                                  type="number"
+                                  value={pkg.price}
+                                  onChange={(e) => {
+                                    const newPrice = parseInt(e.target.value) || 0
+                                    const currentPackages = customPrices?.coinPackages || DEFAULT_COIN_PACKAGES
+                                    const updated = [...currentPackages]
+                                    updated[idx] = { ...updated[idx], price: newPrice }
+                                    const newPrices: CustomPriceOverride = {
+                                      coinPackages: updated,
+                                      inrAbilityPackages: customPrices?.inrAbilityPackages || DEFAULT_INR_ABILITY_PACKAGES,
+                                    }
+                                    setCustomPrices(newPrices)
+                                    saveCustomPrices(newPrices)
+                                  }}
+                                  min={1}
+                                  className="w-14 px-1.5 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{
+                                    backgroundColor: 'rgba(255,255,255,0.06)',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    color: '#EDC22E',
+                                  }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* INR Ability Package Prices */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(255,109,0,0.05)', border: '1px solid rgba(255,109,0,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Zap className="w-3 h-3" style={{ color: '#FF6D00' }} />
+                            <p className="text-[9px] font-bold" style={{ color: '#FF6D00' }}>INR Ability Prices (₹)</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            {(customPrices?.inrAbilityPackages || DEFAULT_INR_ABILITY_PACKAGES).map((pkg, idx) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                <span className="text-[8px] font-semibold w-20 truncate" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                                  {pkg.type} ×{pkg.uses}
+                                </span>
+                                <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>₹</span>
+                                <input
+                                  type="number"
+                                  value={pkg.price}
+                                  onChange={(e) => {
+                                    const newPrice = parseInt(e.target.value) || 0
+                                    const currentPackages = customPrices?.inrAbilityPackages || DEFAULT_INR_ABILITY_PACKAGES
+                                    const updated = [...currentPackages]
+                                    updated[idx] = { ...updated[idx], price: newPrice }
+                                    const newPrices: CustomPriceOverride = {
+                                      coinPackages: customPrices?.coinPackages || DEFAULT_COIN_PACKAGES,
+                                      inrAbilityPackages: updated,
+                                    }
+                                    setCustomPrices(newPrices)
+                                    saveCustomPrices(newPrices)
+                                  }}
+                                  min={1}
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{
+                                    backgroundColor: 'rgba(255,255,255,0.06)',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    color: '#FF6D00',
+                                  }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Reset to defaults */}
+                        <button
+                          onClick={() => {
+                            const defaults: CustomPriceOverride = {
+                              coinPackages: DEFAULT_COIN_PACKAGES,
+                              inrAbilityPackages: DEFAULT_INR_ABILITY_PACKAGES,
+                            }
+                            setCustomPrices(defaults)
+                            saveCustomPrices(defaults)
+                          }}
+                          className="w-full py-1.5 rounded-lg text-[9px] font-bold flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                          style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)', color: '#F65E3B' }}
+                        >
+                          <RotateCcw className="w-3 h-3" /> Reset to Default Prices
+                        </button>
+
+                        <p className="text-[7px] text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                          Price changes take effect on next store visit. User payment amount is locked to the displayed price.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* ====== HISTORY TAB ====== */}
+                    {adminTab === 'history' && (
+                      <div className="space-y-2" style={{ maxHeight: 'calc(85vh - 100px)', overflowY: 'auto' }}>
+                        <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                          All Payment History ({allPurchases.length})
+                        </p>
+                        {allPurchases.length === 0 ? (
+                          <div className="text-center py-4">
+                            <span className="text-2xl block mb-1">📋</span>
+                            <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No payment history</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {/* Group by person (buyerName or whatsappNumber) */}
+                            {(() => {
+                              const personMap = new Map<string, PurchaseHistoryEntry[]>()
+                              allPurchases.forEach(entry => {
+                                const key = entry.buyerName || entry.whatsappNumber || 'Unknown'
+                                if (!personMap.has(key)) personMap.set(key, [])
+                                personMap.get(key)!.push(entry)
+                              })
+                              return Array.from(personMap.entries()).map(([personName, entries]) => (
+                                <div key={personName} className="rounded-lg overflow-hidden"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                  <button
+                                    onClick={() => setExpandedHistoryId(expandedHistoryId === personName ? null : personName)}
+                                    className="w-full flex items-center justify-between px-3 py-2.5"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-7 h-7 rounded-full flex items-center justify-center"
+                                        style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '1px solid rgba(237,194,46,0.2)' }}>
+                                        <span className="text-[10px]">👤</span>
+                                      </div>
+                                      <div className="text-left">
+                                        <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>{personName}</p>
+                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                          {entries.length} order{entries.length > 1 ? 's' : ''} • {entries.filter(e => e.status === 'Delivered').length} delivered • {entries.filter(e => e.status === 'Pending').length} pending
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>
+                                        ₹{entries.reduce((sum, e) => {
+                                          const amt = parseInt(e.amount.replace(/[^0-9]/g, '')) || 0
+                                          return sum + amt
+                                        }, 0)}
+                                      </span>
+                                      <ChevronRight className="w-3 h-3 transition-transform" style={{ color: 'rgba(255,255,255,0.3)', transform: expandedHistoryId === personName ? 'rotate(90deg)' : 'rotate(0)' }} />
+                                    </div>
+                                  </button>
+                                  {expandedHistoryId === personName && (
+                                    <div className="px-3 pb-2.5 space-y-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                                      {entries.map(entry => {
+                                        const coinAmount = entry.coinAmount || getCoinAmountFromItem(entry.item)
+                                        return (
+                                          <div key={entry.id} className="p-2 rounded-lg"
+                                            style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                                            <div className="flex items-center justify-between mb-1">
+                                              <p className="text-[9px] font-bold" style={{ color: '#FFFFFF' }}>{entry.item}</p>
+                                              <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full"
+                                                style={{
+                                                  backgroundColor: entry.status === 'Delivered' ? 'rgba(0,230,118,0.1)' : entry.status === 'Denied' ? 'rgba(246,94,59,0.1)' : 'rgba(237,194,46,0.1)',
+                                                  color: entry.status === 'Delivered' ? '#00E676' : entry.status === 'Denied' ? '#F65E3B' : '#EDC22E',
+                                                }}>
+                                                {entry.status}
+                                              </span>
+                                            </div>
+                                            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                              📅 {new Date(entry.date).toLocaleString()} • {entry.amount}
+                                            </p>
+                                            {entry.whatsappNumber && (
+                                              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                                📱 {entry.whatsappNumber}
+                                              </p>
+                                            )}
+                                            {entry.type !== 'inr_ability' && (
+                                              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                                💰 {coinAmount} coins
+                                              </p>
+                                            )}
+                                            {entry.screenshotDataUrl && (
+                                              <div className="mt-1 rounded-lg overflow-hidden cursor-pointer" style={{ border: '1px solid rgba(255,255,255,0.1)', maxHeight: 100 }}
+                                                onClick={() => setViewingScreenshot(entry.screenshotDataUrl!)}>
+                                                <img src={entry.screenshotDataUrl} alt="Proof" className="w-full h-auto object-contain" style={{ backgroundColor: '#FFFFFF' }} />
+                                              </div>
+                                            )}
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              ))
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="p-3 space-y-3">
+              {/* Today's codes hint */}
+              <div className="p-2.5 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.12)' }}>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Gift className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                  <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Today&apos;s Codes ({rotationDay})</p>
                 </div>
-                {/* Error / Success messages */}
-                <AnimatePresence mode="wait">
-                  {inputError && (
-                    <motion.p
-                      key="error"
-                      initial={{ opacity: 0, y: -5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      className="text-[10px] mt-2 font-medium"
-                      style={{ color: '#F65E3B' }}
-                    >
-                      ⚠️ {inputError}
-                    </motion.p>
-                  )}
-                  {inputSuccess && (
-                    <motion.p
-                      key="success"
-                      initial={{ opacity: 0, y: -5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      className="text-[10px] mt-2 font-medium"
-                      style={{ color: '#00E676' }}
-                    >
-                      {inputSuccess}
-                    </motion.p>
-                  )}
-                </AnimatePresence>
+                <div className="flex gap-2">
+                  <div className="flex-1 px-2 py-1.5 rounded text-center"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(237,194,46,0.2)' }}>
+                    <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Day Code</p>
+                    <p className="text-[11px] font-extrabold font-mono tracking-wider" style={{ color: '#FFD700', letterSpacing: '1px' }}>{dayCode}</p>
+                  </div>
+                  <div className="flex-1 px-2 py-1.5 rounded text-center"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(237,194,46,0.2)' }}>
+                    <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Night Code</p>
+                    <p className="text-[11px] font-extrabold font-mono tracking-wider" style={{ color: '#00E676', letterSpacing: '1px' }}>{nightCode}</p>
+                  </div>
+                </div>
               </div>
 
-              {/* ── Reward Change Info ── */}
-              <div
-                className="rounded-xl p-3 text-center"
-                style={{
-                  backgroundColor: 'rgba(237,194,46,0.06)',
-                  border: '1px solid rgba(237,194,46,0.12)',
-                }}
-              >
-                <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  🎁 Today&apos;s Reward:{' '}
-                  <span className="font-bold" style={{ color: currentReward.color }}>
-                    {currentReward.label} {currentReward.emoji}
-                  </span>
-                </p>
-                <p className="text-[10px] mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                  ⏳ Reward changes in: <span style={{ color: '#EDC22E', fontWeight: 'bold' }}>{daysUntilChange} day{daysUntilChange !== 1 ? 's' : ''}</span>
+              {/* Input + Claim button */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={codeInput}
+                  onChange={(e) => {
+                    setCodeInput(e.target.value.toUpperCase())
+                    setStatusMessage(null)
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleClaim()}
+                  placeholder="Enter code here..."
+                  className="flex-1 px-4 py-2.5 rounded-full text-sm font-semibold outline-none"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    color: '#FFFFFF',
+                  }}
+                />
+                <button
+                  onClick={handleClaim}
+                  className="px-6 py-2.5 rounded-full text-xs font-bold transition-transform active:scale-95"
+                  style={{
+                    background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
+                    color: '#FFFFFF',
+                    boxShadow: '0 2px 10px rgba(237,194,46,0.3)',
+                  }}
+                >
+                  CLAIM
+                </button>
+              </div>
+
+              {/* Status message */}
+              {statusMessage && (
+                <motion.div
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
+                  style={{
+                    backgroundColor: statusMessage.type === 'success' ? 'rgba(0,230,118,0.08)' :
+                      statusMessage.type === 'error' ? 'rgba(246,94,59,0.08)' : 'rgba(237,194,46,0.08)',
+                    border: `1px solid ${statusMessage.type === 'success' ? 'rgba(0,230,118,0.15)' :
+                      statusMessage.type === 'error' ? 'rgba(246,94,59,0.15)' : 'rgba(237,194,46,0.15)'}`,
+                  }}
+                >
+                  {statusMessage.type === 'success' ? (
+                    <Check className="w-3 h-3" style={{ color: '#00E676' }} />
+                  ) : statusMessage.type === 'error' ? (
+                    <AlertCircle className="w-3 h-3" style={{ color: '#F65E3B' }} />
+                  ) : (
+                    <AlertCircle className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                  )}
+                  <p className="text-[9px] font-semibold" style={{
+                    color: statusMessage.type === 'success' ? '#00E676' :
+                      statusMessage.type === 'error' ? '#F65E3B' : '#EDC22E',
+                  }}>
+                    {statusMessage.text}
+                  </p>
+                </motion.div>
+              )}
+
+              {/* Info */}
+              <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  • One claim per day per code • 7-day rotation of daily codes
+                  <br />• Max {MAX_COINS_PER_COUPON} coins per coupon • Max {MAX_MULTIPLIER_COUNT}x multiplier rewards
+                  <br />• Rewards: 🎫 Spins / 💰 Coins / 🧲 Magnets / 💣 Bombs / ✨ 5x / 🌟 2.5x
                 </p>
               </div>
+
+              {/* Claim History */}
+              {claimHistory.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Claim History</p>
+                    <button
+                      onClick={() => { setClaimHistory([]); saveClaimedCoupons([]) }}
+                      className="text-[8px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-1 transition-transform active:scale-95"
+                      style={{ backgroundColor: 'rgba(246,94,59,0.1)', color: '#F65E3B' }}
+                    >
+                      🗑️ Delete All
+                    </button>
+                  </div>
+                  <div className="max-h-32 overflow-y-auto space-y-1 pr-1" style={{ scrollbarWidth: 'thin' }}>
+                    {claimHistory.slice(0, 20).map((claim, i) => (
+                      <div key={i} className="flex items-center justify-between px-2 py-1.5 rounded-lg"
+                        style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[8px] font-mono" style={{ color: '#EDC22E' }}>{claim.code}</span>
+                          <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{claim.date}</span>
+                        </div>
+                        <span className="text-[8px] font-semibold" style={{ color: '#00E676' }}>{claim.reward}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </motion.div>
         </motion.div>
       )}
+
+      {/* Screenshot Viewer Modal */}
+      <AnimatePresence>
+        {viewingScreenshot && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] flex items-center justify-center px-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.92)' }}
+            onClick={() => setViewingScreenshot(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.8 }}
+              className="relative max-w-2xl w-[95vw] rounded-2xl p-4 text-center"
+              style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold" style={{ color: '#EDC22E' }}>📸 Payment Proof</p>
+                <button onClick={() => setViewingScreenshot(null)}
+                  className="w-7 h-7 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                  <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                </button>
+              </div>
+              <div className="rounded-lg overflow-hidden mb-3" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                <img src={viewingScreenshot} alt="Payment proof" className="w-full h-auto max-h-[70vh] object-contain rounded-lg" style={{ backgroundColor: '#FFFFFF', imageRendering: 'auto' }} />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => {
+                  const a = document.createElement('a')
+                  a.href = viewingScreenshot
+                  a.download = `payment-proof-${Date.now()}.jpg`
+                  a.click()
+                }}
+                  className="flex-1 py-2 rounded-lg text-[10px] font-bold transition-transform active:scale-95"
+                  style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
+                  ⬇️ Download
+                </button>
+                <button onClick={() => setViewingScreenshot(null)}
+                  className="flex-1 py-2 rounded-lg text-[10px] font-semibold"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </AnimatePresence>
-  )
-}
-
-// ── Code Card Sub-Component ───────────────────────────────────────
-interface CodeCardProps {
-  type: 'day' | 'night'
-  code: string
-  isActive: boolean
-  isClaimed: boolean
-  timeLabel: string
-  reward: RewardInfo
-  copiedCode: string | null
-  claimingCode: string | null
-  onCopy: (code: string) => void
-  onClaim: (code: string, type: 'day' | 'night') => void
-}
-
-function CodeCard({
-  type,
-  code,
-  isActive,
-  isClaimed,
-  timeLabel,
-  reward,
-  copiedCode,
-  claimingCode,
-  onCopy,
-  onClaim,
-}: CodeCardProps) {
-  const isDay = type === 'day'
-  const tintBg = isDay ? 'rgba(237,194,46,0.06)' : 'rgba(100,140,255,0.06)'
-  const tintBorder = isDay ? 'rgba(237,194,46,0.15)' : 'rgba(100,140,255,0.15)'
-  const accentColor = isDay ? '#EDC22E' : '#648CFF'
-  const iconBg = isDay ? 'rgba(237,194,46,0.12)' : 'rgba(100,140,255,0.12)'
-  const isCopied = copiedCode === code
-  const isClaiming = claimingCode === code
-
-  const canClaim = isActive && !isClaimed
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 15 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: isDay ? 0.1 : 0.2 }}
-      className="rounded-xl p-3.5"
-      style={{
-        backgroundColor: tintBg,
-        border: `1px solid ${tintBorder}`,
-        boxShadow: isActive && !isClaimed
-          ? `0 0 20px ${accentColor}15`
-          : 'none',
-      }}
-    >
-      {/* Card Header: Icon + Title + Badge */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center"
-            style={{ backgroundColor: iconBg }}
-          >
-            {isDay ? (
-              <Sun className="w-3.5 h-3.5" style={{ color: accentColor }} />
-            ) : (
-              <Moon className="w-3.5 h-3.5" style={{ color: accentColor }} />
-            )}
-          </div>
-          <div>
-            <p className="text-xs font-bold" style={{ color: accentColor }}>
-              {isDay ? 'Day Code' : 'Night Code'}
-            </p>
-            <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
-              {isDay ? 'Valid 12PM–12AM' : 'Valid 12AM–12PM'}
-            </p>
-          </div>
-        </div>
-
-        {/* Status badge */}
-        {isActive ? (
-          isClaimed ? (
-            <span
-              className="text-[8px] font-bold px-2 py-0.5 rounded-full"
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.06)',
-                color: 'rgba(255,255,255,0.4)',
-              }}
-            >
-              ✅ Claimed
-            </span>
-          ) : (
-            <motion.span
-              animate={{ opacity: [1, 0.6, 1] }}
-              transition={{ repeat: Infinity, duration: 1.5 }}
-              className="text-[8px] font-bold px-2 py-0.5 rounded-full"
-              style={{
-                backgroundColor: `${accentColor}20`,
-                color: accentColor,
-              }}
-            >
-              🔥 Active Now!
-            </motion.span>
-          )
-        ) : (
-          <span
-            className="text-[8px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
-            style={{
-              backgroundColor: 'rgba(255,255,255,0.04)',
-              color: 'rgba(255,255,255,0.3)',
-            }}
-          >
-            <Clock className="w-2.5 h-2.5" />
-            {timeLabel}
-          </span>
-        )}
-      </div>
-
-      {/* Code Display Box */}
-      <div
-        className="flex items-center gap-2 rounded-lg p-2.5 mb-3"
-        style={{
-          backgroundColor: 'rgba(0,0,0,0.3)',
-          border: `1px solid ${isActive ? accentColor + '30' : 'rgba(255,255,255,0.06)'}`,
-        }}
-      >
-        <span
-          className="flex-1 text-center font-mono text-sm font-extrabold tracking-[0.2em]"
-          style={{
-            color: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.25)',
-            letterSpacing: '0.25em',
-          }}
-        >
-          {code}
-        </span>
-        <button
-          onClick={() => onCopy(code)}
-          disabled={!isActive}
-          className="w-7 h-7 rounded-md flex items-center justify-center transition-transform hover:scale-110 active:scale-90 disabled:opacity-30"
-          style={{
-            backgroundColor: isCopied ? 'rgba(0,230,118,0.15)' : 'rgba(255,255,255,0.08)',
-          }}
-          title="Copy code"
-        >
-          {isCopied ? (
-            <Check className="w-3 h-3" style={{ color: '#00E676' }} />
-          ) : (
-            <Copy className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
-          )}
-        </button>
-      </div>
-
-      {/* Reward Description */}
-      <p className="text-[10px] mb-3 text-center" style={{ color: 'rgba(255,255,255,0.5)' }}>
-        Reward:{' '}
-        <span className="font-bold" style={{ color: reward.color }}>
-          {reward.label} {reward.emoji}
-        </span>
-      </p>
-
-      {/* Claim Button */}
-      <button
-        onClick={() => onClaim(code, type)}
-        disabled={!canClaim}
-        className="w-full py-2.5 rounded-lg font-bold text-xs transition-all active:scale-95 disabled:active:scale-100"
-        style={{
-          background: canClaim
-            ? isClaiming
-              ? 'linear-gradient(135deg, #00E676, #00C853)'
-              : 'linear-gradient(135deg, #00E676, #00C853)'
-            : 'rgba(255,255,255,0.06)',
-          color: canClaim ? '#FFFFFF' : 'rgba(255,255,255,0.25)',
-          boxShadow: canClaim ? '0 2px 12px rgba(0,230,118,0.3)' : 'none',
-          cursor: canClaim ? 'pointer' : 'not-allowed',
-        }}
-      >
-        {isClaiming ? (
-          <motion.span
-            initial={{ scale: 0.8 }}
-            animate={{ scale: 1 }}
-            className="flex items-center justify-center gap-1"
-          >
-            ✅ Claimed!
-          </motion.span>
-        ) : isClaimed ? (
-          '✅ Claimed'
-        ) : !isActive ? (
-          `⏳ ${isDay ? 'Starts at 12PM' : 'Starts at 12AM'}`
-        ) : (
-          '🎉 CLAIM'
-        )}
-      </button>
-    </motion.div>
   )
 }

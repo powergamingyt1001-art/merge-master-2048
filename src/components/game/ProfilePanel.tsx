@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users, TrendingUp, Percent } from 'lucide-react'
+import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users, TrendingUp, Percent, Gift, Trash2 } from 'lucide-react'
 import { Notification, PLAYER_AVATARS, getLevelInfo, getLevelThreshold, MAX_LEVEL } from '@/hooks/useGame'
+import { AdsterraBanner320x50 } from '@/components/ads/AdsterraAds'
 
 interface ProfilePanelProps {
   isOpen: boolean
@@ -39,6 +40,7 @@ export function ProfilePanel({
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState(playerName)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
+  const [showLevelList, setShowLevelList] = useState(false)
 
   const levelInfo = getLevelInfo(playerLevel)
   const currentLevelThreshold = getLevelThreshold(playerLevel)
@@ -95,7 +97,8 @@ export function ProfilePanel({
                     boxShadow: `0 0 20px ${levelInfo.color}40`,
                   }}>
                   <span className="text-4xl">{playerAvatar}</span>
-                  <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold"
+                  <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold cursor-pointer hover:scale-110 transition-transform"
+                    onClick={(e) => { e.stopPropagation(); setShowLevelList(true) }}
                     style={{ backgroundColor: levelInfo.color, color: '#FFFFFF', border: '2px solid #1a0533' }}>
                     {playerLevel}
                   </div>
@@ -150,32 +153,108 @@ export function ProfilePanel({
                   )}
                 </div>
 
-                {/* Level Title */}
-                <div className="flex items-center gap-1 mt-1 px-2.5 py-0.5 rounded-full"
-                  style={{ backgroundColor: `${levelInfo.color}15`, border: `1px solid ${levelInfo.color}30` }}>
+                {/* Level Title - Tap to view all levels */}
+                <button onClick={() => setShowLevelList(true)}
+                  className="flex items-center gap-1 mt-1 px-3 py-1 rounded-full transition-transform hover:scale-105 active:scale-95"
+                  style={{ backgroundColor: `${levelInfo.color}15`, border: `1.5px solid ${levelInfo.color}40` }}>
                   <span className="text-sm">{levelInfo.icon}</span>
-                  <span className="text-[10px] font-bold" style={{ color: levelInfo.color }}>{levelInfo.title}</span>
-                </div>
+                  <span className="text-[10px] font-bold" style={{ color: levelInfo.color }}>Lv.{playerLevel} {levelInfo.title}</span>
+                  <span className="text-[8px]" style={{ color: `${levelInfo.color}80` }}>▼ Levels</span>
+                </button>
+
+                {/* Level List Overlay */}
+                <AnimatePresence>
+                  {showLevelList && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="w-full mt-2"
+                    >
+                      <div className="rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <div className="flex items-center justify-between px-3 py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                          <div className="flex items-center gap-1.5">
+                            <Star className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
+                            <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>Level Progression</span>
+                          </div>
+                          <button onClick={() => setShowLevelList(false)}
+                            className="w-5 h-5 rounded-full flex items-center justify-center"
+                            style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                            <X className="w-2.5 h-2.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                          </button>
+                        </div>
+                        <div className="max-h-52 overflow-y-auto px-2 py-1.5 space-y-1">
+                          {Array.from({ length: Math.min(playerLevel + 5, MAX_LEVEL) }, (_, i) => i + 1).map((lv) => {
+                            const info = getLevelInfo(lv)
+                            const isAchieved = lv <= playerLevel
+                            const isCurrent = lv === playerLevel
+                            const isBonusLevel = lv % 5 === 0
+                            const bonusCoins = isBonusLevel ? (lv / 5) * 100 : 0
+                            return (
+                              <div key={lv}
+                                className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
+                                style={{
+                                  backgroundColor: isCurrent ? `${info.color}20` : isBonusLevel && isAchieved ? 'rgba(237,194,46,0.08)' : 'rgba(255,255,255,0.02)',
+                                  border: isCurrent ? `1px solid ${info.color}40` : isBonusLevel ? '1px solid rgba(237,194,46,0.15)' : '1px solid rgba(255,255,255,0.03)',
+                                }}>
+                                <span className="text-[11px] flex-shrink-0">{info.icon}</span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[9px] font-bold" style={{ color: isAchieved ? '#FFFFFF' : 'rgba(255,255,255,0.3)' }}>
+                                      Lv.{lv}
+                                    </span>
+                                    <span className="text-[8px] truncate" style={{ color: isAchieved ? info.color : 'rgba(255,255,255,0.2)' }}>
+                                      {info.title}
+                                    </span>
+                                    {isBonusLevel && (
+                                      <Gift className="w-2.5 h-2.5 flex-shrink-0" style={{ color: '#EDC22E' }} />
+                                    )}
+                                  </div>
+                                  {isBonusLevel && (
+                                    <p className="text-[7px]" style={{ color: 'rgba(237,194,46,0.7)' }}>
+                                      Bonus: 5 skills + {bonusCoins}💰{lv >= 15 ? ' + 5x/2.5x' : ''}
+                                    </p>
+                                  )}
+                                </div>
+                                <span className="text-[9px] flex-shrink-0">
+                                  {isCurrent ? '⭐' : isAchieved ? '✓' : '🔒'}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <div className="px-3 py-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                          <p className="text-[7px] text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                            Every 5 levels: 5 random skills + bonus coins{playerLevel >= 10 ? '' : ' • Lv.15+: 5x & 2.5x abilities'}
+                          </p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
-              {/* Level Progress */}
-              <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              {/* Level Progress - Click to open level list */}
+              <button onClick={() => setShowLevelList(true)} className="w-full p-3 rounded-xl mb-3 text-left transition-transform active:scale-[0.98]" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-bold" style={{ color: levelInfo.color }}>Level {playerLevel} Progress</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-extrabold" style={{ color: levelInfo.color }}>Lv.{playerLevel}</span>
+                    <span className="text-[9px] font-bold" style={{ color: levelInfo.color }}>{levelInfo.icon} {levelInfo.title}</span>
+                  </div>
                   <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{levelXP.toLocaleString()} / {nextLevelThreshold.toLocaleString()} XP</span>
                 </div>
-                <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                <div className="h-4 rounded-full overflow-hidden relative" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
                   <div className="h-full rounded-full transition-all" style={{ width: `${progressPct}%`, background: `linear-gradient(90deg, ${levelInfo.color}, ${levelInfo.color}CC)` }} />
+                  <span className="absolute inset-0 flex items-center justify-center text-[8px] font-extrabold" style={{ color: 'rgba(255,255,255,0.95)', textShadow: '0 1px 3px rgba(0,0,0,0.7)' }}>
+                    Lv.{playerLevel} — {Math.round(progressPct)}%
+                  </span>
                 </div>
                 {playerLevel < MAX_LEVEL && (
                   <p className="text-[8px] mt-1 text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                    {xpNeededForNextLevel.toLocaleString()} more XP to Level {playerLevel + 1}
+                    {xpNeededForNextLevel.toLocaleString()} more XP to Level {playerLevel + 1} ▼ Tap to see all levels
                   </p>
                 )}
-                {playerLevel >= MAX_LEVEL && (
-                  <p className="text-[8px] mt-1 text-center" style={{ color: '#F65E3B' }}>MAX LEVEL! 🎮🔥</p>
-                )}
-              </div>
+              </button>
 
               {/* Win Rate Box - Prominent */}
               <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)' }}>
@@ -255,6 +334,11 @@ export function ProfilePanel({
                   🔄 Reset All Data
                 </button>
               )}
+
+              {/* Banner Ad */}
+              <div className="w-full mt-3">
+                <AdsterraBanner320x50 />
+              </div>
             </div>
           </motion.div>
         </motion.div>
@@ -276,13 +360,15 @@ function StatBox({ icon, label, value, color }: { icon: React.ReactNode; label: 
 }
 
 export function NotificationsPanel({
-  isOpen, onClose, notifications, onMarkRead, onMarkAllRead,
+  isOpen, onClose, notifications, onMarkRead, onMarkAllRead, onDeleteNotification, onDeleteReadNotifications,
 }: {
   isOpen: boolean
   onClose: () => void
   notifications: Notification[]
   onMarkRead: (id: string) => void
   onMarkAllRead: () => void
+  onDeleteNotification: (id: string) => void
+  onDeleteReadNotifications: () => void
 }) {
   const unreadCount = notifications.filter(n => !n.read).length
 
@@ -321,6 +407,12 @@ export function NotificationsPanel({
                     Read All
                   </button>
                 )}
+                {notifications.some(n => n.read) && (
+                  <button onClick={onDeleteReadNotifications} className="text-[8px] font-bold px-2 py-1 rounded-lg"
+                    style={{ backgroundColor: 'rgba(246,94,59,0.08)', color: '#F65E3B' }}>
+                    Clear All
+                  </button>
+                )}
                 <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
                   <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
                 </button>
@@ -337,8 +429,8 @@ export function NotificationsPanel({
               ) : (
                 <div className="space-y-1.5">
                   {notifications.map((notif) => (
-                    <button key={notif.id} onClick={() => onMarkRead(notif.id)}
-                      className="w-full text-left flex items-start gap-2.5 p-2.5 rounded-xl transition-colors"
+                    <div key={notif.id} onClick={() => onMarkRead(notif.id)}
+                      className="w-full text-left flex items-start gap-2.5 p-2.5 rounded-xl transition-colors cursor-pointer relative group"
                       style={{
                         backgroundColor: notif.read ? 'rgba(255,255,255,0.02)' : `${getTypeColor(notif.type)}08`,
                         border: notif.read ? '1px solid rgba(255,255,255,0.04)' : `1px solid ${getTypeColor(notif.type)}20`,
@@ -358,7 +450,14 @@ export function NotificationsPanel({
                           {new Date(notif.timestamp).toLocaleString()}
                         </p>
                       </div>
-                    </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onDeleteNotification(notif.id) }}
+                        className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-40 hover:opacity-100 transition-opacity"
+                        style={{ backgroundColor: 'rgba(246,94,59,0.1)' }}
+                      >
+                        <Trash2 className="w-2.5 h-2.5" style={{ color: '#F65E3B' }} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}

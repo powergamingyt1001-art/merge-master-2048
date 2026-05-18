@@ -136,24 +136,58 @@ export function AboutPage({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
 
 export function ContactPage({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   return (
-    <FooterPage isOpen={isOpen} onClose={onClose} title="Contact Us">
-      <Section title="Get in Touch">
-        <Text>Have questions or feedback? We'd love to hear from you!</Text>
+    <FooterPage isOpen={isOpen} onClose={onClose} title="Contact & Support">
+      <Section title="Need Help?">
+        <Text>Having issues or questions? Reach out to us through any of these channels!</Text>
       </Section>
 
-      <Section title="Email">
-        <Link href="mailto:powergamingyt1001@gmail.com">powergamingyt1001@gmail.com</Link>
-      </Section>
+      <div className="space-y-2 mb-3">
+        {/* Email Support */}
+        <div className="p-2.5 rounded-lg flex items-center gap-3" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <span className="text-2xl">📧</span>
+          <div className="flex-1">
+            <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>Email Support</p>
+            <a href="mailto:powergamingyt1001@gmail.com" target="_blank" rel="noopener noreferrer"
+              className="text-[9px] font-semibold" style={{ color: '#00E676' }}>powergamingyt1001@gmail.com</a>
+            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Response within 24-48 hours</p>
+          </div>
+        </div>
 
-      <Section title="Response Time">
-        <Text>We typically respond within 24-48 hours.</Text>
+        {/* Instagram */}
+        <div className="p-2.5 rounded-lg flex items-center gap-3" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <span className="text-2xl">📸</span>
+          <div className="flex-1">
+            <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>Instagram</p>
+            <a href="https://www.instagram.com/strike_bulk_shop?igsh=MXBtajQ3N241d29vaQ==" target="_blank" rel="noopener noreferrer"
+              className="text-[9px] font-semibold" style={{ color: '#E1306C' }}>@strike_bulk_shop</a>
+            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>DM us on Instagram</p>
+          </div>
+        </div>
+
+        {/* Telegram */}
+        <div className="p-2.5 rounded-lg flex items-center gap-3" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <span className="text-2xl">✈️</span>
+          <div className="flex-1">
+            <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>Telegram Support</p>
+            <a href="https://t.me/deepanshu100111112" target="_blank" rel="noopener noreferrer"
+              className="text-[9px] font-semibold" style={{ color: '#0088cc' }}>@deepanshu100111112</a>
+            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Quick support on Telegram</p>
+          </div>
+        </div>
+      </div>
+
+      <Section title="Upload Payment Proof">
+        <Text>You can send your payment screenshots/proof through any of the channels above. We do NOT collect payment proof inside the app.</Text>
+        <Bullet>📱 Send proof on Telegram for fastest verification</Bullet>
+        <Bullet>📸 DM on Instagram with your screenshot</Bullet>
+        <Bullet>📧 Email your proof with order details</Bullet>
       </Section>
 
       <Section title="What can we help with?">
         <Bullet>Bug reports and technical issues</Bullet>
+        <Bullet>Payment problems</Bullet>
         <Bullet>Feature suggestions</Bullet>
         <Bullet>Account or game progress questions</Bullet>
-        <Bullet>Ad-related concerns</Bullet>
         <Bullet>Partnership inquiries</Bullet>
       </Section>
     </FooterPage>
