@@ -64,7 +64,7 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
   const spinCountRef = useRef(0)
   const timeoutRefs = useRef<ReturnType<typeof setTimeout>[]>([])
 
-  const totalSpins = spinMultiplier === 10 ? 11 : spinMultiplier
+  const totalSpins = spinMultiplier === 10 ? 12 : spinMultiplier
   const ticketCost = spinMultiplier
 
   // Clear pending timeouts to prevent stale state after close
@@ -237,7 +237,7 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
                           <span className="text-[7px]" style={{ color: isActive ? 'rgba(237,194,46,0.7)' : 'rgba(255,255,255,0.3)' }}>{count}🎫</span>
                           {isBonus && (
                             <span className="absolute -top-1.5 -right-1 text-[6px] font-bold px-1 rounded-full" style={{ backgroundColor: '#F65E3B', color: '#FFFFFF' }}>
-                              +1
+                              +2
                             </span>
                           )}
                         </button>
@@ -249,7 +249,7 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
                 {/* Multi-spin info */}
                 {!hasResult && !spinning && spinMultiplier > 1 && (
                   <p className="text-center text-[10px] mb-2" style={{ color: '#00E676' }}>
-                    {spinMultiplier === 10 ? '10 tickets = 11 spins! (+1 FREE)' : `${spinMultiplier} spins for ${spinMultiplier} tickets`}
+                    {spinMultiplier === 10 ? '10 tickets = 12 spins! (+2 FREE)' : `${spinMultiplier} spins for ${spinMultiplier} tickets`}
                   </p>
                 )}
 

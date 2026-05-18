@@ -59,12 +59,12 @@ export function WelcomeGift({ isOpen, onClose, onClaim }: WelcomeGiftProps) {
             {/* Rewards grid */}
             <div className="grid grid-cols-3 gap-2 px-5 mb-5">
               {[
-                { icon: <Bomb className="w-5 h-5" />, label: '55 Blast', color: '#FF7A00' },
-                { icon: <Magnet className="w-5 h-5" />, label: '55 Magnet', color: '#00E676' },
-                { icon: <Hammer className="w-5 h-5" />, label: '55 Hammer', color: '#F59563' },
-                { icon: <Undo2 className="w-5 h-5" />, label: '55 Undo', color: '#8f7a66' },
-                { icon: <Sparkles className="w-5 h-5" />, label: '55 Spins', color: '#EDC22E' },
-                { icon: <span className="text-lg">💰</span>, label: '1000 Coins', color: '#EDC22E' },
+                { icon: <Bomb className="w-5 h-5" />, label: '5 Blast', color: '#FF7A00' },
+                { icon: <Magnet className="w-5 h-5" />, label: '5 Magnet', color: '#00E676' },
+                { icon: <Hammer className="w-5 h-5" />, label: '5 Hammer', color: '#F59563' },
+                { icon: <Undo2 className="w-5 h-5" />, label: '5 Undo', color: '#8f7a66' },
+                { icon: <Sparkles className="w-5 h-5" />, label: '5 Spins', color: '#EDC22E' },
+                { icon: <span className="text-lg">💰</span>, label: '500 Coins', color: '#EDC22E' },
               ].map((item, i) => (
                 <motion.div
                   key={i}

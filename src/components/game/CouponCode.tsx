@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Gift, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles } from 'lucide-react'
+import { X, Gift, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap } from 'lucide-react'
 
 interface CouponCodeProps {
   isOpen: boolean
@@ -255,7 +255,45 @@ function getCoinAmountFromItem(item: string): number {
   return 500
 }
 
-type AdminTab = 'payments' | 'coupons' | 'nightcode'
+type AdminTab = 'payments' | 'coupons' | 'nightcode' | 'prices'
+
+// Custom price overrides stored in localStorage
+interface CustomPriceOverride {
+  coinPackages: { coins: number; price: number }[]
+  inrAbilityPackages: { type: string; uses: number; price: number }[]
+}
+
+function loadCustomPrices(): CustomPriceOverride | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const data = localStorage.getItem('adminCustomPrices')
+    return data ? JSON.parse(data) : null
+  } catch { return null }
+}
+
+function saveCustomPrices(prices: CustomPriceOverride) {
+  localStorage.setItem('adminCustomPrices', JSON.stringify(prices))
+}
+
+// Default COIN_PACKAGES (matching Store.tsx)
+const DEFAULT_COIN_PACKAGES = [
+  { coins: 2500, price: 3 },
+  { coins: 4999, price: 5 },
+  { coins: 11999, price: 10 },
+  { coins: 25000, price: 19 },
+  { coins: 62000, price: 49 },
+  { coins: 120000, price: 99 },
+]
+
+// Default INR_ABILITY_PACKAGES (matching Store.tsx)
+const DEFAULT_INR_ABILITY_PACKAGES = [
+  { type: '5x', uses: 1, price: 20 },
+  { type: '5x', uses: 5, price: 80 },
+  { type: '5x', uses: 10, price: 149 },
+  { type: '2.5x', uses: 1, price: 10 },
+  { type: '2.5x', uses: 5, price: 40 },
+  { type: '2.5x', uses: 10, price: 75 },
+]
 
 export function CouponCode({
   isOpen,
@@ -287,6 +325,7 @@ export function CouponCode({
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryEntry[]>(() => loadPurchaseHistory())
   const [customCodes, setCustomCodes] = useState<CustomCouponCode[]>(() => loadCustomCouponCodes())
   const [nightCodeSettings, setNightCodeSettings] = useState<NightCodeSettings>(() => loadNightCodeSettings())
+  const [customPrices, setCustomPrices] = useState<CustomPriceOverride | null>(() => loadCustomPrices())
 
   // New coupon form state
   const [newCodeInput, setNewCodeInput] = useState('')
@@ -308,6 +347,7 @@ export function CouponCode({
       setNightCodeSettings(loadNightCodeSettings())
       setNcRewardType(loadNightCodeSettings().rewardType)
       setNcRewardAmount(loadNightCodeSettings().rewardAmount)
+      setCustomPrices(loadCustomPrices())
     }
   }, [showAdminPanel])
 
@@ -600,6 +640,17 @@ export function CouponCode({
     savePurchaseHistory(updated)
   }, [purchaseHistory])
 
+  // Disapprove (undo) a previously approved purchase - only within 24 hours
+  const handleDisapprovePurchase = useCallback((entry: PurchaseHistoryEntry) => {
+    const hoursSince = (Date.now() - new Date(entry.date).getTime()) / (1000 * 60 * 60)
+    if (hoursSince > 24) return // Can only undo within 24 hours
+    const updated = purchaseHistory.map(p =>
+      p.id === entry.id ? { ...p, status: 'Denied' as const } : p
+    )
+    setPurchaseHistory(updated)
+    savePurchaseHistory(updated)
+  }, [purchaseHistory])
+
   // Create a custom coupon code
   const handleCreateCoupon = useCallback(() => {
     const code = newCodeInput.trim().toUpperCase()
@@ -768,6 +819,7 @@ export function CouponCode({
                       { key: 'payments' as AdminTab, label: 'Payments', icon: <Clock className="w-3 h-3" /> },
                       { key: 'coupons' as AdminTab, label: 'Coupons', icon: <Ticket className="w-3 h-3" /> },
                       { key: 'nightcode' as AdminTab, label: 'Night Code', icon: <Sparkles className="w-3 h-3" /> },
+                      { key: 'prices' as AdminTab, label: 'Prices', icon: <Coins className="w-3 h-3" /> },
                     ].map(tab => (
                       <button
                         key={tab.key}
@@ -913,24 +965,42 @@ export function CouponCode({
                               Recent Processed
                             </p>
                             <div className="max-h-32 overflow-y-auto space-y-1" style={{ scrollbarWidth: 'thin' }}>
-                              {allPurchases.filter(p => p.status !== 'Pending').slice(0, 15).map(entry => (
+                              {allPurchases.filter(p => p.status !== 'Pending').slice(0, 15).map(entry => {
+                                const hoursSinceDelivered = entry.status === 'Delivered'
+                                  ? (Date.now() - new Date(entry.date).getTime()) / (1000 * 60 * 60)
+                                  : 999
+                                const canUndoApproval = entry.status === 'Delivered' && hoursSinceDelivered <= 24
+                                return (
                                 <div key={entry.id} className="flex items-center justify-between px-2 py-1.5 rounded-lg"
                                   style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
-                                  <div>
-                                    <p className="text-[8px] font-semibold" style={{ color: 'rgba(255,255,255,0.6)' }}>{entry.item}</p>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[8px] font-semibold truncate" style={{ color: 'rgba(255,255,255,0.6)' }}>{entry.item}</p>
                                     <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
                                       {new Date(entry.date).toLocaleDateString()} • {entry.amount}
                                     </p>
                                   </div>
-                                  <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full"
-                                    style={{
-                                      backgroundColor: entry.status === 'Delivered' ? 'rgba(0,230,118,0.1)' : 'rgba(246,94,59,0.1)',
-                                      color: entry.status === 'Delivered' ? '#00E676' : '#F65E3B',
-                                    }}>
-                                    {entry.status}
-                                  </span>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full"
+                                      style={{
+                                        backgroundColor: entry.status === 'Delivered' ? 'rgba(0,230,118,0.1)' : 'rgba(246,94,59,0.1)',
+                                        color: entry.status === 'Delivered' ? '#00E676' : '#F65E3B',
+                                      }}>
+                                      {entry.status}
+                                    </span>
+                                    {canUndoApproval && (
+                                      <button
+                                        onClick={() => handleDisapprovePurchase(entry)}
+                                        className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-95"
+                                        style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)' }}
+                                        title="Undo approval (within 24h)"
+                                      >
+                                        <RotateCcw className="w-2.5 h-2.5" style={{ color: '#F65E3B' }} />
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
-                              ))}
+                                )
+                              })}
                             </div>
                           </div>
                         )}
@@ -1240,6 +1310,115 @@ export function CouponCode({
                             </div>
                           </div>
                         </div>
+                      </div>
+                    )}
+
+                    {/* ====== PRICES TAB ====== */}
+                    {adminTab === 'prices' && (
+                      <div className="space-y-3">
+                        {/* Coin Package Prices */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(237,194,46,0.05)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                            <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Coin Package Prices (₹)</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            {(customPrices?.coinPackages || DEFAULT_COIN_PACKAGES).map((pkg, idx) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                <span className="text-[8px] font-semibold w-20 truncate" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                                  {pkg.coins.toLocaleString()} Coins
+                                </span>
+                                <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>₹</span>
+                                <input
+                                  type="number"
+                                  value={pkg.price}
+                                  onChange={(e) => {
+                                    const newPrice = parseInt(e.target.value) || 0
+                                    const currentPackages = customPrices?.coinPackages || DEFAULT_COIN_PACKAGES
+                                    const updated = [...currentPackages]
+                                    updated[idx] = { ...updated[idx], price: newPrice }
+                                    const newPrices: CustomPriceOverride = {
+                                      coinPackages: updated,
+                                      inrAbilityPackages: customPrices?.inrAbilityPackages || DEFAULT_INR_ABILITY_PACKAGES,
+                                    }
+                                    setCustomPrices(newPrices)
+                                    saveCustomPrices(newPrices)
+                                  }}
+                                  min={1}
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{
+                                    backgroundColor: 'rgba(255,255,255,0.06)',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    color: '#EDC22E',
+                                  }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* INR Ability Package Prices */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(255,109,0,0.05)', border: '1px solid rgba(255,109,0,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Zap className="w-3 h-3" style={{ color: '#FF6D00' }} />
+                            <p className="text-[9px] font-bold" style={{ color: '#FF6D00' }}>INR Ability Prices (₹)</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            {(customPrices?.inrAbilityPackages || DEFAULT_INR_ABILITY_PACKAGES).map((pkg, idx) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                <span className="text-[8px] font-semibold w-20 truncate" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                                  {pkg.type} ×{pkg.uses}
+                                </span>
+                                <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>₹</span>
+                                <input
+                                  type="number"
+                                  value={pkg.price}
+                                  onChange={(e) => {
+                                    const newPrice = parseInt(e.target.value) || 0
+                                    const currentPackages = customPrices?.inrAbilityPackages || DEFAULT_INR_ABILITY_PACKAGES
+                                    const updated = [...currentPackages]
+                                    updated[idx] = { ...updated[idx], price: newPrice }
+                                    const newPrices: CustomPriceOverride = {
+                                      coinPackages: customPrices?.coinPackages || DEFAULT_COIN_PACKAGES,
+                                      inrAbilityPackages: updated,
+                                    }
+                                    setCustomPrices(newPrices)
+                                    saveCustomPrices(newPrices)
+                                  }}
+                                  min={1}
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{
+                                    backgroundColor: 'rgba(255,255,255,0.06)',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    color: '#FF6D00',
+                                  }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Reset to defaults */}
+                        <button
+                          onClick={() => {
+                            const defaults: CustomPriceOverride = {
+                              coinPackages: DEFAULT_COIN_PACKAGES,
+                              inrAbilityPackages: DEFAULT_INR_ABILITY_PACKAGES,
+                            }
+                            setCustomPrices(defaults)
+                            saveCustomPrices(defaults)
+                          }}
+                          className="w-full py-1.5 rounded-lg text-[9px] font-bold flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                          style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)', color: '#F65E3B' }}
+                        >
+                          <RotateCcw className="w-3 h-3" /> Reset to Default Prices
+                        </button>
+
+                        <p className="text-[7px] text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                          Price changes take effect on next store visit. User payment amount is locked to the displayed price.
+                        </p>
                       </div>
                     )}
                   </div>

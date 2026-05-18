@@ -38,7 +38,7 @@ interface PurchaseHistoryEntry {
 }
 
 // Coin packages (INR prices) - Updated
-const COIN_PACKAGES = [
+const DEFAULT_COIN_PACKAGES = [
   { coins: 2500, price: 3, label: '2,500 Coins', color: '#EDC22E' },
   { coins: 4999, price: 5, label: '4,999 Coins', color: '#FF7A00' },
   { coins: 11999, price: 10, label: '11,999 Coins', color: '#00E676' },
@@ -46,6 +46,21 @@ const COIN_PACKAGES = [
   { coins: 62000, price: 49, label: '62,000 Coins', color: '#FF69B4' },
   { coins: 120000, price: 99, label: '1,20,000 Coins', color: '#E040FB' },
 ]
+
+// Load coin packages with admin price overrides
+function getCoinPackages(): typeof DEFAULT_COIN_PACKAGES {
+  if (typeof window === 'undefined') return DEFAULT_COIN_PACKAGES
+  try {
+    const data = localStorage.getItem('adminCustomPrices')
+    if (!data) return DEFAULT_COIN_PACKAGES
+    const overrides: { coinPackages: { coins: number; price: number }[] } = JSON.parse(data)
+    if (!overrides.coinPackages) return DEFAULT_COIN_PACKAGES
+    return DEFAULT_COIN_PACKAGES.map((pkg, idx) => {
+      const override = overrides.coinPackages[idx]
+      return override ? { ...pkg, price: override.price } : pkg
+    })
+  } catch { return DEFAULT_COIN_PACKAGES }
+}
 
 // Ability packages (coin prices) - Keep existing
 const ABILITY_PACKAGES = [
@@ -57,7 +72,7 @@ const ABILITY_PACKAGES = [
 ]
 
 // INR Ability packages (5x and 2.5x)
-const INR_ABILITY_PACKAGES = [
+const DEFAULT_INR_ABILITY_PACKAGES = [
   // 5x Ability
   { type: '5x' as const, uses: 1, price: 20, label: '5x × 1', emoji: '✖️', color: '#FF6D00', category: '5x' },
   { type: '5x' as const, uses: 5, price: 80, label: '5x × 5', emoji: '✖️', color: '#FF6D00', category: '5x' },
@@ -68,6 +83,21 @@ const INR_ABILITY_PACKAGES = [
   { type: '2.5x' as const, uses: 10, price: 75, label: '2.5x × 10', emoji: '✨', color: '#7C4DFF', category: '2.5x' },
 ]
 
+// Load INR ability packages with admin price overrides
+function getInrAbilityPackages(): typeof DEFAULT_INR_ABILITY_PACKAGES {
+  if (typeof window === 'undefined') return DEFAULT_INR_ABILITY_PACKAGES
+  try {
+    const data = localStorage.getItem('adminCustomPrices')
+    if (!data) return DEFAULT_INR_ABILITY_PACKAGES
+    const overrides: { inrAbilityPackages: { type: string; uses: number; price: number }[] } = JSON.parse(data)
+    if (!overrides.inrAbilityPackages) return DEFAULT_INR_ABILITY_PACKAGES
+    return DEFAULT_INR_ABILITY_PACKAGES.map((pkg, idx) => {
+      const override = overrides.inrAbilityPackages[idx]
+      return override ? { ...pkg, price: override.price } : pkg
+    })
+  } catch { return DEFAULT_INR_ABILITY_PACKAGES }
+}
+
 // Free ad reward options (basic abilities only)
 const FREE_AD_REWARDS = [
   { type: 'blast', count: 1, label: '1 Bomb', emoji: '💣', weight: 30 },
@@ -77,7 +107,7 @@ const FREE_AD_REWARDS = [
 ]
 
 const UPI_ID = '9897186065@fam'
-const WEEKLY_ABILITY_LIMIT = 15
+const BIWEEKLY_ABILITY_LIMIT = 20
 
 type StoreTab = 'coins' | 'abilities' | 'history'
 
@@ -101,6 +131,13 @@ function getWeekNumber(): number {
   return Math.floor((now.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
 }
 
+// 2-week cycle number for biweekly tracking
+function getBiweeklyCycle(): number {
+  const now = new Date()
+  const start = new Date(2025, 0, 6)
+  return Math.floor((now.getTime() - start.getTime()) / (14 * 24 * 60 * 60 * 1000)) + 1
+}
+
 function getFreeAdRewardCount(): { week: number; count: number } {
   if (typeof window === 'undefined') return { week: getWeekNumber(), count: 0 }
   try {
@@ -121,31 +158,61 @@ function saveFreeAdRewardCount(week: number, count: number) {
   localStorage.setItem('freeAdRewardsWeek', JSON.stringify({ week, count }))
 }
 
-// Weekly INR ability purchase tracking
-interface WeeklyAbilityPurchases {
-  week: number
+// Biweekly INR ability purchase tracking
+interface BiweeklyAbilityPurchases {
+  cycle: number
   '5x': number
   '2.5x': number
 }
 
-function getWeeklyAbilityPurchases(): WeeklyAbilityPurchases {
-  const currentWeek = getWeekNumber()
-  if (typeof window === 'undefined') return { week: currentWeek, '5x': 0, '2.5x': 0 }
+function getBiweeklyAbilityPurchases(): BiweeklyAbilityPurchases {
+  const currentCycle = getBiweeklyCycle()
+  if (typeof window === 'undefined') return { cycle: currentCycle, '5x': 0, '2.5x': 0 }
   try {
-    const data = localStorage.getItem('weeklyAbilityPurchases')
-    if (!data) return { week: currentWeek, '5x': 0, '2.5x': 0 }
+    const data = localStorage.getItem('biweeklyAbilityPurchases')
+    if (!data) return { cycle: currentCycle, '5x': 0, '2.5x': 0 }
     const parsed = JSON.parse(data)
-    if (parsed.week !== currentWeek) {
-      return { week: currentWeek, '5x': 0, '2.5x': 0 }
+    if (parsed.cycle !== currentCycle) {
+      return { cycle: currentCycle, '5x': 0, '2.5x': 0 }
     }
-    return { week: currentWeek, '5x': parsed['5x'] || 0, '2.5x': parsed['2.5x'] || 0 }
+    return { cycle: currentCycle, '5x': parsed['5x'] || 0, '2.5x': parsed['2.5x'] || 0 }
   } catch {
-    return { week: currentWeek, '5x': 0, '2.5x': 0 }
+    return { cycle: currentCycle, '5x': 0, '2.5x': 0 }
   }
 }
 
-function saveWeeklyAbilityPurchases(data: WeeklyAbilityPurchases) {
-  localStorage.setItem('weeklyAbilityPurchases', JSON.stringify(data))
+function saveBiweeklyAbilityPurchases(data: BiweeklyAbilityPurchases) {
+  localStorage.setItem('biweeklyAbilityPurchases', JSON.stringify(data))
+}
+
+// Biweekly coin-ability purchase tracking (hammer, magnet, bomb, undo, spin)
+interface BiweeklyCoinAbilityPurchases {
+  cycle: number
+  hammer: number
+  magnet: number
+  blast: number
+  undo: number
+  spin: number
+}
+
+function getBiweeklyCoinAbilityPurchases(): BiweeklyCoinAbilityPurchases {
+  const currentCycle = getBiweeklyCycle()
+  if (typeof window === 'undefined') return { cycle: currentCycle, hammer: 0, magnet: 0, blast: 0, undo: 0, spin: 0 }
+  try {
+    const data = localStorage.getItem('biweeklyCoinAbilityPurchases')
+    if (!data) return { cycle: currentCycle, hammer: 0, magnet: 0, blast: 0, undo: 0, spin: 0 }
+    const parsed = JSON.parse(data)
+    if (parsed.cycle !== currentCycle) {
+      return { cycle: currentCycle, hammer: 0, magnet: 0, blast: 0, undo: 0, spin: 0 }
+    }
+    return { cycle: currentCycle, hammer: parsed.hammer || 0, magnet: parsed.magnet || 0, blast: parsed.blast || 0, undo: parsed.undo || 0, spin: parsed.spin || 0 }
+  } catch {
+    return { cycle: currentCycle, hammer: 0, magnet: 0, blast: 0, undo: 0, spin: 0 }
+  }
+}
+
+function saveBiweeklyCoinAbilityPurchases(data: BiweeklyCoinAbilityPurchases) {
+  localStorage.setItem('biweeklyCoinAbilityPurchases', JSON.stringify(data))
 }
 
 // Check if a pending purchase is older than 12 hours
@@ -193,11 +260,12 @@ export function Store({
   const [adWatching, setAdWatching] = useState(false)
   const [adCountdown, setAdCountdown] = useState(0)
   const [freeAdInfo, setFreeAdInfo] = useState(() => getFreeAdRewardCount())
-  const [weeklyAbilities, setWeeklyAbilities] = useState(() => getWeeklyAbilityPurchases())
+  const [biweeklyAbilities, setBiweeklyAbilities] = useState(() => getBiweeklyAbilityPurchases())
+  const [biweeklyCoinAbilities, setBiweeklyCoinAbilities] = useState(() => getBiweeklyCoinAbilityPurchases())
   const [upiCopied, setUpiCopied] = useState(false)
 
   // Handle coin package purchase - open payment dialog
-  const handleBuyCoins = useCallback((pkg: typeof COIN_PACKAGES[0]) => {
+  const handleBuyCoins = useCallback((pkg: typeof DEFAULT_COIN_PACKAGES[0]) => {
     setPaymentItem({
       label: pkg.label,
       price: pkg.price,
@@ -210,11 +278,11 @@ export function Store({
   }, [])
 
   // Handle INR ability purchase - open payment dialog
-  const handleBuyInrAbility = useCallback((ability: typeof INR_ABILITY_PACKAGES[0]) => {
-    const weeklyData = getWeeklyAbilityPurchases()
-    const currentCount = weeklyData[ability.category] || 0
-    if (currentCount >= WEEKLY_ABILITY_LIMIT) {
-      onAddNotification('Weekly Limit Reached', 'Weekly limit reached (15/week). Come back next week!', 'system', '⏰')
+  const handleBuyInrAbility = useCallback((ability: typeof DEFAULT_INR_ABILITY_PACKAGES[0]) => {
+    const biweeklyData = getBiweeklyAbilityPurchases()
+    const currentCount = biweeklyData[ability.category] || 0
+    if (currentCount >= BIWEEKLY_ABILITY_LIMIT) {
+      onAddNotification('Purchase Limit Reached', '2-week limit reached (20/cycle). Come back next cycle!', 'system', '⏰')
       return
     }
 
@@ -269,7 +337,7 @@ export function Store({
       id: Date.now().toString(),
       date: new Date().toISOString(),
       item: paymentItem.label,
-      amount: `₹${paymentForm.amountPaid || paymentItem.price}`,
+      amount: `₹${paymentItem.price}`,
       status: 'Pending',
       type: paymentItem.type === 'coins' ? 'coins' : 'inr_ability',
       whatsappNumber: paymentForm.whatsappNumber.trim(),
@@ -284,12 +352,12 @@ export function Store({
     setPurchaseHistory(updated)
     savePurchaseHistory(updated)
 
-    // Update weekly ability purchases if applicable
+    // Update biweekly ability purchases if applicable
     if (paymentItem.type === '5x' || paymentItem.type === '2.5x') {
-      const weeklyData = getWeeklyAbilityPurchases()
-      weeklyData[paymentItem.type] = (weeklyData[paymentItem.type] || 0) + (paymentItem.uses || 1)
-      saveWeeklyAbilityPurchases(weeklyData)
-      setWeeklyAbilities(weeklyData)
+      const biweeklyData = getBiweeklyAbilityPurchases()
+      biweeklyData[paymentItem.type] = (biweeklyData[paymentItem.type] || 0) + (paymentItem.uses || 1)
+      saveBiweeklyAbilityPurchases(biweeklyData)
+      setBiweeklyAbilities(biweeklyData)
     }
 
     setShowPaymentDialog(false)
@@ -309,6 +377,15 @@ export function Store({
   const handleBuyAbility = useCallback((ability: typeof ABILITY_PACKAGES[0]) => {
     if (coins < ability.cost) {
       onAddNotification('Not Enough Coins', `You need ${ability.cost} coins. You have ${coins}.`, 'system', '💰')
+      return
+    }
+
+    // Check biweekly limit for coin-ability purchases (3 purchases per 2 weeks = max 15 items)
+    const coinAbilityData = getBiweeklyCoinAbilityPurchases()
+    const maxCoinAbilityPurchases = 3 // 3 purchases per 2-week cycle
+    const currentPurchases = coinAbilityData[ability.type] || 0
+    if (currentPurchases >= maxCoinAbilityPurchases) {
+      onAddNotification('Purchase Limit', `${ability.label}: 3 purchases per 2 weeks max. Come back next cycle!`, 'system', '⏰')
       return
     }
 
@@ -333,6 +410,12 @@ export function Store({
         onAddSpinTickets(ability.count)
         break
     }
+
+    // Track coin-ability purchase
+    const updatedCoinAbilities = { ...coinAbilityData }
+    updatedCoinAbilities[ability.type] = (updatedCoinAbilities[ability.type] || 0) + 1
+    saveBiweeklyCoinAbilityPurchases(updatedCoinAbilities)
+    setBiweeklyCoinAbilities(updatedCoinAbilities)
 
     // Save to history
     const entry: PurchaseHistoryEntry = {
@@ -428,7 +511,8 @@ export function Store({
   // Refresh data on tab change
   const handleTabChange = useCallback((tab: StoreTab) => {
     setActiveTab(tab)
-    setWeeklyAbilities(getWeeklyAbilityPurchases())
+    setBiweeklyAbilities(getBiweeklyAbilityPurchases())
+    setBiweeklyCoinAbilities(getBiweeklyCoinAbilityPurchases())
     setPurchaseHistory(loadPurchaseHistory())
   }, [])
 
@@ -500,7 +584,7 @@ export function Store({
               {/* ====== COINS TAB ====== */}
               {activeTab === 'coins' && (
                 <div className="space-y-2">
-                  {COIN_PACKAGES.map(pkg => (
+                  {getCoinPackages().map(pkg => (
                     <div key={pkg.coins} className="flex items-center justify-between p-2.5 rounded-lg relative"
                       style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: `1px solid ${pkg.color}20` }}>
                       {pkg.popular && (
@@ -606,11 +690,11 @@ export function Store({
                         <p className="text-[9px] font-bold" style={{ color: '#FF6D00' }}>5x Multiplier</p>
                       </div>
                       <span className="text-[7px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,109,0,0.1)', color: '#FF6D00' }}>
-                        {WEEKLY_ABILITY_LIMIT - (weeklyAbilities['5x'] || 0)} left this week
+                        {BIWEEKLY_ABILITY_LIMIT - (biweeklyAbilities['5x'] || 0)} left (2wk)
                       </span>
                     </div>
-                    {INR_ABILITY_PACKAGES.filter(a => a.category === '5x').map((ability, idx) => {
-                      const remaining = WEEKLY_ABILITY_LIMIT - (weeklyAbilities['5x'] || 0)
+                    {getInrAbilityPackages().filter(a => a.category === '5x').map((ability, idx) => {
+                      const remaining = BIWEEKLY_ABILITY_LIMIT - (biweeklyAbilities['5x'] || 0)
                       const disabled = remaining <= 0
                       return (
                         <div key={`5x-${idx}`} className="flex items-center justify-between p-2 rounded-lg"
@@ -651,11 +735,11 @@ export function Store({
                         <p className="text-[9px] font-bold" style={{ color: '#7C4DFF' }}>2.5x Multiplier</p>
                       </div>
                       <span className="text-[7px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(124,77,255,0.1)', color: '#7C4DFF' }}>
-                        {WEEKLY_ABILITY_LIMIT - (weeklyAbilities['2.5x'] || 0)} left this week
+                        {BIWEEKLY_ABILITY_LIMIT - (biweeklyAbilities['2.5x'] || 0)} left (2wk)
                       </span>
                     </div>
-                    {INR_ABILITY_PACKAGES.filter(a => a.category === '2.5x').map((ability, idx) => {
-                      const remaining = WEEKLY_ABILITY_LIMIT - (weeklyAbilities['2.5x'] || 0)
+                    {getInrAbilityPackages().filter(a => a.category === '2.5x').map((ability, idx) => {
+                      const remaining = BIWEEKLY_ABILITY_LIMIT - (biweeklyAbilities['2.5x'] || 0)
                       const disabled = remaining <= 0
                       return (
                         <div key={`2.5x-${idx}`} className="flex items-center justify-between p-2 rounded-lg"
@@ -703,12 +787,15 @@ export function Store({
                         ability.type === 'magnet' ? magnetCount :
                         ability.type === 'blast' ? blastCount :
                         ability.type === 'spin' ? spinTickets : 0
+                      const maxCoinPurchases = 3
+                      const coinPurchasesLeft = maxCoinPurchases - (biweeklyCoinAbilities[ability.type] || 0)
+                      const isCoinLimited = coinPurchasesLeft <= 0
                       return (
                         <div key={ability.type + ability.count} className="flex items-center justify-between p-2 rounded-lg"
                           style={{
-                            backgroundColor: canAfford ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.01)',
-                            border: `1px solid ${canAfford ? `${ability.color}20` : 'rgba(255,255,255,0.04)'}`,
-                            opacity: canAfford ? 1 : 0.6,
+                            backgroundColor: canAfford && !isCoinLimited ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.01)',
+                            border: `1px solid ${canAfford && !isCoinLimited ? `${ability.color}20` : 'rgba(255,255,255,0.04)'}`,
+                            opacity: canAfford && !isCoinLimited ? 1 : 0.6,
                           }}>
                           <div className="flex items-center gap-2">
                             <span className="text-lg">{ability.emoji}</span>
@@ -717,15 +804,18 @@ export function Store({
                               <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
                                 Have: {currentCount} • Cost: {ability.cost} 💰
                               </p>
+                              <p className="text-[6px]" style={{ color: isCoinLimited ? '#F65E3B' : 'rgba(255,255,255,0.25)' }}>
+                                {isCoinLimited ? 'Limit reached (2wk)' : `${coinPurchasesLeft} buys left (2wk)`}
+                              </p>
                             </div>
                           </div>
                           <button
                             onClick={() => handleBuyAbility(ability)}
-                            disabled={!canAfford}
+                            disabled={!canAfford || isCoinLimited}
                             className="px-3 py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
                             style={{
-                              background: canAfford ? `linear-gradient(135deg, ${ability.color}, ${ability.color}CC)` : 'rgba(255,255,255,0.05)',
-                              color: canAfford ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
+                              background: canAfford && !isCoinLimited ? `linear-gradient(135deg, ${ability.color}, ${ability.color}CC)` : 'rgba(255,255,255,0.05)',
+                              color: canAfford && !isCoinLimited ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
                             }}
                           >
                             {ability.cost} 💰
@@ -911,19 +1001,19 @@ export function Store({
                       </div>
                       <div>
                         <label className="text-[8px] font-semibold block mb-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                          Amount Paid (₹)
+                          Amount (₹)
                         </label>
-                        <input
-                          type="text"
-                          value={paymentForm.amountPaid}
-                          onChange={(e) => setPaymentForm(prev => ({ ...prev, amountPaid: e.target.value }))}
-                          className="w-full px-3 py-1.5 rounded-lg text-[10px] font-semibold outline-none"
+                        <div
+                          className="w-full px-3 py-1.5 rounded-lg text-[10px] font-semibold flex items-center justify-between"
                           style={{
-                            backgroundColor: 'rgba(255,255,255,0.06)',
-                            border: '1px solid rgba(255,255,255,0.1)',
-                            color: '#FFFFFF',
+                            backgroundColor: 'rgba(237,194,46,0.06)',
+                            border: '1px solid rgba(237,194,46,0.15)',
+                            color: '#EDC22E',
                           }}
-                        />
+                        >
+                          <span>₹{paymentItem.price}</span>
+                          <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.35)' }}>🔒 Locked</span>
+                        </div>
                       </div>
                       <div>
                         <label className="text-[8px] font-semibold block mb-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>

@@ -93,7 +93,6 @@ function buildModesLeaderboard(playerBestScore: number, playerName: string, play
 
   // Deduplicate by playerId (keep highest score entry)
   const seen = new Map<string, LeaderboardEntry>()
-  const deduped: LeaderboardEntry[] = []
   for (const entry of entries) {
     const key = entry.playerId || `${entry.name}_${entry.avatar}`
     const existing = seen.get(key)
@@ -101,7 +100,10 @@ function buildModesLeaderboard(playerBestScore: number, playerName: string, play
       seen.set(key, entry)
     }
   }
+  const deduped: LeaderboardEntry[] = []
   for (const entry of seen.values()) {
+    // Filter out zero-value entries (they clutter the leaderboard)
+    if (entry.value === 0) continue
     deduped.push(entry)
   }
 
@@ -126,7 +128,6 @@ function buildCoinsLeaderboard(playerCoins: number, playerName: string, playerAv
 
   // Deduplicate by playerId (keep highest coins entry)
   const seen = new Map<string, LeaderboardEntry>()
-  const deduped: LeaderboardEntry[] = []
   for (const entry of entries) {
     const key = entry.playerId || `${entry.name}_${entry.avatar}`
     const existing = seen.get(key)
@@ -134,7 +135,10 @@ function buildCoinsLeaderboard(playerCoins: number, playerName: string, playerAv
       seen.set(key, entry)
     }
   }
+  const deduped: LeaderboardEntry[] = []
   for (const entry of seen.values()) {
+    // Filter out zero-value entries (they clutter the leaderboard)
+    if (entry.value === 0) continue
     deduped.push(entry)
   }
 

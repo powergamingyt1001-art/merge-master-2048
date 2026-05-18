@@ -77,6 +77,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     tiles, score, bestScore, gameOver, won, keepPlaying,
     canUndo, undoCount, undoTotal,
     lives, maxLives, hammerCount, magnetCount, blastCount, activePowerUp,
+    multiply5Count, multiply2_5Count, timeExtendCount,
     gameMode, botOpponent, botBattleResult,
     battleTimer, battleTimeLimit, consecutiveMerges, comboBonus, comboMultiplier,
     coinEntryFee, coinGameWon,
@@ -85,7 +86,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     handleMove, newGame, continueGame, undo, activatePowerUp, handleTileClick,
     reviveWithAd, restartAfterStuck, tickBattleTimer, tickCountdown, addCoins, addNotification,
     goBackToDashboard, calculateTournamentPoints, addGameToHistory,
-  } = game
+  } = game as typeof game & { multiply5Count: number; multiply2_5Count: number; timeExtendCount: number }
 
   // ============================================================
   // INJECT BLINK CSS ANIMATION GLOBALLY (once)
@@ -741,11 +742,14 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
       </div>
 
       {/* Power-ups row - BELOW the board */}
-      <div className="flex items-center gap-2 py-1.5 flex-shrink-0">
+      <div className="flex items-center gap-1.5 py-1.5 flex-shrink-0 flex-wrap justify-center">
         <PowerUpBtn icon={<Hammer className="w-3.5 h-3.5" />} count={hammerCount} active={activePowerUp === 'hammer'} onClick={() => handlePowerUp('hammer')} color="#F59563" />
         <PowerUpBtn icon={<Magnet className="w-3.5 h-3.5" />} count={magnetCount} active={activePowerUp === 'magnet'} onClick={() => handlePowerUp('magnet')} color="#00E676" />
         <PowerUpBtn icon={<Bomb className="w-3.5 h-3.5" />} count={blastCount} active={false} onClick={() => handlePowerUp('blast')} color="#FF7A00" />
         <PowerUpBtn icon={<Undo2 className="w-3.5 h-3.5" />} count={undoTotal - undoCount} active={false} onClick={undo} color="#8f7a66" disabled={!canUndo || undoCount >= undoTotal} />
+        <PowerUpBtn icon={<Zap className="w-3.5 h-3.5" />} count={multiply5Count} active={false} onClick={() => {}} color="#EDC22E" disabled={multiply5Count <= 0} />
+        <PowerUpBtn icon={<span className="text-[10px]">✨</span>} count={multiply2_5Count} active={false} onClick={() => {}} color="#FF69B4" disabled={multiply2_5Count <= 0} />
+        <PowerUpBtn icon={<span className="text-[10px]">🌀</span>} count={timeExtendCount} active={false} onClick={() => {}} color="#00FFFF" disabled={timeExtendCount <= 0} />
       </div>
 
       {/* Active Power-up indicator */}

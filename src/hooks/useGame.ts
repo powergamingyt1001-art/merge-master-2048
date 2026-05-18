@@ -57,7 +57,7 @@ export interface DailyTask {
   target: number
   progress: number
   reward: number  // coins (0 if ability reward)
-  rewardType: 'coins' | 'bomb' | 'hammer' | 'magnet' | 'spin'
+  rewardType: 'coins' | 'bomb' | 'hammer' | 'magnet' | 'spin' | 'multiply5' | 'multiply2_5' | 'timeExtend'
   rewardCount: number  // how many of the reward type
   claimed: boolean
 }
@@ -146,6 +146,10 @@ export interface GameState {
   // Streak ad bonus (100 coins from watching ad in streak modal)
   streakAdBonusClaimed: boolean
   streakAdBonusDate: string
+  // New abilities: 5x multiplier, 2.5x multiplier, time extend
+  multiply5Count: number
+  multiply2_5Count: number
+  timeExtendCount: number
 }
 
 const BOT_NAMES = [
@@ -584,6 +588,10 @@ const TASK_TEMPLATES: TaskTemplate[] = [
   { idPrefix: 'bomb3', description: 'Merge 3 Bomb ability reward', emoji: '💣', target: 1, reward: 0, rewardType: 'bomb', rewardCount: 3, category: 'ability' },
   { idPrefix: 'hammer2', description: 'Merge 2 Hammer ability reward', emoji: '🔨', target: 1, reward: 0, rewardType: 'hammer', rewardCount: 2, category: 'ability' },
   { idPrefix: 'magnet2', description: 'Merge 2 Magnet ability reward', emoji: '🧲', target: 1, reward: 0, rewardType: 'magnet', rewardCount: 2, category: 'ability' },
+  // Special ability reward tasks (5x, 2.5x, timeExtend)
+  { idPrefix: '5xday7', description: '7th Day Bonus: 5x Ability!', emoji: '⚡', target: 1, reward: 0, rewardType: 'multiply5', rewardCount: 1, category: 'ability' },
+  { idPrefix: '2_5xday6', description: '6th Day Bonus: 2.5x Ability!', emoji: '✨', target: 1, reward: 0, rewardType: 'multiply2_5', rewardCount: 1, category: 'ability' },
+  { idPrefix: 'timeext', description: 'Time Extend ability reward', emoji: '🌀', target: 1, reward: 0, rewardType: 'timeExtend', rewardCount: 1, category: 'ability' },
 ]
 
 // Simple seeded random from date string for daily consistency
@@ -601,7 +609,8 @@ function seededRandom(seed: string): () => number {
 }
 
 // Generate daily tasks for today - 6 tasks with variety
-function generateDailyTasks(): DailyTask[] {
+// Special: On 6th/7th streak day, include 2.5x/5x ability reward
+function generateDailyTasks(streakDay?: number): DailyTask[] {
   const today = getTodayStr()
   const rand = seededRandom(today)
 
@@ -618,8 +627,28 @@ function generateDailyTasks(): DailyTask[] {
   // Pick 1 game task
   selected.push(gamePool[Math.floor(rand() * gamePool.length)])
 
-  // Pick 1 ability reward task
-  selected.push(abilityPool[Math.floor(rand() * abilityPool.length)])
+  // On 7th streak day, always include 5x ability task
+  if (streakDay === 6) {
+    const multiply5Task = TASK_TEMPLATES.find(t => t.idPrefix === '5xday7')
+    if (multiply5Task) {
+      selected.push(multiply5Task)
+    } else {
+      selected.push(abilityPool[Math.floor(rand() * abilityPool.length)])
+    }
+  }
+  // On 6th streak day, always include 2.5x ability task
+  else if (streakDay === 5) {
+    const multiply25Task = TASK_TEMPLATES.find(t => t.idPrefix === '2_5xday6')
+    if (multiply25Task) {
+      selected.push(multiply25Task)
+    } else {
+      selected.push(abilityPool[Math.floor(rand() * abilityPool.length)])
+    }
+  }
+  // Otherwise pick 1 ability reward task randomly
+  else {
+    selected.push(abilityPool[Math.floor(rand() * abilityPool.length)])
+  }
 
   // Pick 3 more from the remaining pool (any category)
   const remaining = TASK_TEMPLATES.filter(t => !selected.includes(t))
@@ -710,9 +739,12 @@ export function useGame() {
       levelXP: 0,
       gameHistory: [],
       weeklyBonusClaimed: false,
-      dailyTasks: generateDailyTasks(),
+      dailyTasks: generateDailyTasks(saved?.streakDay),
       streakAdBonusClaimed: false,
       streakAdBonusDate: today,
+      multiply5Count: 0,
+      multiply2_5Count: 0,
+      timeExtendCount: 0,
     }
 
     if (!saved) {
@@ -821,10 +853,10 @@ export function useGame() {
       // Regenerate daily tasks if it's a new day or tasks are empty/stale
       dailyTasks: (() => {
         const savedTasks = saved.dailyTasks || []
-        if (savedTasks.length === 0) return generateDailyTasks()
+        if (savedTasks.length === 0) return generateDailyTasks(streakDay)
         // Check if tasks are from today
         const hasTodayTasks = savedTasks.some(t => t.id.includes(today))
-        if (!hasTodayTasks) return generateDailyTasks()
+        if (!hasTodayTasks) return generateDailyTasks(streakDay)
         // Migrate old tasks that don't have rewardType/rewardCount
         return savedTasks.map((t: Record<string, unknown>) => ({
           ...t,
@@ -835,6 +867,10 @@ export function useGame() {
       // Streak ad bonus - reset if day changed
       streakAdBonusClaimed: saved.streakAdBonusDate === today ? (saved.streakAdBonusClaimed || false) : false,
       streakAdBonusDate: today,
+      // New abilities
+      multiply5Count: saved.multiply5Count ?? 0,
+      multiply2_5Count: saved.multiply2_5Count ?? 0,
+      timeExtendCount: saved.timeExtendCount ?? 0,
     }
   })
 
@@ -886,9 +922,12 @@ export function useGame() {
       dailyTasks: state.dailyTasks,
       streakAdBonusClaimed: state.streakAdBonusClaimed,
       streakAdBonusDate: state.streakAdBonusDate,
+      multiply5Count: state.multiply5Count,
+      multiply2_5Count: state.multiply2_5Count,
+      timeExtendCount: state.timeExtendCount,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.streakAdBonusClaimed, state.streakAdBonusDate])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.streakAdBonusClaimed, state.streakAdBonusDate, state.multiply5Count, state.multiply2_5Count, state.timeExtendCount])
 
   // ============================================================
   // FIREBASE SYNC - Sync player data to Firebase RTDB
@@ -998,6 +1037,20 @@ export function useGame() {
     setState(prev => ({
       ...prev,
       notifications: prev.notifications.map(n => ({ ...n, read: true })),
+    }))
+  }, [])
+
+  const deleteNotification = useCallback((id: string) => {
+    setState(prev => ({
+      ...prev,
+      notifications: prev.notifications.filter(n => n.id !== id),
+    }))
+  }, [])
+
+  const deleteReadNotifications = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      notifications: prev.notifications.filter(n => !n.read),
     }))
   }, [])
 
@@ -1572,12 +1625,12 @@ export function useGame() {
       return {
         ...prev,
         welcomeClaimed: true,
-        hammerCount: prev.hammerCount + 55,
-        magnetCount: prev.magnetCount + 55,
-        blastCount: prev.blastCount + 55,
-        undoTotal: prev.undoTotal + 55,
-        spinTickets: prev.spinTickets + 55,
-        coins: prev.coins + 1000, // Welcome bonus coins for new users
+        hammerCount: prev.hammerCount + 5,
+        magnetCount: prev.magnetCount + 5,
+        blastCount: prev.blastCount + 5,
+        undoTotal: prev.undoTotal + 5,
+        spinTickets: prev.spinTickets + 10, // 5 base + 5 extra for new abilities (5x, 2.5x, timeExtend)
+        coins: prev.coins + 500, // Welcome bonus coins for new users
       }
     })
   }, [])
@@ -1800,6 +1853,15 @@ export function useGame() {
         case 'spin':
           extraState = { spinTickets: prev.spinTickets + task.rewardCount }
           break
+        case 'multiply5':
+          extraState = { multiply5Count: prev.multiply5Count + task.rewardCount }
+          break
+        case 'multiply2_5':
+          extraState = { multiply2_5Count: prev.multiply2_5Count + task.rewardCount }
+          break
+        case 'timeExtend':
+          extraState = { timeExtendCount: prev.timeExtendCount + task.rewardCount }
+          break
         case 'coins':
         default:
           extraState = { coins: prev.coins + task.reward }
@@ -1882,9 +1944,12 @@ export function useGame() {
       levelXP: 0,
       gameHistory: [],
       weeklyBonusClaimed: false,
-      dailyTasks: generateDailyTasks(),
+      dailyTasks: generateDailyTasks(0),
       streakAdBonusClaimed: false,
       streakAdBonusDate: getTodayStr(),
+      multiply5Count: 0,
+      multiply2_5Count: 0,
+      timeExtendCount: 0,
     })
   }, [])
 
@@ -1933,6 +1998,8 @@ export function useGame() {
     addNotification,
     markNotificationRead,
     markAllNotificationsRead,
+    deleteNotification,
+    deleteReadNotifications,
     updatePlayerName,
     updatePlayerAvatar,
     addGameToHistory,

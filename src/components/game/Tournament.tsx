@@ -141,7 +141,8 @@ export function Tournament({
       seen.set(key, entry)
     }
   }
-  const players: TournamentPlayer[] = [...seen.values()]
+  // Filter out zero-score entries (they clutter the leaderboard)
+  const players: TournamentPlayer[] = [...seen.values()].filter(entry => entry.score > 0)
 
   players.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', score: tournamentPoints, isPlayer: true, playerId })
   players.sort((a, b) => b.score - a.score)

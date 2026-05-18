@@ -215,3 +215,113 @@ Stage Summary:
 - 12-hour delay compensation with "⏰ Eligible for 50% bonus!" indicator working
 - Admin panel correctly handles inr_ability type purchases (no wrong coin grants)
 - No WhatsApp redirect — BUY button opens payment dialog directly
+
+---
+Task ID: 1-2-3
+Agent: General Purpose Agent
+Task: Fix Leaderboard, Spin Wheel, Welcome Bonus
+
+Work Log:
+- Leaderboard.tsx: Added zero-value filtering in buildModesLeaderboard() — after dedup, entries with value === 0 are skipped (except current player who is always included)
+- Leaderboard.tsx: Added zero-value filtering in buildCoinsLeaderboard() — same pattern, zero-coin entries are filtered out after dedup
+- Tournament.tsx: Added zero-score filtering after dedup — `[...seen.values()].filter(entry => entry.score > 0)` removes zero-point players from tournament rankings
+- SpinWheel.tsx: Changed 10x bonus from +1 to +2 — `totalSpins = spinMultiplier === 10 ? 12 : spinMultiplier` (was 11)
+- SpinWheel.tsx: Changed 10x button badge from "+1" to "+2"
+- SpinWheel.tsx: Changed info text from '10 tickets = 11 spins! (+1 FREE)' to '10 tickets = 12 spins! (+2 FREE)'
+- WelcomeGift.tsx: Changed all reward labels from '55 Blast/Magnet/Hammer/Undo/Spins' to '5 Blast/Magnet/Hammer/Undo/Spins'
+- WelcomeGift.tsx: Changed '1000 Coins' to '500 Coins'
+- useGame.ts claimWelcome(): Changed +55 to +5 for all abilities (hammer, magnet, blast, undo), changed spinTickets from +55 to +10 (5 base + 5 extra for new abilities 5x/2.5x/timeExtend), changed coins from +1000 to +500
+- TypeScript check: No new errors introduced (all pre-existing errors remain unchanged)
+
+Stage Summary:
+- Leaderboard no longer shows zero-score/coins players in Modes Score and Coins Rank tabs
+- Tournament no longer shows zero-point players in rankings
+- 10x spin bonus now gives 12 total spins (2 extra free) instead of 11 (1 extra free)
+- Welcome bonus reverted from 55 abilities + 1000 coins to 5 abilities + 500 coins
+- Extra 5 spin tickets included in welcome bonus to compensate for new abilities (5x, 2.5x, timeExtend)
+
+---
+Task ID: 4-5-11
+Agent: Task 4-5-11 Agent
+Task: Level List in Profile + Ability Counters Grid + Coin Display Fix
+
+Work Log:
+- useGame.ts: Added `multiply5Count: number`, `multiply2_5Count: number`, `timeExtendCount: number` to GameState interface
+- useGame.ts: Initialized new ability counts to 0 in defaults, saved state, and resetAllData
+- useGame.ts: Added new fields to localStorage save data and dependency array
+- ProfilePanel.tsx: Added `showLevelList` state to toggle level list overlay
+- ProfilePanel.tsx: Made level badge (number circle) clickable — onClick opens level list
+- ProfilePanel.tsx: Made level title pill clickable with ▼ indicator — onClick opens level list
+- ProfilePanel.tsx: Added scrollable level list overlay showing levels 1 to playerLevel+5
+- ProfilePanel.tsx: Each level row shows: icon, level number, title, and ✓/🔒/⭐ status indicator
+- ProfilePanel.tsx: Every 5th level (5, 10, 15, 20...) shows Gift icon and bonus text: "Bonus: 5 skills + N💰"
+- ProfilePanel.tsx: Level 15+ bonus text includes "+ 5x/2.5x" for premium abilities
+- ProfilePanel.tsx: Current level highlighted with colored border and ⭐ indicator
+- ProfilePanel.tsx: Added Star and Gift icon imports from lucide-react
+- PlayDashboard.tsx: Added `multiply5Count`, `multiply2_5Count`, `timeExtendCount` props to interface and destructuring
+- PlayDashboard.tsx: Replaced inline inventory bar with 2-row × 4-column grid of ability items
+- PlayDashboard.tsx: Row 1: ⚡5x, 🌀Time, ✨2.5x, 🎟️Spin — Row 2: 🧲Mag, 🔨Ham, 💣Bomb, ↩️Undo
+- PlayDashboard.tsx: Code button centered below the grid
+- PlayDashboard.tsx: Redesigned InventoryItem component: vertical layout with emoji, label, count; grayed out when count=0
+- PlayDashboard.tsx: Fixed coin display overflow — added min-width, truncate class, and abbreviated format for large numbers (1.2K, 1.5M)
+- page.tsx: Added multiply5Count, multiply2_5Count, timeExtendCount prop pass-through to PlayDashboard
+- GameBoard.tsx: Added multiply5Count, multiply2_5Count, timeExtendCount from game context
+- GameBoard.tsx: Added 3 new power-up buttons (⚡5x, ✨2.5x, 🌀Time) to power-ups row with disabled state when count=0
+- Build verified: Production build succeeds with no errors
+
+Stage Summary:
+- Level list modal in Profile panel: clickable level badge/title opens scrollable level progression view
+- Levels 1 to playerLevel+5 shown; current level highlighted; every 5th level shows bonus reward info
+- Ability counters grid: 2×4 grid replacing old inline inventory bar, all 8 abilities always visible
+- New abilities (5x, 2.5x, timeExtend) added to GameState with localStorage persistence
+- Coin display no longer overflows: abbreviated format for large numbers + min-width
+- GameBoard shows all 8 ability power-up buttons below the board
+
+---
+Task ID: 6
+Agent: Task 6 Agent
+Task: Payment lock, weekly limits, admin, notif delete
+
+Work Log:
+- Store.tsx: Changed amountPaid input from editable text field to read-only locked display showing ₹{price} with 🔒 Locked badge
+- Store.tsx: Payment amount in submit handler now always uses paymentItem.price (never user-editable)
+- Store.tsx: Renamed COIN_PACKAGES → DEFAULT_COIN_PACKAGES, added getCoinPackages() that reads admin price overrides from localStorage
+- Store.tsx: Renamed INR_ABILITY_PACKAGES → DEFAULT_INR_ABILITY_PACKAGES, added getInrAbilityPackages() that reads admin price overrides from localStorage
+- Store.tsx: Changed WEEKLY_ABILITY_LIMIT (15) → BIWEEKLY_ABILITY_LIMIT (20) with 2-week cycle tracking
+- Store.tsx: Added getBiweeklyCycle() function tracking 14-day periods
+- Store.tsx: Replaced WeeklyAbilityPurchases with BiweeklyAbilityPurchases (cycle-based instead of week-based)
+- Store.tsx: Added BiweeklyCoinAbilityPurchases tracking for hammer/magnet/blast/undo/spin coin purchases (3 buys per 2-week cycle)
+- Store.tsx: Coin-ability purchase UI now shows remaining buys (2wk) and disables when limit reached
+- Store.tsx: INR ability sections show "X left (2wk)" instead of "X left this week"
+- CouponCode.tsx: Added AdminTab 'prices' with Prices tab in admin panel
+- CouponCode.tsx: Added CustomPriceOverride interface and loadCustomPrices/saveCustomPrices functions
+- CouponCode.tsx: Added DEFAULT_COIN_PACKAGES and DEFAULT_INR_ABILITY_PACKAGES constants for admin reference
+- CouponCode.tsx: Prices tab shows editable price inputs for all 6 coin packages and 6 INR ability packages
+- CouponCode.tsx: Added "Reset to Default Prices" button
+- CouponCode.tsx: Added handleDisapprovePurchase() for undoing approvals within 24 hours
+- CouponCode.tsx: Recent Processed entries now show Undo (RotateCcw) button for Delivered items within 24h
+- CouponCode.tsx: Added Coins, RotateCcw, Zap icon imports
+- ProfilePanel.tsx: Added onDeleteNotification and onDeleteReadNotifications props to NotificationsPanel
+- ProfilePanel.tsx: Changed notification rows from <button> to <div> with trash icon per row
+- ProfilePanel.tsx: Added "Clear All" button that removes all read notifications
+- ProfilePanel.tsx: Added Trash2 icon import
+- PlayDashboard.tsx: Added onDeleteNotification and onDeleteReadNotifications props to interface
+- PlayDashboard.tsx: Passed new notification delete handlers to NotificationsPanel component
+- page.tsx: Passed deleteNotification and deleteReadNotifications from game hook to PlayDashboard
+- useGame.ts: Added deleteNotification() callback to remove single notification by id
+- useGame.ts: Added deleteReadNotifications() callback to remove all read notifications
+- useGame.ts: Extended DailyTask rewardType to include 'multiply5' | 'multiply2_5' | 'timeExtend'
+- useGame.ts: Added 3 new TASK_TEMPLATES: 5xday7 (⚡ 5x), 2_5xday6 (✨ 2.5x), timeext (🌀 timeExtend)
+- useGame.ts: Updated generateDailyTasks() to accept streakDay parameter for streak-based special tasks
+- useGame.ts: On streak day 6 (7th day) → 5x ability task; on streak day 5 (6th day) → 2.5x ability task
+- useGame.ts: Updated claimDailyTask() to handle multiply5, multiply2_5, timeExtend reward types
+- useGame.ts: All generateDailyTasks() calls now pass streakDay where available
+- Build verified: Production build succeeds with no errors
+
+Stage Summary:
+- Payment price is locked (readonly) — users cannot edit amountPaid, only admin can change prices
+- Admin Prices tab: editable coin package and INR ability prices stored in localStorage
+- Weekly limit changed to biweekly (2-week cycle): 20 for INR abilities, 3 purchases/2wk for coin abilities
+- Notification delete: trash icon per notification + Clear All button for read notifications
+- Admin disapprove: Undo button on Delivered purchases within 24 hours, changes status back to Denied
+- Daily tasks: new multiply5, multiply2_5, timeExtend reward types with streak-day-based special tasks

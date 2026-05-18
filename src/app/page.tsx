@@ -182,6 +182,9 @@ export default function Home() {
                 magnetCount={game.magnetCount}
                 blastCount={game.blastCount}
                 undoTotal={game.undoTotal}
+                multiply5Count={game.multiply5Count}
+                multiply2_5Count={game.multiply2_5Count}
+                timeExtendCount={game.timeExtendCount}
                 levelXP={game.levelXP}
                 modBestScore={game.modBestScore}
                 gamePoints={game.gamePoints}
@@ -224,6 +227,8 @@ export default function Home() {
                 onAddNotification={game.addNotification}
                 onMarkNotificationRead={game.markNotificationRead}
                 onMarkAllNotificationsRead={game.markAllNotificationsRead}
+                onDeleteNotification={game.deleteNotification}
+                onDeleteReadNotifications={game.deleteReadNotifications}
                 onUpdatePlayerName={game.updatePlayerName}
                 onUpdatePlayerAvatar={game.updatePlayerAvatar}
                 dailyTasks={game.dailyTasks}

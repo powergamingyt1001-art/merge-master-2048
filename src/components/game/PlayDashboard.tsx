@@ -33,6 +33,9 @@ interface PlayDashboardProps {
   magnetCount: number
   blastCount: number
   undoTotal: number
+  multiply5Count: number
+  multiply2_5Count: number
+  timeExtendCount: number
   modBestScore: number
   gamePoints: number
   bestScore: number
@@ -74,6 +77,8 @@ interface PlayDashboardProps {
   onAddNotification: (title: string, message: string, type: Notification['type'], emoji: string) => void
   onMarkNotificationRead: (id: string) => void
   onMarkAllNotificationsRead: () => void
+  onDeleteNotification: (id: string) => void
+  onDeleteReadNotifications: () => void
   onUpdatePlayerName: (name: string) => void
   onUpdatePlayerAvatar: (avatar: string) => void
   dailyTasks?: DailyTask[]
@@ -97,7 +102,9 @@ const COIN_GAME_MODES = [
 
 export function PlayDashboard({
   coins, spinTickets, streakDay, streakClaimed, welcomeClaimed,
-  hammerCount, magnetCount, blastCount, undoTotal, modBestScore, gamePoints, bestScore,
+  hammerCount, magnetCount, blastCount, undoTotal,
+  multiply5Count, multiply2_5Count, timeExtendCount,
+  modBestScore, gamePoints, bestScore,
   inviteCode, invitedUsers, commissionBalance, commissionClaimed, autoClaimCommission,
   gamesPlayedToday, maxGamesPerDay, notifications,
   playerName, playerAvatar, playerLevel, playerId, firebaseReferrals, firebaseCommissionPending,
@@ -107,7 +114,7 @@ export function PlayDashboard({
   onJoinTournament, onStartTournamentGame,
   onUseSpinTicket, onAddSpinTickets, onClaimWelcome, onClaimStreakDay,
   onAddCoins, onAddPowerUp, onAddUndos, onClaimCommission, onClaimFirebaseCommission, onToggleAutoClaim,
-  onAddNotification, onMarkNotificationRead, onMarkAllNotificationsRead,
+  onAddNotification, onMarkNotificationRead, onMarkAllNotificationsRead, onDeleteNotification, onDeleteReadNotifications,
   onUpdatePlayerName, onUpdatePlayerAvatar,
   dailyTasks, onClaimDailyTask, onCompleteVisitWebsiteTask, onResetAllData,
   weeklyBonusClaimed = false, onClaimWeeklyBonus, onClaimStreakAdBonus, streakAdBonusClaimed = false,
@@ -244,29 +251,34 @@ export function PlayDashboard({
                   </div>
                 )}
               </button>
-              <div className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg"
+              <div className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg min-w-[48px]"
                 style={{ backgroundColor: 'rgba(237,194,46,0.12)', border: '1px solid rgba(237,194,46,0.25)' }}>
-                <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
-                <span className="text-[10px] font-extrabold" style={{ color: '#EDC22E' }}>{coins}</span>
+                <Coins className="w-3 h-3 flex-shrink-0" style={{ color: '#EDC22E' }} />
+                <span className="text-[10px] font-extrabold truncate" style={{ color: '#EDC22E' }}>{coins >= 1000000 ? `${(coins / 1000000).toFixed(1)}M` : coins >= 10000 ? `${(coins / 1000).toFixed(1)}K` : coins}</span>
               </div>
             </div>
           </div>
 
-          {/* Inventory bar */}
-          <div className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg"
+          {/* Ability Grid */}
+          <div className="w-full px-2 py-1.5 rounded-lg"
             style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <InventoryItem emoji="🔨" label="H" count={hammerCount} color="#F59563" />
-              <InventoryItem emoji="🧲" label="M" count={magnetCount} color="#00E676" />
-              <InventoryItem emoji="💣" label="B" count={blastCount} color="#FF7A00" />
-              <InventoryItem emoji="↩️" label="U" count={undoTotal} color="#8f7a66" />
-              <InventoryItem emoji="🎫" label="S" count={spinTickets} color="#EDC22E" />
+            <div className="grid grid-cols-4 gap-1">
+              <InventoryItem emoji="⚡" label="5x" count={multiply5Count} color="#EDC22E" />
+              <InventoryItem emoji="🌀" label="Time" count={timeExtendCount} color="#00FFFF" />
+              <InventoryItem emoji="✨" label="2.5x" count={multiply2_5Count} color="#FF69B4" />
+              <InventoryItem emoji="🎟️" label="Spin" count={spinTickets} color="#EDC22E" />
+              <InventoryItem emoji="🧲" label="Mag" count={magnetCount} color="#00E676" />
+              <InventoryItem emoji="🔨" label="Ham" count={hammerCount} color="#F59563" />
+              <InventoryItem emoji="💣" label="Bomb" count={blastCount} color="#FF7A00" />
+              <InventoryItem emoji="↩️" label="Undo" count={undoTotal} color="#8f7a66" />
             </div>
-            <button onClick={() => setShowCouponCode(true)} className="flex items-center gap-1 px-2.5 py-1 rounded-lg transition-transform active:scale-95 flex-shrink-0"
-              style={{ backgroundColor: 'rgba(237,194,46,0.12)', border: '1px solid rgba(237,194,46,0.25)' }}>
-              <Ticket className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
-              <span className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Code</span>
-            </button>
+            <div className="flex justify-center mt-1">
+              <button onClick={() => setShowCouponCode(true)} className="flex items-center gap-1 px-3 py-1 rounded-lg transition-transform active:scale-95"
+                style={{ backgroundColor: 'rgba(237,194,46,0.12)', border: '1px solid rgba(237,194,46,0.25)' }}>
+                <Ticket className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
+                <span className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Code</span>
+              </button>
+            </div>
           </div>
 
           {/* Central PLAY Button */}
@@ -562,7 +574,8 @@ export function PlayDashboard({
         totalBattlesPlayed={totalBattlesPlayed} totalBattlesWon={totalBattlesWon}
         onResetAllData={onResetAllData} />
       <NotificationsPanel isOpen={showNotifications} onClose={() => setShowNotifications(false)}
-        notifications={notifications} onMarkRead={onMarkNotificationRead} onMarkAllRead={onMarkAllNotificationsRead} />
+        notifications={notifications} onMarkRead={onMarkNotificationRead} onMarkAllRead={onMarkAllNotificationsRead}
+        onDeleteNotification={onDeleteNotification} onDeleteReadNotifications={onDeleteReadNotifications} />
       <PrivacyPolicy isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
       <AboutPage isOpen={showAbout} onClose={() => setShowAbout(false)} />
       <ContactPage isOpen={showContact} onClose={() => setShowContact(false)} />
@@ -599,10 +612,13 @@ export function PlayDashboard({
 }
 
 function InventoryItem({ emoji, label, count, color }: { emoji: string; label: string; count: number; color: string }) {
+  const isZero = count <= 0
   return (
-    <div className="flex items-center gap-0.5">
-      <span className="text-[11px]">{emoji}</span>
-      <span className="text-[8px] font-bold" style={{ color: count > 0 ? color : 'rgba(255,255,255,0.2)' }}>{label}:{count}</span>
+    <div className="flex flex-col items-center gap-0.5 py-1 px-1 rounded-lg"
+      style={{ backgroundColor: isZero ? 'rgba(255,255,255,0.01)' : `${color}08`, border: `1px solid ${isZero ? 'rgba(255,255,255,0.03)' : `${color}15`}` }}>
+      <span className="text-[12px]" style={{ opacity: isZero ? 0.3 : 1 }}>{emoji}</span>
+      <span className="text-[7px] font-bold" style={{ color: isZero ? 'rgba(255,255,255,0.2)' : color }}>{label}</span>
+      <span className="text-[9px] font-extrabold" style={{ color: isZero ? 'rgba(255,255,255,0.15)' : '#FFFFFF' }}>{count}</span>
     </div>
   )
 }
