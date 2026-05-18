@@ -264,31 +264,31 @@ export function PlayDashboard({
             </div>
           </div>
 
-          {/* Ability Grid - 3 left | CODE button | 3 right - Oval shaped */}
-          <div className="w-full px-3 py-2 rounded-[2rem]"
-            style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1.5px solid rgba(237,194,46,0.15)', borderRadius: '2rem' }}>
-            <div className="flex items-center gap-1">
-              {/* Left 3 abilities */}
+          {/* Ability Grid - 3 left | CODE button | 3 right - Oval/Circle shaped */}
+          <div className="w-full px-2 py-2.5 rounded-[2rem]"
+            style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1.5px solid rgba(237,194,46,0.15)', borderRadius: '2.5rem' }}>
+            <div className="flex items-center gap-0.5">
+              {/* Left 3 abilities - smaller icons */}
               <div className="flex flex-col gap-0.5 flex-1">
                 <InventoryItem emoji="⚡" label="5x" count={multiply5Count} color="#EDC22E" />
                 <InventoryItem emoji="🌀" label="Time" count={timeExtendCount} color="#00FFFF" />
                 <InventoryItem emoji="✨" label="2.5x" count={multiply2_5Count} color="#FF69B4" />
               </div>
 
-              {/* Center: Big CODE button + Spin/Undo below */}
+              {/* Center: BIG CODE button + Spin/Undo below */}
               <div className="flex flex-col items-center gap-0.5 px-1">
-                <button onClick={() => setShowCouponCode(true)} className="flex items-center gap-1 px-4 py-2 rounded-full transition-transform active:scale-95"
-                  style={{ backgroundColor: 'rgba(237,194,46,0.15)', border: '1.5px solid rgba(237,194,46,0.35)', background: 'linear-gradient(135deg, rgba(237,194,46,0.2), rgba(255,122,0,0.15))' }}>
-                  <Ticket className="w-4 h-4" style={{ color: '#EDC22E' }} />
-                  <span className="text-[10px] font-extrabold" style={{ color: '#EDC22E' }}>Code</span>
+                <button onClick={() => setShowCouponCode(true)} className="flex flex-col items-center gap-0.5 px-5 py-2.5 rounded-full transition-transform active:scale-95"
+                  style={{ backgroundColor: 'rgba(237,194,46,0.15)', border: '2px solid rgba(237,194,46,0.4)', background: 'linear-gradient(135deg, rgba(237,194,46,0.25), rgba(255,122,0,0.2))' }}>
+                  <Ticket className="w-5 h-5" style={{ color: '#EDC22E' }} />
+                  <span className="text-[11px] font-extrabold" style={{ color: '#EDC22E' }}>Code</span>
                 </button>
-                <div className="flex gap-1">
+                <div className="flex gap-0.5">
                   <InventoryItem emoji="🎟️" label="Spin" count={spinTickets} color="#EDC22E" />
                   <InventoryItem emoji="↩️" label="Undo" count={undoTotal} color="#8f7a66" />
                 </div>
               </div>
 
-              {/* Right 3 abilities */}
+              {/* Right 3 abilities - smaller icons */}
               <div className="flex flex-col gap-0.5 flex-1">
                 <InventoryItem emoji="🧲" label="Mag" count={magnetCount} color="#00E676" />
                 <InventoryItem emoji="🔨" label="Ham" count={hammerCount} color="#F59563" />
@@ -627,6 +627,12 @@ export function PlayDashboard({
   )
 }
 
+function formatCount(n: number): string {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}K`
+  return String(n)
+}
+
 function InventoryItem({ emoji, label, count, color }: { emoji: string; label: string; count: number; color: string }) {
   const isZero = count <= 0
   return (
@@ -634,7 +640,7 @@ function InventoryItem({ emoji, label, count, color }: { emoji: string; label: s
       style={{ backgroundColor: isZero ? 'rgba(255,255,255,0.01)' : `${color}10`, border: `1px solid ${isZero ? 'rgba(255,255,255,0.03)' : `${color}20`}`, opacity: isZero ? 0.4 : 1 }}>
       <span className="text-[10px]" style={{ opacity: isZero ? 0.3 : 1 }}>{emoji}</span>
       <span className="text-[7px] font-bold" style={{ color: isZero ? 'rgba(255,255,255,0.2)' : color }}>{label}</span>
-      <span className="text-[8px] font-extrabold" style={{ color: isZero ? 'rgba(255,255,255,0.15)' : '#FFFFFF' }}>{count}</span>
+      <span className="text-[8px] font-extrabold" style={{ color: isZero ? 'rgba(255,255,255,0.15)' : '#FFFFFF' }}>{formatCount(count)}</span>
     </div>
   )
 }

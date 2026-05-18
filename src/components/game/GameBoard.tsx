@@ -86,7 +86,14 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     handleMove, newGame, continueGame, undo, activatePowerUp, handleTileClick,
     reviveWithAd, restartAfterStuck, tickBattleTimer, tickCountdown, addCoins, addNotification,
     goBackToDashboard, calculateTournamentPoints, addGameToHistory,
-  } = game as typeof game & { multiply5Count: number; multiply2_5Count: number; timeExtendCount: number }
+    activateMultiply5, activateMultiply2_5, activateTimeExtend, tickMultiplier,
+    activeMultiplier, multiplierSecondsLeft,
+  } = game as typeof game & {
+    multiply5Count: number; multiply2_5Count: number; timeExtendCount: number;
+    activateMultiply5: () => void; activateMultiply2_5: () => void;
+    activateTimeExtend: () => void; tickMultiplier: () => void;
+    activeMultiplier: '5x' | '2.5x' | null; multiplierSecondsLeft: number;
+  }
 
   // ============================================================
   // INJECT BLINK CSS ANIMATION GLOBALLY (once)
@@ -159,6 +166,13 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     return () => clearInterval(interval)
   }, [isBattleMode, botBattleResult, battleTimer, tickBattleTimer, countdownOverlay, timerPaused])
 
+  // Multiplier countdown tick
+  useEffect(() => {
+    if (!activeMultiplier || multiplierSecondsLeft <= 0) return
+    const timer = setTimeout(() => { tickMultiplier() }, 1000)
+    return () => clearTimeout(timer)
+  }, [activeMultiplier, multiplierSecondsLeft, tickMultiplier])
+
   // Score gain animation
   useEffect(() => {
     if (score > prevScore.current) {
@@ -185,16 +199,20 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
 
   // Touch handlers
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    // When a power-up is active, allow clicks to pass through to tiles
+    // Don't prevent default or track touch for swipe
+    if (activePowerUp) return
     // Don't capture touch on buttons/interactive elements inside overlays
     if ((e.target as HTMLElement).closest('button, [role="button"], .overlay-content')) return
     e.preventDefault()
     touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
-  }, [])
+  }, [activePowerUp])
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!touchStart.current) return
     e.preventDefault()
   }, [])
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (activePowerUp) return
     if (!touchStart.current) return
     e.preventDefault()
     const dx = e.changedTouches[0].clientX - touchStart.current.x
@@ -202,7 +220,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     if (Math.max(Math.abs(dx), Math.abs(dy)) < 30) return
     onMove(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'))
     touchStart.current = null
-  }, [onMove])
+  }, [onMove, activePowerUp])
 
   const handlePowerUp = useCallback((pu: PowerUp) => { activatePowerUp(pu) }, [activatePowerUp])
   const handleStuckContinue = useCallback(() => { restartAfterStuck() }, [restartAfterStuck])
@@ -725,9 +743,9 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
         <PowerUpBtn icon={<Magnet className="w-3 h-3" />} count={magnetCount} active={activePowerUp === 'magnet'} onClick={() => handlePowerUp('magnet')} color="#00E676" label="Mag" />
         <PowerUpBtn icon={<Bomb className="w-3 h-3" />} count={blastCount} active={false} onClick={() => handlePowerUp('blast')} color="#FF7A00" label="Bomb" />
         <PowerUpBtn icon={<Undo2 className="w-3 h-3" />} count={undoTotal - undoCount} active={false} onClick={undo} color="#8f7a66" disabled={!canUndo || undoCount >= undoTotal} label="Undo" />
-        <PowerUpBtn icon={<Zap className="w-3 h-3" />} count={multiply5Count} active={false} onClick={() => {}} color="#EDC22E" disabled={multiply5Count <= 0} label="5x" />
-        <PowerUpBtn icon={<span className="text-[9px]">✨</span>} count={multiply2_5Count} active={false} onClick={() => {}} color="#FF69B4" disabled={multiply2_5Count <= 0} label="2.5x" />
-        <PowerUpBtn icon={<span className="text-[9px]">🌀</span>} count={timeExtendCount} active={false} onClick={() => {}} color="#00FFFF" disabled={timeExtendCount <= 0} label="Time" />
+        <PowerUpBtn icon={<Zap className="w-3 h-3" />} count={multiply5Count} active={activeMultiplier === '5x'} onClick={() => activateMultiply5()} color="#EDC22E" disabled={multiply5Count <= 0 || !!activeMultiplier} label="5x" />
+        <PowerUpBtn icon={<span className="text-[9px]">✨</span>} count={multiply2_5Count} active={activeMultiplier === '2.5x'} onClick={() => activateMultiply2_5()} color="#FF69B4" disabled={multiply2_5Count <= 0 || !!activeMultiplier} label="2.5x" />
+        <PowerUpBtn icon={<span className="text-[9px]">🌀</span>} count={timeExtendCount} active={false} onClick={() => activateTimeExtend()} color="#00FFFF" disabled={timeExtendCount <= 0 || !isBattleMode || !!botBattleResult} label="Time" />
       </div>
 
       {/* Active Power-up indicator */}
@@ -742,6 +760,28 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
             }}>
             <Zap className="w-2.5 h-2.5" />
             {activePowerUp === 'hammer' ? 'Tap tile to destroy area' : 'Tap tile to explode same numbers'}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Active Multiplier indicator with countdown */}
+      <AnimatePresence>
+        {activeMultiplier && multiplierSecondsLeft > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="px-4 py-1 rounded-full text-xs font-extrabold flex items-center gap-2 flex-shrink-0"
+            style={{
+              backgroundColor: activeMultiplier === '5x' ? 'rgba(237,194,46,0.2)' : 'rgba(255,105,180,0.2)',
+              color: activeMultiplier === '5x' ? '#EDC22E' : '#FF69B4',
+              border: `1.5px solid ${activeMultiplier === '5x' ? 'rgba(237,194,46,0.4)' : 'rgba(255,105,180,0.4)'}`,
+              animation: multiplierSecondsLeft <= 3 ? 'timerBlink 0.5s infinite' : 'none',
+            }}
+          >
+            <Zap className="w-3 h-3" />
+            <span>{activeMultiplier} MULTIPLIER</span>
+            <span className="font-mono">{multiplierSecondsLeft}s</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -815,6 +855,12 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
 // ============================================================
 // SUB-COMPONENT: PowerUpBtn
 // ============================================================
+function formatCount(n: number): string {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}K`
+  return String(n)
+}
+
 function PowerUpBtn({ icon, count, active, onClick, color, disabled, label }: {
   icon: React.ReactNode; count: number; active: boolean; onClick: () => void; color: string; disabled?: boolean; label?: string
 }) {
@@ -824,7 +870,7 @@ function PowerUpBtn({ icon, count, active, onClick, color, disabled, label }: {
       whileTap={!disabled ? { scale: 0.9 } : {}} animate={active ? { scale: [1, 1.05, 1] } : {}} transition={{ duration: 0.8, repeat: active ? Infinity : 0 }}>
       <div style={{ color: count > 0 ? color : 'rgba(255,255,255,0.15)' }}>{icon}</div>
       <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[6px] font-bold"
-        style={{ backgroundColor: count > 0 ? color : 'rgba(255,255,255,0.08)', color: '#FFFFFF' }}>{count}</div>
+        style={{ backgroundColor: count > 0 ? color : 'rgba(255,255,255,0.08)', color: '#FFFFFF' }}>{formatCount(count)}</div>
       {label && <span className="text-[6px] font-bold mt-0.5" style={{ color: disabled ? 'rgba(255,255,255,0.15)' : color }}>{label}</span>}
     </motion.button>
   )

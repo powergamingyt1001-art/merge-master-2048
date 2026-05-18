@@ -150,6 +150,9 @@ export interface GameState {
   multiply5Count: number
   multiply2_5Count: number
   timeExtendCount: number
+  // Active multiplier (runtime only, not saved)
+  activeMultiplier: '5x' | '2.5x' | null
+  multiplierSecondsLeft: number
 }
 
 const BOT_NAMES = [
@@ -753,6 +756,8 @@ export function useGame() {
       multiply5Count: 0,
       multiply2_5Count: 0,
       timeExtendCount: 0,
+      activeMultiplier: null,
+      multiplierSecondsLeft: 0,
     }
 
     if (!saved) {
@@ -879,6 +884,9 @@ export function useGame() {
       multiply5Count: saved.multiply5Count ?? 0,
       multiply2_5Count: saved.multiply2_5Count ?? 0,
       timeExtendCount: saved.timeExtendCount ?? 0,
+      // Multiplier state is NOT saved - resets on reload
+      activeMultiplier: null,
+      multiplierSecondsLeft: 0,
     }
   })
 
@@ -1152,7 +1160,13 @@ export function useGame() {
         comboMultiplier = 1
       }
 
-      const newScore = prev.score + scoreGain + comboExtra
+      let finalScoreGain = scoreGain + comboExtra
+      if (prev.activeMultiplier === '5x') {
+        finalScoreGain = Math.floor(finalScoreGain * 5)
+      } else if (prev.activeMultiplier === '2.5x') {
+        finalScoreGain = Math.floor(finalScoreGain * 2.5)
+      }
+      const newScore = prev.score + finalScoreGain
       const newBestScore = Math.max(newScore, prev.bestScore)
       const isStuck = !canMove(tilesWithNew)
       const won = !prev.won && hasWon(tilesWithNew)
@@ -1271,7 +1285,68 @@ export function useGame() {
       const tiles = initTiles()
       // IMPORTANT: Keep score & gamePoints intact! Only reset tiles.
       // The user loses a life for getting stuck, but their earned points are preserved.
-      return { ...prev, tiles, gameOver: false, won: false, keepPlaying: false, canUndo: false, undoCount: 0, activePowerUp: null, consecutiveMerges: 0, comboBonus: 0, comboMultiplier: 1 }
+      return { ...prev, tiles, gameOver: false, won: false, keepPlaying: false, canUndo: false, undoCount: 0, activePowerUp: null, consecutiveMerges: 0, comboBonus: 0, comboMultiplier: 1, activeMultiplier: null, multiplierSecondsLeft: 0 }
+    })
+  }, [])
+
+  const activateMultiply5 = useCallback(() => {
+    setState(prev => {
+      if (prev.multiply5Count <= 0) return prev
+      if (prev.activeMultiplier) return prev // Already have a multiplier active
+      return {
+        ...prev,
+        multiply5Count: prev.multiply5Count - 1,
+        activeMultiplier: '5x' as const,
+        multiplierSecondsLeft: 10,
+      }
+    })
+  }, [])
+
+  const activateMultiply2_5 = useCallback(() => {
+    setState(prev => {
+      if (prev.multiply2_5Count <= 0) return prev
+      if (prev.activeMultiplier) return prev
+      return {
+        ...prev,
+        multiply2_5Count: prev.multiply2_5Count - 1,
+        activeMultiplier: '2.5x' as const,
+        multiplierSecondsLeft: 10,
+      }
+    })
+  }, [])
+
+  const activateTimeExtend = useCallback(() => {
+    setState(prev => {
+      if (prev.timeExtendCount <= 0) return prev
+      const isBattleMode = prev.gameMode === 'bot' || prev.gameMode === 'coins' || prev.gameMode === 'tournament'
+      if (!isBattleMode) return prev // Only works in battle modes
+      if (prev.botBattleResult) return prev // Game already ended
+      // Update "Use a Power-up" task progress
+      const today = getTodayStr()
+      const tasks = prev.dailyTasks.map(t => {
+        if (t.id === `powerup-${today}` && !t.claimed) {
+          return { ...t, progress: Math.min(t.progress + 1, t.target) }
+        }
+        return t
+      })
+      return {
+        ...prev,
+        timeExtendCount: prev.timeExtendCount - 1,
+        battleTimer: prev.battleTimer + 10,
+        battleTimeLimit: prev.battleTimeLimit + 10,
+        dailyTasks: tasks,
+      }
+    })
+  }, [])
+
+  const tickMultiplier = useCallback(() => {
+    setState(prev => {
+      if (!prev.activeMultiplier) return prev
+      const newSeconds = prev.multiplierSecondsLeft - 1
+      if (newSeconds <= 0) {
+        return { ...prev, activeMultiplier: null, multiplierSecondsLeft: 0 }
+      }
+      return { ...prev, multiplierSecondsLeft: newSeconds }
     })
   }, [])
 
@@ -1383,6 +1458,8 @@ export function useGame() {
       comboMultiplier: 1,
       coinEntryFee: 0,
       coinGameWon: null,
+      activeMultiplier: null,
+      multiplierSecondsLeft: 0,
     }))
   }, [])
 
@@ -1420,6 +1497,8 @@ export function useGame() {
         lastPlayDate: today,
         coinEntryFee: 0,
         coinGameWon: null,
+        activeMultiplier: null as const,
+        multiplierSecondsLeft: 0,
       }
     })
   }, [])
@@ -1460,6 +1539,8 @@ export function useGame() {
         coinGameWon: null,
         gamesPlayedToday: gamesToday + 1,
         lastPlayDate: today,
+        activeMultiplier: null as const,
+        multiplierSecondsLeft: 0,
       }
     })
   }, [])
@@ -1501,6 +1582,8 @@ export function useGame() {
         coinGameWon: null,
         gamesPlayedToday: gamesToday + 1,
         lastPlayDate: today,
+        activeMultiplier: null as const,
+        multiplierSecondsLeft: 0,
       }
     })
   }, [])
@@ -1722,6 +1805,8 @@ export function useGame() {
         consecutiveMerges: 0,
         comboBonus: 0,
         comboMultiplier: 1,
+        activeMultiplier: null as const,
+        multiplierSecondsLeft: 0,
       }
     })
   }, [])
@@ -1750,6 +1835,8 @@ export function useGame() {
       comboMultiplier: 1,
       coinEntryFee: 0,
       coinGameWon: null,
+      activeMultiplier: null,
+      multiplierSecondsLeft: 0,
     }))
   }, [])
 
@@ -1958,6 +2045,8 @@ export function useGame() {
       multiply5Count: 0,
       multiply2_5Count: 0,
       timeExtendCount: 0,
+      activeMultiplier: null,
+      multiplierSecondsLeft: 0,
     })
   }, [])
 
@@ -2014,6 +2103,10 @@ export function useGame() {
     claimWeeklyBonus,
     claimDailyTask,
     resetAllData,
+    activateMultiply5,
+    activateMultiply2_5,
+    activateTimeExtend,
+    tickMultiplier,
     completeVisitWebsiteTask: useCallback(() => {
       setState(prev => {
         const today = getTodayStr()

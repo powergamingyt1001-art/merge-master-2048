@@ -471,3 +471,62 @@ Stage Summary:
 
 ### Verification:
 - Lint passed with no errors.
+
+## Task 2-5: Fix game abilities and implement 5x, 2.5x, Timer Extend functionality
+
+### Date: 2025-03-05
+
+### Bugs Fixed:
+
+1. **Hammer & Magnet touch handling on mobile** (GameBoard.tsx)
+   - `handleTouchStart` now checks `activePowerUp` first and returns early (skips `preventDefault` and touch tracking) so that `onClick` events on tiles can fire
+   - `handleTouchEnd` also checks `activePowerUp` and returns early
+   - Added `activePowerUp` to dependency arrays of both callbacks
+
+2. **5x and 2.5x multiplier buttons had empty onClick handlers** (GameBoard.tsx)
+   - Now call `activateMultiply5()` and `activateMultiply2_5()` respectively
+   - Active state shows when `activeMultiplier === '5x'` or `'2.5x'`
+   - Disabled when count is 0 or another multiplier is already active
+
+3. **Timer Extend button had empty onClick handler** (GameBoard.tsx)
+   - Now calls `activateTimeExtend()`
+   - Disabled when count is 0, not in battle mode, or battle already ended
+
+### New Functionality:
+
+1. **5x Multiplier Ability** (useGame.ts)
+   - `activateMultiply5()`: Checks count > 0 and no active multiplier, then sets `activeMultiplier: '5x'` and `multiplierSecondsLeft: 10`, decrements count
+   - In `handleMove`, score gain is multiplied by 5 when `activeMultiplier === '5x'`
+   - 10-second countdown displayed via multiplier indicator in GameBoard
+
+2. **2.5x Multiplier Ability** (useGame.ts)
+   - `activateMultiply2_5()`: Similar to 5x but sets `activeMultiplier: '2.5x'`, multiplies score by 2.5 (floored to integer)
+   
+3. **Timer Extend Ability** (useGame.ts)
+   - `activateTimeExtend()`: Only works in battle modes (bot/coins/tournament)
+   - Adds 10 seconds to both `battleTimer` and `battleTimeLimit` (so progress bar adjusts correctly)
+   - Decrements `timeExtendCount` and updates daily task progress
+
+4. **Multiplier Tick System** (useGame.ts + GameBoard.tsx)
+   - `tickMultiplier()`: Decrements `multiplierSecondsLeft`, clears multiplier when reaching 0
+   - `useEffect` in GameBoard ticks every 1 second when multiplier is active
+   - Multiplier state resets on: newGame, startBotBattle, startCoinGame, startTournamentGame, goBackToDashboard, restartAfterStuck, reviveWithAd, resetAllData
+
+5. **Active Multiplier Indicator** (GameBoard.tsx)
+   - Animated pill showing "5x MULTIPLIER" or "2.5x MULTIPLIER" with countdown
+   - Gold color for 5x, pink for 2.5x
+   - Blinks when <= 3 seconds remaining
+
+6. **formatCount utility** (GameBoard.tsx)
+   - Displays ability counts as 1K, 10K, 1.5M etc. when >= 1000
+
+### State Changes (useGame.ts):
+
+- Added to `GameState`: `activeMultiplier: '5x' | '2.5x' | null`, `multiplierSecondsLeft: number`
+- Default values: `activeMultiplier: null`, `multiplierSecondsLeft: 0`
+- NOT saved to localStorage (runtime-only, resets on page load)
+- Exported new callbacks: `activateMultiply5`, `activateMultiply2_5`, `activateTimeExtend`, `tickMultiplier`
+
+### Files Modified:
+- `/home/z/my-project/src/hooks/useGame.ts`
+- `/home/z/my-project/src/components/game/GameBoard.tsx`
