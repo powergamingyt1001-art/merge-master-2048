@@ -217,6 +217,7 @@ export default function Home() {
                 onClaimWelcome={game.claimWelcome}
                 onClaimStreakDay={game.claimStreakDay}
                 onAddCoins={game.addCoins}
+                onDeductCoins={game.deductCoins}
                 onAddPowerUp={game.addPowerUp}
                 onAddUndos={game.addUndos}
                 onClaimCommission={game.claimCommission}

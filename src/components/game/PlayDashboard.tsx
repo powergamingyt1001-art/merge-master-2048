@@ -68,6 +68,7 @@ interface PlayDashboardProps {
   onClaimWelcome: () => void
   onClaimStreakDay: (day: number) => void
   onAddCoins: (amount: number) => void
+  onDeductCoins: (amount: number) => void
   onAddPowerUp: (pu: PowerUp, count: number) => void
   onAddUndos: (count: number) => void
   onClaimCommission: () => void
@@ -295,13 +296,13 @@ export function PlayDashboard({
 
             {/* Quick mode buttons */}
             <div className="flex flex-col gap-1.5">
-              <button onClick={() => setShowBattleModes(!showBattleModes)}
+              <button onClick={() => { setShowBattleModes(!showBattleModes); if (!showBattleModes) setShowCoinGames(false) }}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg transition-transform active:scale-95"
                 style={{ backgroundColor: 'rgba(246,94,59,0.12)', border: '1px solid rgba(246,94,59,0.25)' }}>
                 <Swords className="w-3 h-3" style={{ color: '#F65E3B' }} />
                 <span className="text-[9px] font-bold" style={{ color: '#F65E3B' }}>Battle</span>
               </button>
-              <button onClick={() => setShowCoinGames(!showCoinGames)}
+              <button onClick={() => { setShowCoinGames(!showCoinGames); if (!showCoinGames) setShowBattleModes(false) }}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg transition-transform active:scale-95"
                 style={{ backgroundColor: 'rgba(237,194,46,0.12)', border: '1px solid rgba(237,194,46,0.25)' }}>
                 <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
@@ -608,7 +609,7 @@ export function PlayDashboard({
       <PrivacyPolicy isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
       <AboutPage isOpen={showAbout} onClose={() => setShowAbout(false)} />
       <ContactPage isOpen={showContact} onClose={() => setShowContact(false)} />
-      <Store isOpen={showStore} onClose={() => setShowStore(false)} playerId={playerId} coins={coins} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} />
+      <Store isOpen={showStore} onClose={() => setShowStore(false)} playerId={playerId} coins={coins} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} onDeductCoins={onDeductCoins} onAddPowerUp={onAddPowerUp} onAddUndos={onAddUndos} />
       <CouponCode isOpen={showCoupon} onClose={() => setShowCoupon(false)} onAddCoins={onAddCoins} onAddPowerUp={onAddPowerUp} onAddSpinTickets={onAddSpinTickets} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} />
     </div>
   )

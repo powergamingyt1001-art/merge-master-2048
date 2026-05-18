@@ -1044,17 +1044,11 @@ export function useGame() {
         comboMultiplier = 1
       }
 
-      // Apply active multiplier to score gain
+      // Apply active multiplier to score gain (time-based, not move-based)
       let multiplierExtra = 0
-      let newActiveMultiplier = prev.activeMultiplier
-      let newMultiplierTimeLeft = prev.multiplierTimeLeft
       if (prev.activeMultiplier > 1 && prev.multiplierTimeLeft > 0) {
         multiplierExtra = Math.round((scoreGain + comboExtra) * (prev.activeMultiplier - 1))
-        newMultiplierTimeLeft = prev.multiplierTimeLeft - 1
-        if (newMultiplierTimeLeft <= 0) {
-          newActiveMultiplier = 1
-          newMultiplierTimeLeft = 0
-        }
+        // Countdown is handled by multiplierTick (1 second intervals), NOT per move
       }
 
       const newScore = prev.score + scoreGain + comboExtra + multiplierExtra
@@ -1153,8 +1147,8 @@ export function useGame() {
         comboBonus: newComboBonus,
         comboMultiplier: comboMultiplier,
         gamePoints: newGamePoints + multiplierExtra,
-        activeMultiplier: newActiveMultiplier,
-        multiplierTimeLeft: newMultiplierTimeLeft,
+        activeMultiplier: prev.activeMultiplier,
+        multiplierTimeLeft: prev.multiplierTimeLeft,
         coinGameWon,
         playerLevel: calculateLevel(prev.levelXP),
         totalBattlesPlayed,
@@ -1201,7 +1195,7 @@ export function useGame() {
       if (pu === 'extraTime') {
         const isBattleMode = prev.gameMode === 'bot' || prev.gameMode === 'coins' || prev.gameMode === 'tournament'
         if (!isBattleMode) return prev
-        return { ...prev, battleTimer: prev.battleTimer + 10, extraTimeCount: prev.extraTimeCount - 1, activePowerUp: null }
+        return { ...prev, battleTimer: prev.battleTimer + 10, battleTimeLimit: prev.battleTimeLimit + 10, extraTimeCount: prev.extraTimeCount - 1, activePowerUp: null }
       }
 
       if (pu === 'blast') {
@@ -1598,6 +1592,13 @@ export function useGame() {
     })
   }, [])
 
+  const deductCoins = useCallback((amount: number) => {
+    setState(prev => {
+      if (prev.coins < amount) return prev // Not enough coins
+      return { ...prev, coins: prev.coins - amount }
+    })
+  }, [])
+
   const addPowerUp = useCallback((pu: PowerUp, count: number) => {
     setState(prev => {
       switch (pu) {
@@ -1901,6 +1902,7 @@ export function useGame() {
     claimWelcome,
     claimStreakDay,
     addCoins,
+    deductCoins,
     addPowerUp,
     addUndos,
     startBotBattle,

@@ -12,6 +12,9 @@ interface StoreProps {
   playerId: string
   coins: number
   onAddNotification: (title: string, message: string, type: string, emoji: string) => void
+  onDeductCoins: (amount: number) => void
+  onAddPowerUp: (pu: 'hammer' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x' | 'extraTime', count: number) => void
+  onAddUndos: (count: number) => void
 }
 
 interface CoinPack {
@@ -29,6 +32,8 @@ interface AbilityItem {
   price: number
   tag?: { label: string; color: string }
   section: 'regular' | '5x' | '2.5x'
+  currency: 'coin' | 'inr'
+  abilityType?: 'hammer' | 'magnet' | 'blast' | 'timer' | 'undo'
 }
 
 interface StoreTransaction {
@@ -53,29 +58,85 @@ const COIN_PACKS: CoinPack[] = [
 ]
 
 const REGULAR_ABILITIES: AbilityItem[] = [
-  { id: 'bomb-50', emoji: '💣', name: 'Bomb', quantity: 50, price: 5, section: 'regular' },
-  { id: 'hammer-50', emoji: '🔨', name: 'Hammer', quantity: 50, price: 5, section: 'regular' },
-  { id: 'magnet-50', emoji: '🧲', name: 'Magnet', quantity: 50, price: 5, section: 'regular' },
-  { id: 'undo-50', emoji: '↩️', name: 'Undo', quantity: 50, price: 11, section: 'regular' },
-  { id: 'timer-50', emoji: '⏱️', name: 'Timer (+10s)', quantity: 50, price: 5, section: 'regular' },
+  { id: 'bomb-5', emoji: '💣', name: 'Bomb', quantity: 5, price: 300, section: 'regular', currency: 'coin', abilityType: 'blast' },
+  { id: 'magnet-5', emoji: '🧲', name: 'Magnet', quantity: 5, price: 150, section: 'regular', currency: 'coin', abilityType: 'magnet' },
+  { id: 'hammer-5', emoji: '🔨', name: 'Hammer', quantity: 5, price: 150, section: 'regular', currency: 'coin', abilityType: 'hammer' },
+  { id: 'timer-5', emoji: '⏱️', name: 'Timer (+10s)', quantity: 5, price: 200, section: 'regular', currency: 'coin', abilityType: 'timer' },
+  { id: 'undo-5', emoji: '↩️', name: 'Undo', quantity: 5, price: 100, section: 'regular', currency: 'coin', abilityType: 'undo' },
 ]
 
 const MULTIPLIER_5X: AbilityItem[] = [
-  { id: '5x-5', emoji: '5️⃣', name: '5x Multiplier', quantity: 5, price: 20, section: '5x' },
-  { id: '5x-15', emoji: '5️⃣', name: '5x Multiplier', quantity: 15, price: 55, section: '5x', tag: { label: 'HOT', color: '#F65E3B' } },
-  { id: '5x-35', emoji: '5️⃣', name: '5x Multiplier', quantity: 35, price: 100, section: '5x' },
-  { id: '5x-80', emoji: '5️⃣', name: '5x Multiplier', quantity: 80, price: 189, section: '5x', tag: { label: 'HOT', color: '#F65E3B' } },
+  { id: '5x-5', emoji: '⚡', name: '5x Multiplier', quantity: 5, price: 20, section: '5x', currency: 'inr' },
+  { id: '5x-15', emoji: '⚡', name: '5x Multiplier', quantity: 15, price: 55, section: '5x', tag: { label: 'HOT', color: '#F65E3B' }, currency: 'inr' },
+  { id: '5x-35', emoji: '⚡', name: '5x Multiplier', quantity: 35, price: 100, section: '5x', currency: 'inr' },
+  { id: '5x-80', emoji: '⚡', name: '5x Multiplier', quantity: 80, price: 189, section: '5x', tag: { label: 'HOT', color: '#F65E3B' }, currency: 'inr' },
 ]
 
 const MULTIPLIER_2_5X: AbilityItem[] = [
-  { id: '2.5x-5', emoji: '2️⃣', name: '2.5x Multiplier', quantity: 5, price: 20, section: '2.5x' },
-  { id: '2.5x-15', emoji: '2️⃣', name: '2.5x Multiplier', quantity: 15, price: 55, section: '2.5x', tag: { label: 'HOT', color: '#F65E3B' } },
-  { id: '2.5x-35', emoji: '2️⃣', name: '2.5x Multiplier', quantity: 35, price: 100, section: '2.5x' },
-  { id: '2.5x-80', emoji: '2️⃣', name: '2.5x Multiplier', quantity: 80, price: 189, section: '2.5x', tag: { label: 'HOT', color: '#F65E3B' } },
+  { id: '2.5x-5', emoji: '🔥', name: '2.5x Multiplier', quantity: 5, price: 20, section: '2.5x', currency: 'inr' },
+  { id: '2.5x-15', emoji: '🔥', name: '2.5x Multiplier', quantity: 15, price: 55, section: '2.5x', tag: { label: 'HOT', color: '#F65E3B' }, currency: 'inr' },
+  { id: '2.5x-35', emoji: '🔥', name: '2.5x Multiplier', quantity: 35, price: 100, section: '2.5x', currency: 'inr' },
+  { id: '2.5x-80', emoji: '🔥', name: '2.5x Multiplier', quantity: 80, price: 189, section: '2.5x', tag: { label: 'HOT', color: '#F65E3B' }, currency: 'inr' },
 ]
 
 const WHATSAPP_NUMBER = '919999999999'
 const HISTORY_KEY = 'mergeMaster2048_storeHistory'
+const PURCHASE_LIMIT_KEY = 'mergeMaster2048_abilityPurchaseLimits'
+const MAX_ABILITY_PER_2WEEKS = 15 // Max of each ability per 2 weeks for coin purchases
+
+// ─── Purchase Limit Tracking ─────────────────────────────────────────────────
+
+interface PurchaseRecord {
+  [abilityType: string]: { count: number; resetAt: string } // resetAt = ISO date when 2-week window expires
+}
+
+function loadPurchaseLimits(): PurchaseRecord {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = localStorage.getItem(PURCHASE_LIMIT_KEY)
+    if (!raw) return {}
+    const data: PurchaseRecord = JSON.parse(raw)
+    // Clean up expired entries
+    const now = Date.now()
+    const cleaned: PurchaseRecord = {}
+    for (const [key, val] of Object.entries(data)) {
+      if (new Date(val.resetAt).getTime() > now) {
+        cleaned[key] = val
+      }
+    }
+    return cleaned
+  } catch {
+    return {}
+  }
+}
+
+function savePurchaseLimits(data: PurchaseRecord) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(PURCHASE_LIMIT_KEY, JSON.stringify(data))
+}
+
+function getRemainingPurchase(abilityType: string): number {
+  const limits = loadPurchaseLimits()
+  const record = limits[abilityType]
+  if (!record) return MAX_ABILITY_PER_2WEEKS
+  if (new Date(record.resetAt).getTime() <= Date.now()) return MAX_ABILITY_PER_2WEEKS
+  return Math.max(0, MAX_ABILITY_PER_2WEEKS - record.count)
+}
+
+function recordPurchase(abilityType: string, quantity: number) {
+  const limits = loadPurchaseLimits()
+  const existing = limits[abilityType]
+  const now = Date.now()
+  const twoWeeks = 14 * 24 * 60 * 60 * 1000
+
+  if (!existing || new Date(existing.resetAt).getTime() <= now) {
+    // Start new 2-week window
+    limits[abilityType] = { count: quantity, resetAt: new Date(now + twoWeeks).toISOString() }
+  } else {
+    limits[abilityType] = { ...existing, count: existing.count + quantity }
+  }
+  savePurchaseLimits(limits)
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -195,7 +256,22 @@ function CoinsTab({ playerId, onBuy }: { playerId: string; onBuy: (item: string,
 
 // ─── Ability Card ────────────────────────────────────────────────────────────
 
-function AbilityCard({ item, onBuy }: { item: AbilityItem; onBuy: (item: string, price: number) => void }) {
+function AbilityCard({
+  item,
+  onBuy,
+  onCoinBuy,
+  coins,
+}: {
+  item: AbilityItem
+  onBuy: (item: string, price: number) => void
+  onCoinBuy: (item: AbilityItem) => void
+  coins: number
+}) {
+  const isCoinCurrency = item.currency === 'coin'
+  const remaining = isCoinCurrency && item.abilityType ? getRemainingPurchase(item.abilityType) : null
+  const canAfford = isCoinCurrency ? coins >= item.price : true
+  const isLimitReached = remaining !== null && remaining <= 0
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -10 }}
@@ -204,6 +280,7 @@ function AbilityCard({ item, onBuy }: { item: AbilityItem; onBuy: (item: string,
       style={{
         background: 'rgba(255,255,255,0.04)',
         border: '1px solid rgba(255,255,255,0.08)',
+        opacity: isLimitReached ? 0.5 : 1,
       }}
     >
       {item.tag && <TagBadge label={item.tag.label} color={item.tag.color} />}
@@ -224,21 +301,29 @@ function AbilityCard({ item, onBuy }: { item: AbilityItem; onBuy: (item: string,
           <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
             x{item.quantity}
           </p>
+          {remaining !== null && (
+            <p className="text-[8px]" style={{ color: remaining > 0 ? '#00E676' : '#F65E3B' }}>
+              {remaining > 0 ? `${remaining} left this period` : 'Limit reached (2 weeks)'}
+            </p>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>
-          ₹{item.price}
+        <span className="text-xs font-bold" style={{ color: isCoinCurrency ? '#EDC22E' : 'rgba(255,255,255,0.6)' }}>
+          {isCoinCurrency ? `💰 ${formatNumber(item.price)}` : `₹${item.price}`}
         </span>
         <button
-          onClick={() => onBuy(`${item.emoji} ${item.name} x${item.quantity}`, item.price)}
-          className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95"
+          onClick={() => isCoinCurrency ? onCoinBuy(item) : onBuy(`${item.emoji} ${item.name} x${item.quantity}`, item.price)}
+          disabled={isCoinCurrency && (!canAfford || isLimitReached)}
+          className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
           style={{
-            background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
+            background: isCoinCurrency
+              ? 'linear-gradient(135deg, #EDC22E, #FFB300)'
+              : 'linear-gradient(135deg, #EDC22E, #FF7A00)',
             color: '#FFFFFF',
           }}
         >
-          BUY
+          {isCoinCurrency ? 'BUY' : 'BUY ₹'}
         </button>
       </div>
     </motion.div>
@@ -247,7 +332,7 @@ function AbilityCard({ item, onBuy }: { item: AbilityItem; onBuy: (item: string,
 
 // ─── Ability Tab ─────────────────────────────────────────────────────────────
 
-function AbilityTab({ playerId, onBuy }: { playerId: string; onBuy: (item: string, price: number) => void }) {
+function AbilityTab({ playerId, onBuy, onCoinBuy, coins }: { playerId: string; onBuy: (item: string, price: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number }) {
   const [canWatchAd, setCanWatchAd] = useState(() => canWatchFreeAd())
 
   const handleWatchAd = useCallback(() => {
@@ -257,47 +342,56 @@ function AbilityTab({ playerId, onBuy }: { playerId: string; onBuy: (item: strin
 
   return (
     <div className="space-y-4">
-      {/* Regular Abilities */}
+      {/* Regular Abilities - Coin Purchases */}
       <div>
         <div className="flex items-center gap-2 mb-2">
-          <Zap className="w-3.5 h-3.5" style={{ color: '#FF7A00' }} />
-          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#FF7A00' }}>
-            ABILITIES
+          <Coins className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
+          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#EDC22E' }}>
+            ABILITIES (COINS)
           </h4>
+          <span className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(237,194,46,0.15)', color: '#EDC22E' }}>
+            15 per 2 weeks
+          </span>
         </div>
         <div className="space-y-2">
           {REGULAR_ABILITIES.map((item) => (
-            <AbilityCard key={item.id} item={item} onBuy={onBuy} />
+            <AbilityCard key={item.id} item={item} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} />
           ))}
         </div>
       </div>
 
-      {/* 5x Multiplier */}
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-sm">🔥</span>
-          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#F65E3B' }}>
-            5x MULTIPLIER
-          </h4>
-        </div>
-        <div className="space-y-2">
-          {MULTIPLIER_5X.map((item) => (
-            <AbilityCard key={item.id} item={item} onBuy={onBuy} />
-          ))}
-        </div>
-      </div>
-
-      {/* 2.5x Multiplier */}
+      {/* 5x Multiplier - Real Money */}
       <div>
         <div className="flex items-center gap-2 mb-2">
           <span className="text-sm">⚡</span>
-          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#00E676' }}>
-            2.5x MULTIPLIER
+          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#F65E3B' }}>
+            5x MULTIPLIER (₹)
           </h4>
+          <span className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(246,94,59,0.15)', color: '#F65E3B' }}>
+            No limit
+          </span>
+        </div>
+        <div className="space-y-2">
+          {MULTIPLIER_5X.map((item) => (
+            <AbilityCard key={item.id} item={item} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} />
+          ))}
+        </div>
+      </div>
+
+      {/* 2.5x Multiplier - Real Money */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-sm">🔥</span>
+          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#00E676' }}>
+            2.5x MULTIPLIER (₹)
+          </h4>
+          <span className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(0,230,118,0.15)', color: '#00E676' }}>
+            No limit
+          </span>
         </div>
         <div className="space-y-2">
           {MULTIPLIER_2_5X.map((item) => (
-            <AbilityCard key={item.id} item={item} onBuy={onBuy} />
+            <AbilityCard key={item.id} item={item} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} />
           ))}
         </div>
       </div>
@@ -604,7 +698,7 @@ function TransactionModal({
 
 // ─── Main Store Component ────────────────────────────────────────────────────
 
-export function Store({ isOpen, onClose, playerId, coins, onAddNotification }: StoreProps) {
+export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos }: StoreProps) {
   const [activeTab, setActiveTab] = useState<TabId>('coins')
   const [history, setHistory] = useState<StoreTransaction[]>(() => loadHistory())
   const [txModal, setTxModal] = useState<{ open: boolean; itemName: string; itemPrice: number }>({
@@ -612,6 +706,46 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification }: S
     itemName: '',
     itemPrice: 0,
   })
+
+  // Handle coin-based ability purchase
+  const handleCoinBuy = useCallback(
+    (item: AbilityItem) => {
+      if (item.currency !== 'coin') return
+      if (coins < item.price) {
+        onAddNotification('Not Enough Coins!', `You need ${formatNumber(item.price)} coins but have ${formatNumber(coins)}`, 'system', '😔')
+        return
+      }
+      if (item.abilityType) {
+        const remaining = getRemainingPurchase(item.abilityType)
+        if (remaining <= 0) {
+          onAddNotification('Limit Reached!', `You've reached the 2-week limit for ${item.name}. Try again later.`, 'system', '⏳')
+          return
+        }
+        if (item.quantity > remaining) {
+          onAddNotification('Almost at Limit!', `You can only buy ${remaining} more ${item.name} this period.`, 'system', '⚠️')
+          return
+        }
+        recordPurchase(item.abilityType, item.quantity)
+      }
+      // Deduct coins
+      onDeductCoins(item.price)
+      // Add ability
+      if (item.abilityType === 'undo') {
+        onAddUndos(item.quantity)
+      } else if (item.abilityType === 'timer') {
+        onAddPowerUp('extraTime', item.quantity)
+      } else if (item.abilityType) {
+        onAddPowerUp(item.abilityType, item.quantity)
+      }
+      onAddNotification(
+        'Ability Purchased! 🎉',
+        `You bought ${item.emoji} ${item.name} x${item.quantity} for ${formatNumber(item.price)} coins`,
+        'reward',
+        item.emoji
+      )
+    },
+    [coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos]
+  )
 
   const handleBuy = useCallback(
     (itemName: string, price: number) => {
@@ -778,7 +912,7 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification }: S
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <AbilityTab playerId={playerId} onBuy={handleBuy} />
+                    <AbilityTab playerId={playerId} onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} />
                   </motion.div>
                 )}
                 {activeTab === 'history' && (
