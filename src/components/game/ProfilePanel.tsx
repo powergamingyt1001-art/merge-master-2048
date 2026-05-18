@@ -153,13 +153,13 @@ export function ProfilePanel({
                   )}
                 </div>
 
-                {/* Level Title */}
+                {/* Level Title - Tap to view all levels */}
                 <button onClick={() => setShowLevelList(true)}
-                  className="flex items-center gap-1 mt-1 px-2.5 py-0.5 rounded-full transition-transform hover:scale-105 active:scale-95"
-                  style={{ backgroundColor: `${levelInfo.color}15`, border: `1px solid ${levelInfo.color}30` }}>
+                  className="flex items-center gap-1 mt-1 px-3 py-1 rounded-full transition-transform hover:scale-105 active:scale-95"
+                  style={{ backgroundColor: `${levelInfo.color}15`, border: `1.5px solid ${levelInfo.color}40` }}>
                   <span className="text-sm">{levelInfo.icon}</span>
-                  <span className="text-[10px] font-bold" style={{ color: levelInfo.color }}>{levelInfo.title}</span>
-                  <span className="text-[8px]" style={{ color: `${levelInfo.color}80` }}>▼</span>
+                  <span className="text-[10px] font-bold" style={{ color: levelInfo.color }}>Lv.{playerLevel} {levelInfo.title}</span>
+                  <span className="text-[8px]" style={{ color: `${levelInfo.color}80` }}>▼ Levels</span>
                 </button>
 
                 {/* Level List Overlay */}
@@ -234,7 +234,7 @@ export function ProfilePanel({
                 </AnimatePresence>
               </div>
 
-              {/* Level Progress */}
+              {/* Level Progress - Click to open level list */}
               <button onClick={() => setShowLevelList(true)} className="w-full p-3 rounded-xl mb-3 text-left transition-transform active:scale-[0.98]" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
@@ -243,15 +243,15 @@ export function ProfilePanel({
                   </div>
                   <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{levelXP.toLocaleString()} / {nextLevelThreshold.toLocaleString()} XP</span>
                 </div>
-                <div className="h-3 rounded-full overflow-hidden relative" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                <div className="h-4 rounded-full overflow-hidden relative" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
                   <div className="h-full rounded-full transition-all" style={{ width: `${progressPct}%`, background: `linear-gradient(90deg, ${levelInfo.color}, ${levelInfo.color}CC)` }} />
-                  <span className="absolute inset-0 flex items-center justify-center text-[7px] font-extrabold" style={{ color: 'rgba(255,255,255,0.9)', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
-                    {Math.round(progressPct)}%
+                  <span className="absolute inset-0 flex items-center justify-center text-[8px] font-extrabold" style={{ color: 'rgba(255,255,255,0.95)', textShadow: '0 1px 3px rgba(0,0,0,0.7)' }}>
+                    Lv.{playerLevel} — {Math.round(progressPct)}%
                   </span>
                 </div>
                 {playerLevel < MAX_LEVEL && (
                   <p className="text-[8px] mt-1 text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                    {xpNeededForNextLevel.toLocaleString()} more XP to Level {playerLevel + 1} ▼
+                    {xpNeededForNextLevel.toLocaleString()} more XP to Level {playerLevel + 1} ▼ Tap to see all levels
                   </p>
                 )}
               </button>

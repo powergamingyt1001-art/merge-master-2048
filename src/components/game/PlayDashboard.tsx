@@ -264,9 +264,9 @@ export function PlayDashboard({
             </div>
           </div>
 
-          {/* Ability Grid - 3 left | CODE button | 3 right */}
-          <div className="w-full px-2 py-0.5 rounded-lg"
-            style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          {/* Ability Grid - 3 left | CODE button | 3 right - Oval shaped */}
+          <div className="w-full px-3 py-2 rounded-[2rem]"
+            style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1.5px solid rgba(237,194,46,0.15)', borderRadius: '2rem' }}>
             <div className="flex items-center gap-1">
               {/* Left 3 abilities */}
               <div className="flex flex-col gap-0.5 flex-1">

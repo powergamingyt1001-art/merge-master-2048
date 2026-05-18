@@ -905,40 +905,15 @@ export function Store({
                     {/* UPI Payment Info */}
                     <div className="p-3 rounded-lg mb-3 text-center"
                       style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.15)' }}>
-                      {/* QR Code Placeholder - styled to look like a QR code area */}
-                      <div className="w-20 h-20 mx-auto mb-2 rounded-lg relative overflow-hidden"
+                      {/* Real UPI QR Code with fixed price - user cannot change amount */}
+                      <div className="w-28 h-28 mx-auto mb-2 rounded-lg overflow-hidden"
                         style={{ backgroundColor: '#FFFFFF', border: '2px solid rgba(0,0,0,0.05)' }}>
-                        {/* QR code pattern simulation */}
-                        <div className="absolute inset-0 p-1.5">
-                          <div className="w-full h-full relative">
-                            {/* Corner squares */}
-                            <div className="absolute top-0 left-0 w-5 h-5" style={{ border: '2px solid #1a0533' }}>
-                              <div className="absolute top-1 left-1 w-2 h-2" style={{ backgroundColor: '#1a0533' }} />
-                            </div>
-                            <div className="absolute top-0 right-0 w-5 h-5" style={{ border: '2px solid #1a0533' }}>
-                              <div className="absolute top-1 right-1 w-2 h-2" style={{ backgroundColor: '#1a0533' }} />
-                            </div>
-                            <div className="absolute bottom-0 left-0 w-5 h-5" style={{ border: '2px solid #1a0533' }}>
-                              <div className="absolute bottom-1 left-1 w-2 h-2" style={{ backgroundColor: '#1a0533' }} />
-                            </div>
-                            {/* Data area dots */}
-                            <div className="absolute top-1 left-7 grid grid-cols-3 gap-[2px]">
-                              {[1,0,1,0,1,0,1,1,0].map((v, i) => (
-                                <div key={i} className="w-[3px] h-[3px]" style={{ backgroundColor: v ? '#1a0533' : 'transparent' }} />
-                              ))}
-                            </div>
-                            <div className="absolute top-7 left-1 grid grid-cols-4 gap-[2px]">
-                              {[0,1,0,1,1,0,1,0,0,1,1,1].map((v, i) => (
-                                <div key={i} className="w-[3px] h-[3px]" style={{ backgroundColor: v ? '#1a0533' : 'transparent' }} />
-                              ))}
-                            </div>
-                            <div className="absolute bottom-1 right-1 grid grid-cols-3 gap-[2px]">
-                              {[1,0,1,0,0,1,1,1,0].map((v, i) => (
-                                <div key={i} className="w-[3px] h-[3px]" style={{ backgroundColor: v ? '#1a0533' : 'transparent' }} />
-                              ))}
-                            </div>
-                          </div>
-                        </div>
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`upi://pay?pa=${UPI_ID}&pn=MergeMaster2048&am=${paymentItem.price}&cu=INR`)}`}
+                          alt="UPI Payment QR Code"
+                          className="w-full h-full object-contain"
+                          style={{ imageRendering: 'pixelated' }}
+                        />
                       </div>
                       <p className="text-[8px] mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Pay via UPI to:</p>
                       <div className="flex items-center justify-center gap-1.5 mb-1">
@@ -962,8 +937,18 @@ export function Store({
                         </button>
                       </div>
                       <p className="text-[8px] font-bold" style={{ color: '#FF7A00' }}>
-                        Amount: ₹{paymentItem.price}
+                        Amount: ₹{paymentItem.price} (fixed)
                       </p>
+                      <a
+                        href={`upi://pay?pa=${UPI_ID}&pn=MergeMaster2048&am=${paymentItem.price}&cu=INR`}
+                        className="inline-block mt-1.5 px-3 py-1 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                        style={{
+                          background: 'linear-gradient(135deg, #00E676, #00C853)',
+                          color: '#FFFFFF',
+                        }}
+                      >
+                        Open UPI App to Pay
+                      </a>
                     </div>
 
                     {/* Form Fields */}

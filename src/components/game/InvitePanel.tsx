@@ -107,6 +107,28 @@ export function InvitePanel({
             )}
 
             <div className="px-4 pb-4">
+              {/* Referral Code Display - Prominent */}
+              <div className="p-3 rounded-xl mb-3 text-center"
+                style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '2px solid rgba(237,194,46,0.3)' }}>
+                <p className="text-[9px] font-bold mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>YOUR REFERRAL CODE</p>
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-2xl font-extrabold tracking-widest" style={{ color: '#FFD700', letterSpacing: '3px', fontFamily: 'monospace' }}>
+                    {inviteCode}
+                  </span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(inviteCode)
+                      setCopied(true)
+                      setTimeout(() => setCopied(false), 2000)
+                    }}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center transition-transform active:scale-90"
+                    style={{ backgroundColor: copied ? 'rgba(0,230,118,0.2)' : 'rgba(237,194,46,0.15)', border: '1px solid ' + (copied ? 'rgba(0,230,118,0.3)' : 'rgba(237,194,46,0.25)') }}>
+                    {copied ? <Check className="w-4 h-4" style={{ color: '#00E676' }} /> : <Copy className="w-4 h-4" style={{ color: '#EDC22E' }} />}
+                  </button>
+                </div>
+                <p className="text-[8px] mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Share this code — friends get 500💰 + 2🎫 + 2🧲 FREE!</p>
+              </div>
+
               {/* Reward info */}
               <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
                 <p className="text-xs font-bold mb-1" style={{ color: '#00E676' }}>🎁 New User Gets:</p>

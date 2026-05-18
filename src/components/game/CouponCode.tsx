@@ -346,6 +346,28 @@ export function CouponCode({
   const [viewingScreenshot, setViewingScreenshot] = useState<string | null>(null)
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
 
+  // Day code settings (for real-time update when admin changes it)
+  interface DayCodeSettings {
+    rewardType: RewardType
+    rewardAmount: number
+    label: string
+    emoji: string
+  }
+  const [dayCodeSettings, setDayCodeSettings] = useState<DayCodeSettings>(() => {
+    if (typeof window === 'undefined') return { rewardType: 'coins', rewardAmount: 300, label: '300 Coins', emoji: '💰' }
+    try {
+      const data = localStorage.getItem('adminDayCodeSettings')
+      return data ? JSON.parse(data) : { rewardType: 'coins', rewardAmount: 300, label: '300 Coins', emoji: '💰' }
+    } catch { return { rewardType: 'coins', rewardAmount: 300, label: '300 Coins', emoji: '💰' } }
+  })
+  const [dcRewardType, setDcRewardType] = useState<RewardType>(dayCodeSettings.rewardType)
+  const [dcRewardAmount, setDcRewardAmount] = useState(dayCodeSettings.rewardAmount)
+
+  function saveDayCodeSettings(settings: DayCodeSettings) {
+    localStorage.setItem('adminDayCodeSettings', JSON.stringify(settings))
+    setDayCodeSettings(settings)
+  }
+
   // Refresh admin data when panel opens
   useEffect(() => {
     if (showAdminPanel) {
@@ -355,6 +377,16 @@ export function CouponCode({
       setNcRewardType(loadNightCodeSettings().rewardType)
       setNcRewardAmount(loadNightCodeSettings().rewardAmount)
       setCustomPrices(loadCustomPrices())
+      // Also reload day code settings
+      try {
+        const dcData = localStorage.getItem('adminDayCodeSettings')
+        if (dcData) {
+          const parsed = JSON.parse(dcData)
+          setDayCodeSettings(parsed)
+          setDcRewardType(parsed.rewardType)
+          setDcRewardAmount(parsed.rewardAmount)
+        }
+      } catch { /* ignore */ }
     }
   }, [showAdminPanel])
 
@@ -567,7 +599,55 @@ export function CouponCode({
       return
     }
 
-    // Pick and apply random reward
+    // Use admin-configured reward for day/night codes (real-time)
+    // If admin didn't set a custom reward, auto-generate one with lower reward
+    const isDayCode = code.startsWith('DAY')
+    const isNightCode = code.startsWith('NIGHT')
+
+    if (isDayCode) {
+      const daySettings = dayCodeSettings
+      // Auto-generate lower reward if admin forgot to configure
+      const rewardToUse: RewardOption = daySettings.rewardAmount > 0
+        ? { type: daySettings.rewardType, label: daySettings.label, emoji: daySettings.emoji, weight: 100 }
+        : { type: 'coins', label: '150 Coins (Auto)', emoji: '💰', weight: 100 } // Auto-generated with lower reward
+      applyReward(rewardToUse)
+      const newClaim: ClaimedCoupon = {
+        code,
+        date: today,
+        reward: `${rewardToUse.emoji} ${rewardToUse.label}`,
+        timestamp: Date.now(),
+      }
+      const updatedHistory = [newClaim, ...claimHistory].slice(0, 50)
+      setClaimHistory(updatedHistory)
+      saveClaimedCoupons(updatedHistory)
+      setShowReward({ label: rewardToUse.label, emoji: rewardToUse.emoji })
+      setStatusMessage({ text: `Day code redeemed! ${rewardToUse.emoji} ${rewardToUse.label}`, type: 'success' })
+      setCodeInput('')
+      return
+    }
+
+    if (isNightCode) {
+      const nightSettings = nightCodeSettings
+      const rewardToUse: RewardOption = nightSettings.rewardAmount > 0
+        ? { type: nightSettings.rewardType, label: nightSettings.label, emoji: nightSettings.emoji, weight: 100 }
+        : { type: 'coins', label: '150 Coins (Auto)', emoji: '💰', weight: 100 }
+      applyReward(rewardToUse)
+      const newClaim: ClaimedCoupon = {
+        code,
+        date: today,
+        reward: `${rewardToUse.emoji} ${rewardToUse.label}`,
+        timestamp: Date.now(),
+      }
+      const updatedHistory = [newClaim, ...claimHistory].slice(0, 50)
+      setClaimHistory(updatedHistory)
+      saveClaimedCoupons(updatedHistory)
+      setShowReward({ label: rewardToUse.label, emoji: rewardToUse.emoji })
+      setStatusMessage({ text: `Night code redeemed! ${rewardToUse.emoji} ${rewardToUse.label}`, type: 'success' })
+      setCodeInput('')
+      return
+    }
+
+    // Fallback: Pick and apply random reward
     const reward = pickRandomReward()
     applyReward(reward)
 
@@ -734,6 +814,29 @@ export function CouponCode({
     setNightCodeSettings(settings)
     saveNightCodeSettings(settings)
   }, [ncRewardType, ncRewardAmount])
+
+  // Save day code settings (real-time update)
+  const handleSaveDayCodeSettings = useCallback(() => {
+    const emojiMap: Record<RewardType, string> = {
+      coins: '💰', spins: '🎫', magnets: '🧲', bombs: '💣', hammers: '🔨', '5x': '✨', '2.5x': '🌟',
+    }
+    const labelMap: Record<RewardType, string> = {
+      coins: `${dcRewardAmount} Coins`,
+      spins: `${dcRewardAmount} Spin Tickets`,
+      magnets: `${dcRewardAmount} Magnets`,
+      bombs: `${dcRewardAmount} Bombs`,
+      hammers: `${dcRewardAmount} Hammers`,
+      '5x': `5x × ${dcRewardAmount} Uses`,
+      '2.5x': `2.5x × ${dcRewardAmount} Uses`,
+    }
+    const settings: DayCodeSettings = {
+      rewardType: dcRewardType,
+      rewardAmount: dcRewardAmount,
+      label: labelMap[dcRewardType],
+      emoji: emojiMap[dcRewardType],
+    }
+    saveDayCodeSettings(settings)
+  }, [dcRewardType, dcRewardAmount])
 
   const dayCode = generateDayCode()
   const nightCode = generateNightCode()
@@ -928,18 +1031,24 @@ export function CouponCode({
                                       </p>
                                     )}
                                     {entry.screenshotDataUrl && (
-                                      <div className="flex items-center gap-1.5">
-                                        <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>📸 Screenshot:</span>
-                                        <button onClick={() => setViewingScreenshot(entry.screenshotDataUrl!)}
-                                          className="text-[7px] font-bold px-1.5 py-0.5 rounded"
-                                          style={{ backgroundColor: 'rgba(0,230,118,0.1)', color: '#00E676' }}>
-                                          <Eye className="w-2.5 h-2.5 inline" /> View
-                                        </button>
-                                        <button onClick={() => { const a = document.createElement('a'); a.href = entry.screenshotDataUrl!; a.download = `payment-${entry.id}.jpg`; a.click(); }}
-                                          className="text-[7px] font-bold px-1.5 py-0.5 rounded"
-                                          style={{ backgroundColor: 'rgba(237,194,46,0.1)', color: '#EDC22E' }}>
-                                          ⬇️ Download
-                                        </button>
+                                      <div className="mt-1.5">
+                                        <p className="text-[7px] mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>📸 Payment Proof:</p>
+                                        <div className="rounded-lg overflow-hidden mb-1.5 cursor-pointer" style={{ border: '1px solid rgba(255,255,255,0.1)', maxHeight: 150 }}
+                                          onClick={() => setViewingScreenshot(entry.screenshotDataUrl!)}>
+                                          <img src={entry.screenshotDataUrl} alt="Proof" className="w-full h-auto object-contain" style={{ backgroundColor: '#FFFFFF' }} />
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                          <button onClick={() => setViewingScreenshot(entry.screenshotDataUrl!)}
+                                            className="text-[7px] font-bold px-2 py-1 rounded"
+                                            style={{ backgroundColor: 'rgba(0,230,118,0.1)', color: '#00E676' }}>
+                                            <Eye className="w-3 h-3 inline" /> View Full Size
+                                          </button>
+                                          <button onClick={() => { const a = document.createElement('a'); a.href = entry.screenshotDataUrl!; a.download = `payment-${entry.id}.jpg`; a.click(); }}
+                                            className="text-[7px] font-bold px-2 py-1 rounded"
+                                            style={{ backgroundColor: 'rgba(237,194,46,0.1)', color: '#EDC22E' }}>
+                                            ⬇️ Download
+                                          </button>
+                                        </div>
                                       </div>
                                     )}
                                   </div>
@@ -1073,8 +1182,8 @@ export function CouponCode({
                               <div className="flex items-center gap-1.5">
                                 <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Reward:</p>
                                 <select
-                                  value={ncRewardType}
-                                  onChange={(e) => setNcRewardType(e.target.value as RewardType)}
+                                  value={dcRewardType}
+                                  onChange={(e) => setDcRewardType(e.target.value as RewardType)}
                                   className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
                                   style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
                                 >
@@ -1091,20 +1200,23 @@ export function CouponCode({
                                 <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Amount:</p>
                                 <input
                                   type="number"
-                                  value={ncRewardAmount}
-                                  onChange={(e) => setNcRewardAmount(parseInt(e.target.value) || 0)}
+                                  value={dcRewardAmount}
+                                  onChange={(e) => setDcRewardAmount(parseInt(e.target.value) || 0)}
                                   min={1}
                                   className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
                                   style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
                                 />
                               </div>
                               <button
-                                onClick={handleSaveNightCodeSettings}
+                                onClick={handleSaveDayCodeSettings}
                                 className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
                                 style={{ background: 'linear-gradient(135deg, #FFD700, #FF7A00)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(255,165,0,0.3)' }}
                               >
-                                SAVE DAY CODE SETTINGS
+                                ☀️ SAVE DAY CODE (Real-time)
                               </button>
+                              <p className="text-[7px] text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                Changes take effect immediately in the game
+                              </p>
                             </div>
                           ) : (
                             <div className="space-y-1.5">
@@ -1160,8 +1272,11 @@ export function CouponCode({
                                 className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
                                 style={{ background: 'linear-gradient(135deg, #7C4DFF, #651FFF)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(124,77,255,0.3)' }}
                               >
-                                SAVE NIGHT CODE SETTINGS
+                                🌙 SAVE NIGHT CODE (Real-time)
                               </button>
+                              <p className="text-[7px] text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                Changes take effect immediately in the game
+                              </p>
                             </div>
                           )}
 
@@ -1512,7 +1627,7 @@ export function CouponCode({
 
                     {/* ====== HISTORY TAB ====== */}
                     {adminTab === 'history' && (
-                      <div className="space-y-2">
+                      <div className="space-y-2" style={{ maxHeight: 'calc(85vh - 100px)', overflowY: 'auto' }}>
                         <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
                           All Payment History ({allPurchases.length})
                         </p>
@@ -1522,88 +1637,88 @@ export function CouponCode({
                             <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No payment history</p>
                           </div>
                         ) : (
-                          <div className="space-y-1.5 max-h-[60vh] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
-                            {allPurchases.map(entry => {
-                              const isExpanded = expandedHistoryId === entry.id
-                              const coinAmount = entry.coinAmount || getCoinAmountFromItem(entry.item)
-                              return (
-                                <div key={entry.id} className="rounded-lg overflow-hidden"
-                                  style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <div className="space-y-2">
+                            {/* Group by person (buyerName or whatsappNumber) */}
+                            {(() => {
+                              const personMap = new Map<string, PurchaseHistoryEntry[]>()
+                              allPurchases.forEach(entry => {
+                                const key = entry.buyerName || entry.whatsappNumber || 'Unknown'
+                                if (!personMap.has(key)) personMap.set(key, [])
+                                personMap.get(key)!.push(entry)
+                              })
+                              return Array.from(personMap.entries()).map(([personName, entries]) => (
+                                <div key={personName} className="rounded-lg overflow-hidden"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                                   <button
-                                    onClick={() => setExpandedHistoryId(isExpanded ? null : entry.id)}
-                                    className="w-full flex items-center justify-between px-3 py-2"
+                                    onClick={() => setExpandedHistoryId(expandedHistoryId === personName ? null : personName)}
+                                    className="w-full flex items-center justify-between px-3 py-2.5"
                                   >
                                     <div className="flex items-center gap-2">
-                                      <span className="text-[10px]">{entry.type === 'inr_ability' ? '⚡' : '💰'}</span>
+                                      <div className="w-7 h-7 rounded-full flex items-center justify-center"
+                                        style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '1px solid rgba(237,194,46,0.2)' }}>
+                                        <span className="text-[10px]">👤</span>
+                                      </div>
                                       <div className="text-left">
-                                        <p className="text-[9px] font-bold" style={{ color: '#FFFFFF' }}>
-                                          {entry.buyerName || entry.whatsappNumber || entry.item}
-                                        </p>
+                                        <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>{personName}</p>
                                         <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                          {entry.item} • {entry.amount}
+                                          {entries.length} order{entries.length > 1 ? 's' : ''} • {entries.filter(e => e.status === 'Delivered').length} delivered • {entries.filter(e => e.status === 'Pending').length} pending
                                         </p>
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                      <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full"
-                                        style={{
-                                          backgroundColor: entry.status === 'Delivered' ? 'rgba(0,230,118,0.1)' : entry.status === 'Denied' ? 'rgba(246,94,59,0.1)' : 'rgba(237,194,46,0.1)',
-                                          color: entry.status === 'Delivered' ? '#00E676' : entry.status === 'Denied' ? '#F65E3B' : '#EDC22E',
-                                        }}>
-                                        {entry.status}
+                                      <span className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>
+                                        ₹{entries.reduce((sum, e) => {
+                                          const amt = parseInt(e.amount.replace(/[^0-9]/g, '')) || 0
+                                          return sum + amt
+                                        }, 0)}
                                       </span>
-                                      <ChevronRight className="w-3 h-3 transition-transform" style={{ color: 'rgba(255,255,255,0.3)', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0)' }} />
+                                      <ChevronRight className="w-3 h-3 transition-transform" style={{ color: 'rgba(255,255,255,0.3)', transform: expandedHistoryId === personName ? 'rotate(90deg)' : 'rotate(0)' }} />
                                     </div>
                                   </button>
-                                  {isExpanded && (
-                                    <div className="px-3 pb-2.5 space-y-1" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                                      <p className="text-[7px] pt-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                        📅 {new Date(entry.date).toLocaleString()}
-                                      </p>
-                                      {entry.buyerName && (
-                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                          👤 Name: <span style={{ color: 'rgba(255,255,255,0.6)' }}>{entry.buyerName}</span>
-                                        </p>
-                                      )}
-                                      {entry.whatsappNumber && (
-                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                          📱 WhatsApp: <span style={{ color: '#00E676' }}>{entry.whatsappNumber}</span>
-                                        </p>
-                                      )}
-                                      {entry.transactionId && (
-                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                          📋 TXN: <span className="font-mono" style={{ color: 'rgba(255,255,255,0.6)' }}>{entry.transactionId}</span>
-                                        </p>
-                                      )}
-                                      {entry.type === 'inr_ability' ? (
-                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                          ⚡ Ability: <span style={{ color: '#FF6D00' }}>{entry.abilityType}</span>
-                                          {entry.abilityCount && <span style={{ color: 'rgba(255,255,255,0.5)' }}> × {entry.abilityCount}</span>}
-                                        </p>
-                                      ) : (
-                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                          💰 Coins: <span style={{ color: '#EDC22E' }}>{coinAmount}</span>
-                                        </p>
-                                      )}
-                                      {entry.screenshotDataUrl && (
-                                        <div className="flex items-center gap-1.5 pt-1">
-                                          <button onClick={() => setViewingScreenshot(entry.screenshotDataUrl!)}
-                                            className="text-[8px] font-bold px-2 py-1 rounded-lg flex items-center gap-1"
-                                            style={{ backgroundColor: 'rgba(0,230,118,0.1)', color: '#00E676' }}>
-                                            <Eye className="w-3 h-3" /> View Proof
-                                          </button>
-                                          <button onClick={() => { const a = document.createElement('a'); a.href = entry.screenshotDataUrl!; a.download = `payment-${entry.id}.jpg`; a.click(); }}
-                                            className="text-[8px] font-bold px-2 py-1 rounded-lg flex items-center gap-1"
-                                            style={{ backgroundColor: 'rgba(237,194,46,0.1)', color: '#EDC22E' }}>
-                                            ⬇️ Download
-                                          </button>
-                                        </div>
-                                      )}
+                                  {expandedHistoryId === personName && (
+                                    <div className="px-3 pb-2.5 space-y-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                                      {entries.map(entry => {
+                                        const coinAmount = entry.coinAmount || getCoinAmountFromItem(entry.item)
+                                        return (
+                                          <div key={entry.id} className="p-2 rounded-lg"
+                                            style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                                            <div className="flex items-center justify-between mb-1">
+                                              <p className="text-[9px] font-bold" style={{ color: '#FFFFFF' }}>{entry.item}</p>
+                                              <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full"
+                                                style={{
+                                                  backgroundColor: entry.status === 'Delivered' ? 'rgba(0,230,118,0.1)' : entry.status === 'Denied' ? 'rgba(246,94,59,0.1)' : 'rgba(237,194,46,0.1)',
+                                                  color: entry.status === 'Delivered' ? '#00E676' : entry.status === 'Denied' ? '#F65E3B' : '#EDC22E',
+                                                }}>
+                                                {entry.status}
+                                              </span>
+                                            </div>
+                                            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                              📅 {new Date(entry.date).toLocaleString()} • {entry.amount}
+                                            </p>
+                                            {entry.whatsappNumber && (
+                                              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                                📱 {entry.whatsappNumber}
+                                              </p>
+                                            )}
+                                            {entry.type !== 'inr_ability' && (
+                                              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                                💰 {coinAmount} coins
+                                              </p>
+                                            )}
+                                            {entry.screenshotDataUrl && (
+                                              <div className="mt-1 rounded-lg overflow-hidden cursor-pointer" style={{ border: '1px solid rgba(255,255,255,0.1)', maxHeight: 100 }}
+                                                onClick={() => setViewingScreenshot(entry.screenshotDataUrl!)}>
+                                                <img src={entry.screenshotDataUrl} alt="Proof" className="w-full h-auto object-contain" style={{ backgroundColor: '#FFFFFF' }} />
+                                              </div>
+                                            )}
+                                          </div>
+                                        )
+                                      })}
                                     </div>
                                   )}
                                 </div>
-                              )
-                            })}
+                              ))
+                            })()}
                           </div>
                         )}
                       </div>
@@ -1750,7 +1865,7 @@ export function CouponCode({
               initial={{ scale: 0.8 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.8 }}
-              className="relative max-w-lg w-full rounded-2xl p-4 text-center"
+              className="relative max-w-2xl w-[95vw] rounded-2xl p-4 text-center"
               style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -1763,7 +1878,7 @@ export function CouponCode({
                 </button>
               </div>
               <div className="rounded-lg overflow-hidden mb-3" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
-                <img src={viewingScreenshot} alt="Payment proof" className="w-full h-auto max-h-[80vh] object-contain" style={{ backgroundColor: '#FFFFFF' }} />
+                <img src={viewingScreenshot} alt="Payment proof" className="w-full h-auto max-h-[70vh] object-contain rounded-lg" style={{ backgroundColor: '#FFFFFF', imageRendering: 'auto' }} />
               </div>
               <div className="flex gap-2">
                 <button onClick={() => {

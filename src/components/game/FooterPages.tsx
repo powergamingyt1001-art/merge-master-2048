@@ -158,8 +158,8 @@ export function ContactPage({ isOpen, onClose }: { isOpen: boolean; onClose: () 
           <span className="text-2xl">📸</span>
           <div className="flex-1">
             <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>Instagram</p>
-            <a href="https://instagram.com/powergamingyt1001" target="_blank" rel="noopener noreferrer"
-              className="text-[9px] font-semibold" style={{ color: '#E1306C' }}>@powergamingyt1001</a>
+            <a href="https://www.instagram.com/strike_bulk_shop?igsh=MXBtajQ3N241d29vaQ==" target="_blank" rel="noopener noreferrer"
+              className="text-[9px] font-semibold" style={{ color: '#E1306C' }}>@strike_bulk_shop</a>
             <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>DM us on Instagram</p>
           </div>
         </div>
@@ -169,12 +169,19 @@ export function ContactPage({ isOpen, onClose }: { isOpen: boolean; onClose: () 
           <span className="text-2xl">✈️</span>
           <div className="flex-1">
             <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>Telegram Support</p>
-            <a href="https://t.me/powergaming_support" target="_blank" rel="noopener noreferrer"
-              className="text-[9px] font-semibold" style={{ color: '#0088cc' }}>@powergaming_support</a>
+            <a href="https://t.me/deepanshu100111112" target="_blank" rel="noopener noreferrer"
+              className="text-[9px] font-semibold" style={{ color: '#0088cc' }}>@deepanshu100111112</a>
             <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Quick support on Telegram</p>
           </div>
         </div>
       </div>
+
+      <Section title="Upload Payment Proof">
+        <Text>You can send your payment screenshots/proof through any of the channels above. We do NOT collect payment proof inside the app.</Text>
+        <Bullet>📱 Send proof on Telegram for fastest verification</Bullet>
+        <Bullet>📸 DM on Instagram with your screenshot</Bullet>
+        <Bullet>📧 Email your proof with order details</Bullet>
+      </Section>
 
       <Section title="What can we help with?">
         <Bullet>Bug reports and technical issues</Bullet>
