@@ -235,23 +235,26 @@ export function ProfilePanel({
               </div>
 
               {/* Level Progress */}
-              <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <button onClick={() => setShowLevelList(true)} className="w-full p-3 rounded-xl mb-3 text-left transition-transform active:scale-[0.98]" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-bold" style={{ color: levelInfo.color }}>Level {playerLevel} Progress</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-extrabold" style={{ color: levelInfo.color }}>Lv.{playerLevel}</span>
+                    <span className="text-[9px] font-bold" style={{ color: levelInfo.color }}>{levelInfo.icon} {levelInfo.title}</span>
+                  </div>
                   <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{levelXP.toLocaleString()} / {nextLevelThreshold.toLocaleString()} XP</span>
                 </div>
-                <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                <div className="h-3 rounded-full overflow-hidden relative" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
                   <div className="h-full rounded-full transition-all" style={{ width: `${progressPct}%`, background: `linear-gradient(90deg, ${levelInfo.color}, ${levelInfo.color}CC)` }} />
+                  <span className="absolute inset-0 flex items-center justify-center text-[7px] font-extrabold" style={{ color: 'rgba(255,255,255,0.9)', textShadow: '0 1px 2px rgba(0,0,0,0.5)' }}>
+                    {Math.round(progressPct)}%
+                  </span>
                 </div>
                 {playerLevel < MAX_LEVEL && (
                   <p className="text-[8px] mt-1 text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                    {xpNeededForNextLevel.toLocaleString()} more XP to Level {playerLevel + 1}
+                    {xpNeededForNextLevel.toLocaleString()} more XP to Level {playerLevel + 1} ▼
                   </p>
                 )}
-                {playerLevel >= MAX_LEVEL && (
-                  <p className="text-[8px] mt-1 text-center" style={{ color: '#F65E3B' }}>MAX LEVEL! 🎮🔥</p>
-                )}
-              </div>
+              </button>
 
               {/* Win Rate Box - Prominent */}
               <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)' }}>

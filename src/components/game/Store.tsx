@@ -311,11 +311,11 @@ export function Store({
     const reader = new FileReader()
     reader.onloadend = () => {
       const result = reader.result as string
-      // Resize to save localStorage space - max 200x200
+      // Resize to save localStorage space - max 400x400
       const img = new Image()
       img.onload = () => {
         const canvas = document.createElement('canvas')
-        const maxSize = 200
+        const maxSize = 400
         let w = img.width
         let h = img.height
         if (w > h) { h = (h / w) * maxSize; w = maxSize }

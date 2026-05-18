@@ -98,6 +98,11 @@ const COIN_GAME_MODES = [
   { fee: 200, win: 400, color: '#EDC22E', label: '₹200' },
   { fee: 500, win: 1000, color: '#FF7A00', label: '₹500' },
   { fee: 1000, win: 2000, color: '#F65E3B', label: '₹1000' },
+  { fee: 1500, win: 3000, color: '#FF69B4', label: '₹1500' },
+  { fee: 3000, win: 6000, color: '#E040FB', label: '₹3000' },
+  { fee: 6500, win: 13000, color: '#00BCD4', label: '₹6500' },
+  { fee: 10000, win: 20000, color: '#FF5252', label: '₹10000' },
+  { fee: 20000, win: 40000, color: '#FFD700', label: '₹20000' },
 ]
 
 export function PlayDashboard({
@@ -313,13 +318,13 @@ export function PlayDashboard({
 
             {/* Quick mode buttons */}
             <div className="flex flex-col gap-1.5">
-              <button onClick={() => setShowBattleModes(!showBattleModes)}
+              <button onClick={() => { setShowBattleModes(!showBattleModes); setShowCoinGames(false) }}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg transition-transform active:scale-95"
                 style={{ backgroundColor: 'rgba(246,94,59,0.12)', border: '1px solid rgba(246,94,59,0.25)' }}>
                 <Swords className="w-3 h-3" style={{ color: '#F65E3B' }} />
                 <span className="text-[9px] font-bold" style={{ color: '#F65E3B' }}>Battle</span>
               </button>
-              <button onClick={() => setShowCoinGames(!showCoinGames)}
+              <button onClick={() => { setShowCoinGames(!showCoinGames); setShowBattleModes(false) }}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg transition-transform active:scale-95"
                 style={{ backgroundColor: 'rgba(237,194,46,0.12)', border: '1px solid rgba(237,194,46,0.25)' }}>
                 <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
@@ -367,7 +372,7 @@ export function PlayDashboard({
             {showCoinGames && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="w-full overflow-hidden">
                 <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.04)', border: '1px solid rgba(237,194,46,0.08)' }}>
-                  <div className="grid grid-cols-5 gap-1">
+                  <div className="grid grid-cols-5 gap-1 max-h-40 overflow-y-auto">
                     {COIN_GAME_MODES.map((mode) => {
                       const canPlay = coins >= mode.fee && isOnline && !isGameLimitReached
                       return (

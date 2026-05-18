@@ -255,7 +255,7 @@ function getCoinAmountFromItem(item: string): number {
   return 500
 }
 
-type AdminTab = 'payments' | 'coupons' | 'prices'
+type AdminTab = 'payments' | 'coupons' | 'prices' | 'history'
 
 // Custom price overrides stored in localStorage
 interface CustomPriceOverride {
@@ -344,6 +344,7 @@ export function CouponCode({
   const [dayCodeCustom, setDayCodeCustom] = useState('')
   const [nightCodeCustom, setNightCodeCustom] = useState('')
   const [viewingScreenshot, setViewingScreenshot] = useState<string | null>(null)
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
 
   // Refresh admin data when panel opens
   useEffect(() => {
@@ -825,6 +826,7 @@ export function CouponCode({
                       { key: 'payments' as AdminTab, label: 'Payments', icon: <Clock className="w-3 h-3" /> },
                       { key: 'coupons' as AdminTab, label: 'Coupons', icon: <Ticket className="w-3 h-3" /> },
                       { key: 'prices' as AdminTab, label: 'Prices', icon: <Coins className="w-3 h-3" /> },
+                      { key: 'history' as AdminTab, label: 'History', icon: <ChevronRight className="w-3 h-3" /> },
                     ].map(tab => (
                       <button
                         key={tab.key}
@@ -860,7 +862,7 @@ export function CouponCode({
                             <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No pending purchases</p>
                           </div>
                         ) : (
-                          <div className="space-y-1.5 max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                          <div className="space-y-1.5 max-h-[60vh] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
                             {pendingPurchases.map(entry => {
                               const hoursSince = (Date.now() - new Date(entry.date).getTime()) / (1000 * 60 * 60)
                               const isDelayed = hoursSince > 12
@@ -979,7 +981,7 @@ export function CouponCode({
                             <p className="text-[9px] font-bold mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
                               Recent Processed
                             </p>
-                            <div className="max-h-32 overflow-y-auto space-y-1" style={{ scrollbarWidth: 'thin' }}>
+                            <div className="max-h-[60vh] overflow-y-auto space-y-1" style={{ scrollbarWidth: 'thin' }}>
                               {allPurchases.filter(p => p.status !== 'Pending').slice(0, 15).map(entry => {
                                 const hoursSinceDelivered = entry.status === 'Delivered'
                                   ? (Date.now() - new Date(entry.date).getTime()) / (1000 * 60 * 60)
@@ -1507,6 +1509,105 @@ export function CouponCode({
                         </p>
                       </div>
                     )}
+
+                    {/* ====== HISTORY TAB ====== */}
+                    {adminTab === 'history' && (
+                      <div className="space-y-2">
+                        <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                          All Payment History ({allPurchases.length})
+                        </p>
+                        {allPurchases.length === 0 ? (
+                          <div className="text-center py-4">
+                            <span className="text-2xl block mb-1">📋</span>
+                            <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No payment history</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5 max-h-[60vh] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                            {allPurchases.map(entry => {
+                              const isExpanded = expandedHistoryId === entry.id
+                              const coinAmount = entry.coinAmount || getCoinAmountFromItem(entry.item)
+                              return (
+                                <div key={entry.id} className="rounded-lg overflow-hidden"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                  <button
+                                    onClick={() => setExpandedHistoryId(isExpanded ? null : entry.id)}
+                                    className="w-full flex items-center justify-between px-3 py-2"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px]">{entry.type === 'inr_ability' ? '⚡' : '💰'}</span>
+                                      <div className="text-left">
+                                        <p className="text-[9px] font-bold" style={{ color: '#FFFFFF' }}>
+                                          {entry.buyerName || entry.whatsappNumber || entry.item}
+                                        </p>
+                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                          {entry.item} • {entry.amount}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full"
+                                        style={{
+                                          backgroundColor: entry.status === 'Delivered' ? 'rgba(0,230,118,0.1)' : entry.status === 'Denied' ? 'rgba(246,94,59,0.1)' : 'rgba(237,194,46,0.1)',
+                                          color: entry.status === 'Delivered' ? '#00E676' : entry.status === 'Denied' ? '#F65E3B' : '#EDC22E',
+                                        }}>
+                                        {entry.status}
+                                      </span>
+                                      <ChevronRight className="w-3 h-3 transition-transform" style={{ color: 'rgba(255,255,255,0.3)', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0)' }} />
+                                    </div>
+                                  </button>
+                                  {isExpanded && (
+                                    <div className="px-3 pb-2.5 space-y-1" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                                      <p className="text-[7px] pt-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                        📅 {new Date(entry.date).toLocaleString()}
+                                      </p>
+                                      {entry.buyerName && (
+                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                          👤 Name: <span style={{ color: 'rgba(255,255,255,0.6)' }}>{entry.buyerName}</span>
+                                        </p>
+                                      )}
+                                      {entry.whatsappNumber && (
+                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                          📱 WhatsApp: <span style={{ color: '#00E676' }}>{entry.whatsappNumber}</span>
+                                        </p>
+                                      )}
+                                      {entry.transactionId && (
+                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                          📋 TXN: <span className="font-mono" style={{ color: 'rgba(255,255,255,0.6)' }}>{entry.transactionId}</span>
+                                        </p>
+                                      )}
+                                      {entry.type === 'inr_ability' ? (
+                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                          ⚡ Ability: <span style={{ color: '#FF6D00' }}>{entry.abilityType}</span>
+                                          {entry.abilityCount && <span style={{ color: 'rgba(255,255,255,0.5)' }}> × {entry.abilityCount}</span>}
+                                        </p>
+                                      ) : (
+                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                          💰 Coins: <span style={{ color: '#EDC22E' }}>{coinAmount}</span>
+                                        </p>
+                                      )}
+                                      {entry.screenshotDataUrl && (
+                                        <div className="flex items-center gap-1.5 pt-1">
+                                          <button onClick={() => setViewingScreenshot(entry.screenshotDataUrl!)}
+                                            className="text-[8px] font-bold px-2 py-1 rounded-lg flex items-center gap-1"
+                                            style={{ backgroundColor: 'rgba(0,230,118,0.1)', color: '#00E676' }}>
+                                            <Eye className="w-3 h-3" /> View Proof
+                                          </button>
+                                          <button onClick={() => { const a = document.createElement('a'); a.href = entry.screenshotDataUrl!; a.download = `payment-${entry.id}.jpg`; a.click(); }}
+                                            className="text-[8px] font-bold px-2 py-1 rounded-lg flex items-center gap-1"
+                                            style={{ backgroundColor: 'rgba(237,194,46,0.1)', color: '#EDC22E' }}>
+                                            ⬇️ Download
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -1522,13 +1623,13 @@ export function CouponCode({
                 <div className="flex gap-2">
                   <div className="flex-1 px-2 py-1.5 rounded text-center"
                     style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(237,194,46,0.2)' }}>
-                    <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Day Code</p>
-                    <p className="text-[10px] font-bold tracking-wide" style={{ color: '#FFD700' }}>{dayCode}</p>
+                    <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Day Code</p>
+                    <p className="text-[11px] font-extrabold font-mono tracking-wider" style={{ color: '#FFD700', letterSpacing: '1px' }}>{dayCode}</p>
                   </div>
                   <div className="flex-1 px-2 py-1.5 rounded text-center"
                     style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(237,194,46,0.2)' }}>
-                    <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Night Code</p>
-                    <p className="text-[10px] font-bold tracking-wide" style={{ color: '#00E676' }}>{nightCode}</p>
+                    <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Night Code</p>
+                    <p className="text-[11px] font-extrabold font-mono tracking-wider" style={{ color: '#00E676', letterSpacing: '1px' }}>{nightCode}</p>
                   </div>
                 </div>
               </div>
@@ -1605,7 +1706,16 @@ export function CouponCode({
               {/* Claim History */}
               {claimHistory.length > 0 && (
                 <div>
-                  <p className="text-[9px] font-bold mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>Claim History</p>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Claim History</p>
+                    <button
+                      onClick={() => { setClaimHistory([]); saveClaimedCoupons([]) }}
+                      className="text-[8px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-1 transition-transform active:scale-95"
+                      style={{ backgroundColor: 'rgba(246,94,59,0.1)', color: '#F65E3B' }}
+                    >
+                      🗑️ Delete All
+                    </button>
+                  </div>
                   <div className="max-h-32 overflow-y-auto space-y-1 pr-1" style={{ scrollbarWidth: 'thin' }}>
                     {claimHistory.slice(0, 20).map((claim, i) => (
                       <div key={i} className="flex items-center justify-between px-2 py-1.5 rounded-lg"
@@ -1640,7 +1750,7 @@ export function CouponCode({
               initial={{ scale: 0.8 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.8 }}
-              className="relative max-w-sm w-full rounded-2xl p-4 text-center"
+              className="relative max-w-lg w-full rounded-2xl p-4 text-center"
               style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -1653,7 +1763,7 @@ export function CouponCode({
                 </button>
               </div>
               <div className="rounded-lg overflow-hidden mb-3" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
-                <img src={viewingScreenshot} alt="Payment proof" className="w-full h-auto max-h-64 object-contain" style={{ backgroundColor: '#FFFFFF' }} />
+                <img src={viewingScreenshot} alt="Payment proof" className="w-full h-auto max-h-[80vh] object-contain" style={{ backgroundColor: '#FFFFFF' }} />
               </div>
               <div className="flex gap-2">
                 <button onClick={() => {

@@ -384,3 +384,90 @@ Stage Summary:
 - UPI ID changed to 7668122925@mbk
 - Screenshot viewer with View + Download in admin panel
 - All changes lint-clean and pushed to GitHub
+
+## Task 2-a: Fix Battle/Coin toggle + Add more coin game modes
+
+**Date**: 2026-03-05
+
+### Changes made to `/home/z/my-project/src/components/game/PlayDashboard.tsx`:
+
+1. **Battle/Coin mutual exclusion** - Changed button `onClick` handlers:
+   - Battle button: `onClick={() => { setShowBattleModes(!showBattleModes); setShowCoinGames(false) }}`
+   - Coins button: `onClick={() => { setShowCoinGames(!showCoinGames); setShowBattleModes(false) }}`
+   - Now clicking one closes the other, ensuring only one panel is open at a time.
+
+2. **Added more coin game modes** - Expanded `COIN_GAME_MODES` from 5 to 10 entries:
+   - Added: ₹1500 (win 3000, #FF69B4), ₹3000 (win 6000, #E040FB), ₹6500 (win 13000, #00BCD4), ₹10000 (win 20000, #FF5252), ₹20000 (win 40000, #FFD700)
+
+3. **Scrollable coin games grid** - Added `max-h-40 overflow-y-auto` to the coin games grid container so the expanded modes scroll within a bounded height.
+
+### Verification:
+- Lint passed with no errors.
+
+---
+
+## Task 2-b: ProfilePanel Level Number on Progress Bar + ContactPage with Email/Instagram/Telegram
+
+**Date**: 2026-03-05
+
+### Change 1: ProfilePanel.tsx - Level Progress section redesigned
+
+- Changed Level Progress from a plain `<div>` to a `<button>` that opens the level list (`setShowLevelList(true)`)
+- Added big `Lv.{playerLevel}` text (text-lg font-extrabold) with level icon and title next to it
+- Progress bar height increased from h-2 to h-3 with `relative` positioning
+- Added percentage text overlaid on the progress bar (`absolute inset-0 flex items-center justify-center`, 7px font, white with text shadow)
+- Added `active:scale-[0.98]` press feedback on the button
+- Added `▼` indicator to "more XP to Level N" hint text
+- Removed the separate "MAX LEVEL! 🎮🔥" block (now handled by the conditional xpNeededForNextLevel text only)
+
+### Change 2: FooterPages.tsx - ContactPage replaced with multi-channel support
+
+- Changed title from "Contact Us" to "Contact & Support"
+- Replaced simple email-only contact with 3 channel cards:
+  - 📧 Email Support: powergamingyt1001@gmail.com (mailto link, green color)
+  - 📸 Instagram: @powergamingyt1001 (instagram.com link, pink #E1306C color)
+  - ✈️ Telegram Support: @powergaming_support (t.me link, blue #0088cc color)
+- Each card has emoji, title, clickable link, and description text
+- Updated help topics: added "Payment problems", kept bug reports, feature suggestions, account questions, partnership inquiries; removed "Ad-related concerns"
+
+### Verification:
+- Lint passed with no errors.
+
+---
+
+## Task 2-c: Admin Panel Improvements (CouponCode.tsx)
+
+**Date**: 2026-03-05
+
+### Change 1: Payment proof screenshot bigger in viewing overlay
+- Changed `max-h-64` to `max-h-[80vh]` on the screenshot `<img>` element
+- Changed modal container from `max-w-sm` to `max-w-lg` for bigger modal
+
+### Change 2: Recent Processed and Pending lists extended to full screen
+- Changed `max-h-32` to `max-h-[60vh]` in the "Recent Processed" history section
+- Changed `max-h-64` to `max-h-[60vh]` in the pending purchases section
+
+### Change 3: Delete All button for claim history
+- Added "🗑️ Delete All" button next to "Claim History" title
+- Button clears claimHistory state and saves empty array to localStorage
+- Styled with red accent (rgba(246,94,59,0.1) bg, #F65E3B text)
+
+### Change 4: Coupon code display bigger and more visible (user section)
+- Day Code label: `text-[7px]` → `text-[8px] font-bold`, color from rgba(255,255,255,0.4) to rgba(255,255,255,0.5)
+- Day Code value: `text-[10px] font-bold tracking-wide` → `text-[11px] font-extrabold font-mono tracking-wider` + `letterSpacing: '1px'`
+- Night Code label: same changes as Day Code label
+- Night Code value: same changes as Day Code value
+
+### Change 5: History tab added to admin panel
+- Extended `AdminTab` type: added `'history'` to union type
+- Added `expandedHistoryId` state for expandable entries
+- Added History tab button in admin tab bar (after Prices) with ChevronRight icon
+- History tab content shows all purchases with:
+  - Expandable entries (click to toggle details)
+  - Buyer name or WhatsApp number as primary identifier
+  - Status badge (Delivered=green, Denied=red, Pending=yellow)
+  - Expanded view: date, name, WhatsApp, TXN, ability/coins info, screenshot View/Download buttons
+  - Scrollable list with `max-h-[60vh]`
+
+### Verification:
+- Lint passed with no errors.
