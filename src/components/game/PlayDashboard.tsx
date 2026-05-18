@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Swords, Clock, Trophy, Coins, Crown, Bell, Lock } from 'lucide-react'
+import { Play, Swords, Clock, Trophy, Coins, Crown, Bell, Lock, ShoppingCart, Ticket } from 'lucide-react'
 import { SpinWheel, SpinPrize } from './SpinWheel'
 import { LoginStreak } from './LoginStreak'
 import { WelcomeGift } from './WelcomeGift'
@@ -20,6 +20,8 @@ import {
 } from '@/components/ads/AdsterraAds'
 import { PowerUp, Notification, DailyTask, getLevelInfo } from '@/hooks/useGame'
 import { getRandomLink } from '@/components/ads/AdOverlay'
+import { CouponCode } from './CouponCode'
+import { Store } from './Store'
 
 interface PlayDashboardProps {
   coins: number
@@ -79,6 +81,8 @@ interface PlayDashboardProps {
   onResetAllData?: () => void
   weeklyBonusClaimed?: boolean
   onClaimWeeklyBonus?: () => void
+  onClaimStreakAdBonus?: () => void
+  streakAdBonusClaimed?: boolean
 }
 
 const COIN_GAME_MODES = [
@@ -104,7 +108,7 @@ export function PlayDashboard({
   onAddNotification, onMarkNotificationRead, onMarkAllNotificationsRead,
   onUpdatePlayerName, onUpdatePlayerAvatar,
   dailyTasks, onClaimDailyTask, onCompleteVisitWebsiteTask, onResetAllData,
-  weeklyBonusClaimed = false, onClaimWeeklyBonus,
+  weeklyBonusClaimed = false, onClaimWeeklyBonus, onClaimStreakAdBonus, streakAdBonusClaimed = false,
 }: PlayDashboardProps) {
   const [showSpin, setShowSpin] = useState(false)
   const [showStreak, setShowStreak] = useState(false)
@@ -119,6 +123,8 @@ export function PlayDashboard({
   const [showPrivacy, setShowPrivacy] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
   const [showContact, setShowContact] = useState(false)
+  const [showStore, setShowStore] = useState(false)
+  const [showCouponCode, setShowCouponCode] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
   // Decide which big banner to show (only 1 per session) - lazy init
   const [bigBannerSlot] = useState<string>(() => getDashboardBigBannerSlot())
@@ -248,6 +254,10 @@ export function PlayDashboard({
               <InventoryItem emoji="💣" count={blastCount} color="#FF7A00" />
             </div>
             <div className="flex items-center gap-1.5">
+              <button onClick={() => setShowCouponCode(true)} className="flex items-center gap-0.5 px-1 py-0.5 rounded transition-transform active:scale-95" style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.12)' }}>
+                <Ticket className="w-2.5 h-2.5" style={{ color: '#EDC22E' }} />
+                <span className="text-[7px] font-bold" style={{ color: '#EDC22E' }}>Code</span>
+              </button>
               <div className="flex items-center gap-0.5 px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(0,230,118,0.08)' }}>
                 <span className="text-[10px]">🎫</span>
                 <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>{spinTickets}</span>
@@ -375,8 +385,8 @@ export function PlayDashboard({
             <AdsterraNativeBanner />
           </div>
 
-          {/* Quick Actions: Streak + Spin + Weekly + Leaderboard */}
-          <div className="w-full grid grid-cols-4 gap-1.5">
+          {/* Quick Actions: Streak + Spin + Weekly + Store + Leaderboard */}
+          <div className="w-full grid grid-cols-5 gap-1.5">
             <button onClick={() => setShowStreak(true)}
               className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
               style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
@@ -401,6 +411,13 @@ export function PlayDashboard({
               <span className="text-base">🎁</span>
               <p className="text-[7px] font-bold" style={{ color: weeklyBonusClaimed ? 'rgba(255,255,255,0.3)' : '#EDC22E' }}>Weekly</p>
               <p className="text-[6px]" style={{ color: weeklyBonusClaimed ? 'rgba(255,255,255,0.2)' : '#00E676' }}>{weeklyBonusClaimed ? '✓' : '400💰'}</p>
+            </button>
+            <button onClick={() => setShowStore(true)}
+              className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
+              style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
+              <ShoppingCart className="w-4 h-4" style={{ color: '#EDC22E' }} />
+              <p className="text-[7px] font-bold" style={{ color: '#EDC22E' }}>Store</p>
+              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Buy</p>
             </button>
             <button onClick={() => setShowLeaderboard(true)}
               className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
@@ -428,7 +445,19 @@ export function PlayDashboard({
               <div className="flex flex-col gap-1">
                 {dailyTasks.map(task => {
                   const isComplete = task.progress >= task.target
-                  const isVisitTask = task.id.startsWith('visit-')
+                  const isVisitTask = task.id.startsWith('visit1-') || task.id.startsWith('visit2-')
+                  // Format reward display based on rewardType
+                  const rewardDisplay = task.rewardType === 'coins'
+                    ? `+${task.reward}💰`
+                    : task.rewardType === 'bomb'
+                      ? `+${task.rewardCount}💣`
+                      : task.rewardType === 'hammer'
+                        ? `+${task.rewardCount}🔨`
+                        : task.rewardType === 'magnet'
+                          ? `+${task.rewardCount}🧲`
+                          : task.rewardType === 'spin'
+                            ? `+${task.rewardCount}🎫`
+                            : `+${task.reward}💰`
                   return (
                     <div key={task.id} className="flex items-center justify-between px-2 py-1.5 rounded-lg"
                       style={{ backgroundColor: isComplete ? 'rgba(0,230,118,0.06)' : 'rgba(255,255,255,0.02)', border: `1px solid ${isComplete ? 'rgba(0,230,118,0.15)' : 'rgba(255,255,255,0.04)'}` }}>
@@ -436,7 +465,7 @@ export function PlayDashboard({
                         <span className="text-[10px]">{task.emoji}</span>
                         <div>
                           <p className="text-[8px] font-semibold" style={{ color: isComplete ? '#00E676' : 'rgba(255,255,255,0.7)' }}>{task.description}</p>
-                          <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{task.progress}/{task.target} • +{task.reward}💰</p>
+                          <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{task.progress}/{task.target} • {rewardDisplay}</p>
                         </div>
                       </div>
                       {task.claimed ? (
@@ -512,7 +541,8 @@ export function PlayDashboard({
       <SpinWheel isOpen={showSpin} onClose={() => setShowSpin(false)} spinTickets={spinTickets}
         onUseTicket={onUseSpinTicket} onWinPrize={handleSpinPrize} onWatchAdForSpin={() => { onAddSpinTickets(1) }} isOnline={isOnline} />
       <LoginStreak isOpen={showStreak} onClose={() => setShowStreak(false)} streakDay={streakDay}
-        streakClaimed={streakClaimed} onClaim={onClaimStreakDay} />
+        streakClaimed={streakClaimed} onClaim={onClaimStreakDay}
+        onClaimStreakAdBonus={onClaimStreakAdBonus ?? (() => {})} streakAdBonusClaimed={streakAdBonusClaimed} />
       <WelcomeGift isOpen={showWelcome} onClose={() => setShowWelcome(false)} onClaim={() => { onClaimWelcome(); setShowWelcome(false) }} />
       <Leaderboard isOpen={showLeaderboard} onClose={() => setShowLeaderboard(false)}
         gamePoints={gamePoints} bestScore={bestScore} coins={coins}
@@ -545,6 +575,34 @@ export function PlayDashboard({
       <PrivacyPolicy isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
       <AboutPage isOpen={showAbout} onClose={() => setShowAbout(false)} />
       <ContactPage isOpen={showContact} onClose={() => setShowContact(false)} />
+      <Store
+        isOpen={showStore}
+        onClose={() => setShowStore(false)}
+        coins={coins}
+        hammerCount={hammerCount}
+        magnetCount={magnetCount}
+        blastCount={blastCount}
+        spinTickets={spinTickets}
+        playerId={playerId}
+        onAddCoins={onAddCoins}
+        onAddPowerUp={onAddPowerUp}
+        onAddUndos={onAddUndos}
+        onAddSpinTickets={onAddSpinTickets}
+        onAddNotification={onAddNotification}
+      />
+      <CouponCode
+        isOpen={showCouponCode}
+        onClose={() => setShowCouponCode(false)}
+        coins={coins}
+        hammerCount={hammerCount}
+        magnetCount={magnetCount}
+        blastCount={blastCount}
+        spinTickets={spinTickets}
+        onAddCoins={onAddCoins}
+        onAddPowerUp={onAddPowerUp}
+        onAddSpinTickets={onAddSpinTickets}
+        onAddNotification={onAddNotification}
+      />
     </div>
   )
 }

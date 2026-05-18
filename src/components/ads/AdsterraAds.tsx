@@ -11,8 +11,8 @@ import { useEffect, useRef } from 'react'
 // inappropriate/dirty ads for family-friendly gaming
 //
 // AD CONDITIONS:
-// - Popunder: 50% chance per session, 15s delay, once per 5 min
-// - Social Bar: 50% chance per session, 10s delay
+// - Popunder: Always loads, 8s delay, once per 5 min, data-cfasync=false
+// - Social Bar: Always loads, 5s delay, data-cfasync=false
 // - Big banners (728x90, 300x250): Only ONE per page view (rotated)
 // - Small banners (320x50, 468x60): Always shown (small, non-intrusive)
 // ============================================================
@@ -56,16 +56,13 @@ export function getDashboardBigBannerSlot(): string {
 }
 
 // --- Popunder Ad (Global - with conditions) ---
-// 50% chance per session, 15s delay, once per 5 minutes
+// Always loads (100%), 8s delay, once per 5 minutes, data-cfasync=false
 export function AdsterraPopunder() {
   useEffect(() => {
-    // Check session chance
-    if (!shouldShowAdThisSession('popunder', 50)) return
-
     const existing = document.getElementById('adsterra-popunder')
     if (existing) return
 
-    // 15 second delay after page load - prevents redirect on page open
+    // 8 second delay after page load - prevents redirect on page open
     const timer = setTimeout(() => {
       // Check if we can show popunder now (5 min cooldown)
       if (!canShowPopunderNow()) return
@@ -74,9 +71,27 @@ export function AdsterraPopunder() {
       script.id = 'adsterra-popunder'
       script.src = 'https://pl29392034.profitablecpmratenetwork.com/40/9d/aa/409daa8e988b716a6a40b571e679667a.js'
       script.async = true
-      document.body.appendChild(script)
+      script.setAttribute('data-cfasync', 'false')
+
+      // Fallback: try document.head if document.body append fails
+      try {
+        document.body.appendChild(script)
+      } catch {
+        document.head.appendChild(script)
+      }
+
       markPopunderShown()
-    }, 15000) // 15 second delay
+
+      // Error handling: if script fails to load, retry once with head append
+      script.onerror = () => {
+        const retryScript = document.createElement('script')
+        retryScript.id = 'adsterra-popunder-retry'
+        retryScript.src = script.src
+        retryScript.async = true
+        retryScript.setAttribute('data-cfasync', 'false')
+        document.head.appendChild(retryScript)
+      }
+    }, 8000) // 8 second delay
 
     return () => clearTimeout(timer)
   }, [])
@@ -85,23 +100,37 @@ export function AdsterraPopunder() {
 }
 
 // --- Social Bar Ad (Global - with conditions) ---
-// 50% chance per session, 10s delay
+// Always loads (100%), 5s delay, data-cfasync=false
 export function AdsterraSocialBar() {
   useEffect(() => {
-    // Check session chance
-    if (!shouldShowAdThisSession('socialbar', 50)) return
-
     const existing = document.getElementById('adsterra-socialbar')
     if (existing) return
 
-    // 10 second delay after page load
+    // 5 second delay after page load
     const timer = setTimeout(() => {
       const script = document.createElement('script')
       script.id = 'adsterra-socialbar'
       script.src = 'https://pl29392035.profitablecpmratenetwork.com/b7/40/ba/b740ba65f24e56491e9bd88c482e6b7f.js'
       script.async = true
-      document.body.appendChild(script)
-    }, 10000) // 10 second delay
+      script.setAttribute('data-cfasync', 'false')
+
+      // Fallback: try document.head if document.body append fails
+      try {
+        document.body.appendChild(script)
+      } catch {
+        document.head.appendChild(script)
+      }
+
+      // Error handling: if script fails to load, retry once with head append
+      script.onerror = () => {
+        const retryScript = document.createElement('script')
+        retryScript.id = 'adsterra-socialbar-retry'
+        retryScript.src = script.src
+        retryScript.async = true
+        retryScript.setAttribute('data-cfasync', 'false')
+        document.head.appendChild(retryScript)
+      }
+    }, 5000) // 5 second delay
 
     return () => clearTimeout(timer)
   }, [])

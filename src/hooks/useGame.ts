@@ -56,7 +56,9 @@ export interface DailyTask {
   emoji: string
   target: number
   progress: number
-  reward: number
+  reward: number  // coins (0 if ability reward)
+  rewardType: 'coins' | 'bomb' | 'hammer' | 'magnet' | 'spin'
+  rewardCount: number  // how many of the reward type
   claimed: boolean
 }
 
@@ -141,6 +143,9 @@ export interface GameState {
   weeklyBonusClaimed: boolean
   // Daily tasks
   dailyTasks: DailyTask[]
+  // Streak ad bonus (100 coins from watching ad in streak modal)
+  streakAdBonusClaimed: boolean
+  streakAdBonusDate: string
 }
 
 const BOT_NAMES = [
@@ -549,15 +554,91 @@ export function getCurrentLevelPoints(level: number): number {
   return getLevelThreshold(Math.min(Math.max(level, 1), MAX_LEVEL))
 }
 
-// Generate daily tasks for today
+// Task type pool for daily task generation
+type TaskCategory = 'visitor' | 'game' | 'ability'
+
+interface TaskTemplate {
+  idPrefix: string
+  description: string
+  emoji: string
+  target: number
+  reward: number
+  rewardType: DailyTask['rewardType']
+  rewardCount: number
+  category: TaskCategory
+}
+
+const TASK_TEMPLATES: TaskTemplate[] = [
+  // Visitor tasks
+  { idPrefix: 'visit1', description: 'Visit Sponsor Website', emoji: '🌐', target: 1, reward: 50, rewardType: 'coins', rewardCount: 50, category: 'visitor' },
+  { idPrefix: 'visit2', description: 'Visit 2 Sponsor Websites', emoji: '🌐🌐', target: 2, reward: 100, rewardType: 'coins', rewardCount: 100, category: 'visitor' },
+  // Game tasks
+  { idPrefix: 'play3', description: 'Play 3 Games', emoji: '🎮', target: 3, reward: 30, rewardType: 'coins', rewardCount: 30, category: 'game' },
+  { idPrefix: 'play5', description: 'Play 5 Games', emoji: '🎮🎮', target: 5, reward: 50, rewardType: 'coins', rewardCount: 50, category: 'game' },
+  { idPrefix: 'score500', description: 'Score 500+ in a game', emoji: '🏆', target: 1, reward: 40, rewardType: 'coins', rewardCount: 40, category: 'game' },
+  { idPrefix: 'score1000', description: 'Score 1000+ in a game', emoji: '🏆', target: 1, reward: 80, rewardType: 'coins', rewardCount: 80, category: 'game' },
+  { idPrefix: 'spin', description: 'Spin the Wheel', emoji: '🎰', target: 1, reward: 20, rewardType: 'coins', rewardCount: 20, category: 'game' },
+  { idPrefix: 'powerup', description: 'Use a Power-up', emoji: '⚡', target: 1, reward: 25, rewardType: 'coins', rewardCount: 25, category: 'game' },
+  { idPrefix: 'winbattle', description: 'Win a Battle', emoji: '⚔️', target: 1, reward: 60, rewardType: 'coins', rewardCount: 60, category: 'game' },
+  // Ability reward tasks
+  { idPrefix: 'bomb3', description: 'Merge 3 Bomb ability reward', emoji: '💣', target: 1, reward: 0, rewardType: 'bomb', rewardCount: 3, category: 'ability' },
+  { idPrefix: 'hammer2', description: 'Merge 2 Hammer ability reward', emoji: '🔨', target: 1, reward: 0, rewardType: 'hammer', rewardCount: 2, category: 'ability' },
+  { idPrefix: 'magnet2', description: 'Merge 2 Magnet ability reward', emoji: '🧲', target: 1, reward: 0, rewardType: 'magnet', rewardCount: 2, category: 'ability' },
+]
+
+// Simple seeded random from date string for daily consistency
+function seededRandom(seed: string): () => number {
+  let hash = 0
+  for (let i = 0; i < seed.length; i++) {
+    const char = seed.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash |= 0
+  }
+  return () => {
+    hash = (hash * 1664525 + 1013904223) | 0
+    return (hash >>> 0) / 4294967296
+  }
+}
+
+// Generate daily tasks for today - 6 tasks with variety
 function generateDailyTasks(): DailyTask[] {
   const today = getTodayStr()
-  return [
-    { id: `visit-${today}`, description: 'Visit Sponsor Website', emoji: '🌐', target: 1, progress: 0, reward: 50, claimed: false },
-    { id: `play3-${today}`, description: 'Play 3 Games', emoji: '🎮', target: 3, progress: 0, reward: 30, claimed: false },
-    { id: `score500-${today}`, description: 'Score 500+ in a game', emoji: '🏆', target: 1, progress: 0, reward: 40, claimed: false },
-    { id: `spin-${today}`, description: 'Spin the Wheel', emoji: '🎰', target: 1, progress: 0, reward: 20, claimed: false },
-  ]
+  const rand = seededRandom(today)
+
+  // Ensure at least 1 visitor, 1 game, 1 ability reward
+  const visitorPool = TASK_TEMPLATES.filter(t => t.category === 'visitor')
+  const gamePool = TASK_TEMPLATES.filter(t => t.category === 'game')
+  const abilityPool = TASK_TEMPLATES.filter(t => t.category === 'ability')
+
+  const selected: TaskTemplate[] = []
+
+  // Pick 1 visitor task
+  selected.push(visitorPool[Math.floor(rand() * visitorPool.length)])
+
+  // Pick 1 game task
+  selected.push(gamePool[Math.floor(rand() * gamePool.length)])
+
+  // Pick 1 ability reward task
+  selected.push(abilityPool[Math.floor(rand() * abilityPool.length)])
+
+  // Pick 3 more from the remaining pool (any category)
+  const remaining = TASK_TEMPLATES.filter(t => !selected.includes(t))
+  const shuffled = [...remaining].sort(() => rand() - 0.5)
+  for (let i = 0; i < 3 && i < shuffled.length; i++) {
+    selected.push(shuffled[i])
+  }
+
+  return selected.map(t => ({
+    id: `${t.idPrefix}-${today}`,
+    description: t.description,
+    emoji: t.emoji,
+    target: t.target,
+    progress: 0,
+    reward: t.reward,
+    rewardType: t.rewardType,
+    rewardCount: t.rewardCount,
+    claimed: false,
+  }))
 }
 
 export function useGame() {
@@ -630,6 +711,8 @@ export function useGame() {
       gameHistory: [],
       weeklyBonusClaimed: false,
       dailyTasks: generateDailyTasks(),
+      streakAdBonusClaimed: false,
+      streakAdBonusDate: today,
     }
 
     if (!saved) {
@@ -742,8 +825,16 @@ export function useGame() {
         // Check if tasks are from today
         const hasTodayTasks = savedTasks.some(t => t.id.includes(today))
         if (!hasTodayTasks) return generateDailyTasks()
-        return savedTasks
+        // Migrate old tasks that don't have rewardType/rewardCount
+        return savedTasks.map((t: Record<string, unknown>) => ({
+          ...t,
+          rewardType: (t as Record<string, unknown>).rewardType || 'coins',
+          rewardCount: (t as Record<string, unknown>).rewardCount || (t as { reward: number }).reward,
+        })) as DailyTask[]
       })(),
+      // Streak ad bonus - reset if day changed
+      streakAdBonusClaimed: saved.streakAdBonusDate === today ? (saved.streakAdBonusClaimed || false) : false,
+      streakAdBonusDate: today,
     }
   })
 
@@ -793,9 +884,11 @@ export function useGame() {
       gameHistory: state.gameHistory.slice(0, 30),
       weeklyBonusClaimed: state.weeklyBonusClaimed,
       dailyTasks: state.dailyTasks,
+      streakAdBonusClaimed: state.streakAdBonusClaimed,
+      streakAdBonusDate: state.streakAdBonusDate,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.streakAdBonusClaimed, state.streakAdBonusDate])
 
   // ============================================================
   // FIREBASE SYNC - Sync player data to Firebase RTDB
@@ -923,10 +1016,24 @@ export function useGame() {
       // Update daily task progress for games played and score
       const today = getTodayStr()
       const tasks = prev.dailyTasks.map(t => {
+        // Play 3 Games
         if (t.id === `play3-${today}` && !t.claimed) {
           return { ...t, progress: Math.min(t.progress + 1, t.target) }
         }
+        // Play 5 Games
+        if (t.id === `play5-${today}` && !t.claimed) {
+          return { ...t, progress: Math.min(t.progress + 1, t.target) }
+        }
+        // Score 500+
         if (t.id === `score500-${today}` && !t.claimed && score >= 500) {
+          return { ...t, progress: Math.min(t.progress + 1, t.target) }
+        }
+        // Score 1000+
+        if (t.id === `score1000-${today}` && !t.claimed && score >= 1000) {
+          return { ...t, progress: Math.min(t.progress + 1, t.target) }
+        }
+        // Win a Battle
+        if (t.id === `winbattle-${today}` && !t.claimed && result === 'win') {
           return { ...t, progress: Math.min(t.progress + 1, t.target) }
         }
         return t
@@ -1119,12 +1226,21 @@ export function useGame() {
         const shuffled = [...prev.tiles].sort(() => Math.random() - 0.5)
         const remaining = shuffled.slice(tilesToRemove)
         prevState.current = prev
+        // Update "Use a Power-up" task progress
+        const today = getTodayStr()
+        const tasks = prev.dailyTasks.map(t => {
+          if (t.id === `powerup-${today}` && !t.claimed) {
+            return { ...t, progress: Math.min(t.progress + 1, t.target) }
+          }
+          return t
+        })
         return {
           ...prev,
           tiles: remaining.map(t => ({ ...t, id: getNextId(), isNew: false, isMerged: false, flash: false })),
           blastCount: prev.blastCount - 1,
           activePowerUp: null,
           canUndo: true,
+          dailyTasks: tasks,
         }
       }
       return { ...prev, activePowerUp: pu }
@@ -1136,20 +1252,45 @@ export function useGame() {
       if (prev.activePowerUp === 'hammer') {
         if (!prev.tiles.some(t => t.row === row && t.col === col) || prev.hammerCount <= 0) return { ...prev, activePowerUp: null }
         prevState.current = prev
-        return { ...prev, tiles: prev.tiles.filter(t => !(t.row === row && t.col === col)), hammerCount: prev.hammerCount - 1, activePowerUp: null, canUndo: true }
+        // Destroy clicked tile + all 4 adjacent tiles (up, down, left, right)
+        const adjacentPositions = [
+          { row, col },
+          { row: row - 1, col },
+          { row: row + 1, col },
+          { row, col: col - 1 },
+          { row, col: col + 1 },
+        ].filter(p => p.row >= 0 && p.row < 4 && p.col >= 0 && p.col < 4)
+        const newTiles = prev.tiles.filter(t => !adjacentPositions.some(p => p.row === t.row && p.col === t.col))
+        // Update "Use a Power-up" task progress
+        const today = getTodayStr()
+        const tasks = prev.dailyTasks.map(t => {
+          if (t.id === `powerup-${today}` && !t.claimed) {
+            return { ...t, progress: Math.min(t.progress + 1, t.target) }
+          }
+          return t
+        })
+        return { ...prev, tiles: newTiles, hammerCount: prev.hammerCount - 1, activePowerUp: null, canUndo: true, dailyTasks: tasks }
       }
       if (prev.activePowerUp === 'magnet') {
         const targetTile = prev.tiles.find(t => t.row === row && t.col === col)
         if (!targetTile || prev.magnetCount <= 0) return { ...prev, activePowerUp: null }
-        const same = prev.tiles.filter(t => t.value === targetTile.value && !(t.row === row && t.col === col))
-        if (same.length === 0) return { ...prev, activePowerUp: null }
-        const mergeTarget = same[0]
-        const newValue = targetTile.value * 2
+        // Find ALL tiles with the same value
+        const sameValueTiles = prev.tiles.filter(t => t.value === targetTile.value)
+        if (sameValueTiles.length === 0) return { ...prev, activePowerUp: null }
         prevState.current = prev
-        const newTiles = prev.tiles
-          .filter(t => !(t.row === row && t.col === col) && !(t.row === mergeTarget.row && t.col === mergeTarget.col))
-          .concat([{ id: getNextId(), value: newValue, row: mergeTarget.row, col: mergeTarget.col, isNew: false, isMerged: true, flash: true }])
-        return { ...prev, tiles: newTiles, score: prev.score + newValue, magnetCount: prev.magnetCount - 1, activePowerUp: null, canUndo: true, gamePoints: prev.gamePoints + newValue }
+        // Explode/destroy ALL tiles with the same value
+        const count = sameValueTiles.length
+        const scoreGain = targetTile.value * count
+        const newTiles = prev.tiles.filter(t => t.value !== targetTile.value)
+        // Update "Use a Power-up" task progress
+        const today = getTodayStr()
+        const tasks = prev.dailyTasks.map(t => {
+          if (t.id === `powerup-${today}` && !t.claimed) {
+            return { ...t, progress: Math.min(t.progress + 1, t.target) }
+          }
+          return t
+        })
+        return { ...prev, tiles: newTiles, score: prev.score + scoreGain, magnetCount: prev.magnetCount - 1, activePowerUp: null, canUndo: true, gamePoints: prev.gamePoints + scoreGain, dailyTasks: tasks }
       }
       return prev
     })
@@ -1643,10 +1784,32 @@ export function useGame() {
       })
       const task = prev.dailyTasks.find(t => t.id === taskId)
       if (!task || task.claimed || task.progress < task.target) return prev
+
+      // Handle different reward types
+      let extraState: Partial<GameState> = {}
+      switch (task.rewardType) {
+        case 'bomb':
+          extraState = { blastCount: prev.blastCount + task.rewardCount }
+          break
+        case 'hammer':
+          extraState = { hammerCount: prev.hammerCount + task.rewardCount }
+          break
+        case 'magnet':
+          extraState = { magnetCount: prev.magnetCount + task.rewardCount }
+          break
+        case 'spin':
+          extraState = { spinTickets: prev.spinTickets + task.rewardCount }
+          break
+        case 'coins':
+        default:
+          extraState = { coins: prev.coins + task.reward }
+          break
+      }
+
       return {
         ...prev,
         dailyTasks: tasks,
-        coins: prev.coins + task.reward,
+        ...extraState,
       }
     })
   }, [])
@@ -1720,6 +1883,8 @@ export function useGame() {
       gameHistory: [],
       weeklyBonusClaimed: false,
       dailyTasks: generateDailyTasks(),
+      streakAdBonusClaimed: false,
+      streakAdBonusDate: getTodayStr(),
     })
   }, [])
 
@@ -1778,12 +1943,27 @@ export function useGame() {
       setState(prev => {
         const today = getTodayStr()
         const tasks = prev.dailyTasks.map(t => {
-          if (t.id === `visit-${today}` && !t.claimed) {
+          // Handle both 1-visit and 2-visit tasks
+          if ((t.id === `visit1-${today}` || t.id === `visit2-${today}`) && !t.claimed) {
             return { ...t, progress: Math.min(t.progress + 1, t.target) }
           }
           return t
         })
         return { ...prev, dailyTasks: tasks }
+      })
+    }, []),
+    claimStreakAdBonus: useCallback(() => {
+      setState(prev => {
+        const today = getTodayStr()
+        if (prev.streakAdBonusClaimed || prev.streakAdBonusDate !== today) {
+          return { ...prev, streakAdBonusClaimed: prev.streakAdBonusDate !== today ? false : prev.streakAdBonusClaimed, streakAdBonusDate: today }
+        }
+        return {
+          ...prev,
+          coins: prev.coins + 100,
+          streakAdBonusClaimed: true,
+          streakAdBonusDate: today,
+        }
       })
     }, []),
   }

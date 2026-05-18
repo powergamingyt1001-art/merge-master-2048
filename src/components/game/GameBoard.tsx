@@ -746,9 +746,6 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
         <PowerUpBtn icon={<Magnet className="w-3.5 h-3.5" />} count={magnetCount} active={activePowerUp === 'magnet'} onClick={() => handlePowerUp('magnet')} color="#00E676" />
         <PowerUpBtn icon={<Bomb className="w-3.5 h-3.5" />} count={blastCount} active={false} onClick={() => handlePowerUp('blast')} color="#FF7A00" />
         <PowerUpBtn icon={<Undo2 className="w-3.5 h-3.5" />} count={undoTotal - undoCount} active={false} onClick={undo} color="#8f7a66" disabled={!canUndo || undoCount >= undoTotal} />
-        <PowerUpBtn icon={<span className="text-[10px]">5x</span>} count={game.multiplier5xCount} active={false} onClick={() => handlePowerUp('multiplier5x')} color="#F65E3B" />
-        <PowerUpBtn icon={<span className="text-[10px]">2.5x</span>} count={game.multiplier2_5xCount} active={false} onClick={() => handlePowerUp('multiplier2_5x')} color="#FF7A00" />
-        <PowerUpBtn icon={<span className="text-[10px]">+10s</span>} count={game.extraTimeCount} active={false} onClick={() => handlePowerUp('extraTime')} color="#00FFFF" />
       </div>
 
       {/* Active Power-up indicator */}
@@ -757,12 +754,12 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
           <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
             className="px-3 py-0.5 rounded-full text-[9px] font-bold flex items-center gap-1 flex-shrink-0"
             style={{
-              backgroundColor: activePowerUp === 'hammer' ? 'rgba(245,149,99,0.15)' : activePowerUp === 'magnet' ? 'rgba(0,230,118,0.15)' : 'rgba(255,122,0,0.15)',
-              color: activePowerUp === 'hammer' ? '#F59563' : activePowerUp === 'magnet' ? '#00E676' : '#FF7A00',
-              border: `1px solid ${activePowerUp === 'hammer' ? 'rgba(245,149,99,0.25)' : activePowerUp === 'magnet' ? 'rgba(0,230,118,0.25)' : 'rgba(255,122,0,0.25)'}`,
+              backgroundColor: activePowerUp === 'hammer' ? 'rgba(245,149,99,0.15)' : 'rgba(0,230,118,0.15)',
+              color: activePowerUp === 'hammer' ? '#F59563' : '#00E676',
+              border: `1px solid ${activePowerUp === 'hammer' ? 'rgba(245,149,99,0.25)' : 'rgba(0,230,118,0.25)'}`,
             }}>
             <Zap className="w-2.5 h-2.5" />
-            {activePowerUp === 'hammer' ? 'Tap tile to destroy + 2 nearby' : activePowerUp === 'magnet' ? 'Tap to destroy all same tiles' : 'Power-up active'}
+            {activePowerUp === 'hammer' ? 'Tap tile to destroy area' : 'Tap tile to explode same numbers'}
           </motion.div>
         )}
       </AnimatePresence>

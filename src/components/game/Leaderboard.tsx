@@ -25,6 +25,13 @@ interface LeaderboardEntry {
   avatar: string
   value: number
   isPlayer: boolean
+  lastActive?: number
+}
+
+// Check if a player is online (active within last 2 minutes)
+function isOnline(lastActive: number | undefined): boolean {
+  if (!lastActive) return false
+  return Date.now() - lastActive < 2 * 60 * 1000
 }
 
 // Fake players for fallback when Firebase is unavailable
@@ -75,7 +82,7 @@ function buildModesLeaderboard(playerBestScore: number, playerName: string, play
     // Use real Firebase data
     firebasePlayers.forEach(p => {
       if (p.id !== playerId) {
-        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.bestScore || 0, isPlayer: false })
+        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.bestScore || 0, isPlayer: false, lastActive: p.lastActive })
       }
     })
   } else {
@@ -95,7 +102,7 @@ function buildCoinsLeaderboard(playerCoins: number, playerName: string, playerAv
   if (firebasePlayers.length > 0) {
     firebasePlayers.forEach(p => {
       if (p.id !== playerId) {
-        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.coins || 0, isPlayer: false })
+        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.coins || 0, isPlayer: false, lastActive: p.lastActive })
       }
     })
   } else {
@@ -355,6 +362,9 @@ function RankRow({ entry, color }: { entry: LeaderboardEntry; color: string }) {
       style={{ backgroundColor: entry.isPlayer ? 'rgba(237,194,46,0.12)' : 'rgba(255,255,255,0.03)', border: entry.isPlayer ? '1px solid rgba(237,194,46,0.2)' : '1px solid transparent' }}>
       <span className="text-[10px] font-bold w-5 text-center" style={{ color: 'rgba(255,255,255,0.4)' }}>#{entry.rank}</span>
       <span className="text-sm">{entry.avatar}</span>
+      {/* Online/Offline indicator - only for rank 4+ */}
+      <div className="w-2 h-2 rounded-full flex-shrink-0"
+        style={{ backgroundColor: isOnline(entry.lastActive) ? '#00E676' : '#F65E3B' }} />
       <span className="text-[10px] font-semibold flex-1 truncate" style={{ color: entry.isPlayer ? '#EDC22E' : 'rgba(255,255,255,0.7)' }}>
         {entry.name} {entry.isPlayer && '(You)'}
       </span>
