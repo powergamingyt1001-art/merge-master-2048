@@ -216,12 +216,30 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (!touchStart.current) return
     e.preventDefault()
-    const dx = e.changedTouches[0].clientX - touchStart.current.x
-    const dy = e.changedTouches[0].clientY - touchStart.current.y
-    if (Math.max(Math.abs(dx), Math.abs(dy)) < 30) return
+    const endX = e.changedTouches[0].clientX
+    const endY = e.changedTouches[0].clientY
+    const dx = endX - touchStart.current.x
+    const dy = endY - touchStart.current.y
+
+    // If it's a tap (not a swipe) and a power-up is active, handle tile tap
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 30) {
+      if (activePowerUp === 'hammer' || activePowerUp === 'magnet') {
+        // Calculate which cell was tapped based on touch coordinates
+        const boardEl = (e.currentTarget as HTMLElement)
+        const rect = boardEl.getBoundingClientRect()
+        const relX = endX - rect.left
+        const relY = endY - rect.top
+        const col = Math.floor((relX - gap) / (cellSize + gap))
+        const row = Math.floor((relY - gap) / (cellSize + gap))
+        if (row >= 0 && row < 4 && col >= 0 && col < 4) {
+          handleTileClick(row, col)
+        }
+      }
+      return
+    }
     onMove(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'))
     touchStart.current = null
-  }, [onMove])
+  }, [onMove, activePowerUp, handleTileClick, cellSize, gap])
 
   const handlePowerUp = useCallback((pu: PowerUp) => { activatePowerUp(pu) }, [activatePowerUp])
   const handleStuckContinue = useCallback(() => { restartAfterStuck() }, [restartAfterStuck])

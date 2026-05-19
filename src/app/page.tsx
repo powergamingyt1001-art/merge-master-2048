@@ -171,11 +171,6 @@ export default function Home() {
                 hammerCount={game.hammerCount}
                 magnetCount={game.magnetCount}
                 blastCount={game.blastCount}
-                undoTotal={game.undoTotal}
-                multiply5Count={game.multiply5Count}
-                multiply2_5Count={game.multiply2_5Count}
-                timeExtendCount={game.timeExtendCount}
-                levelXP={game.levelXP}
                 modBestScore={game.modBestScore}
                 gamePoints={game.gamePoints}
                 bestScore={game.bestScore}
@@ -228,8 +223,6 @@ export default function Home() {
                 onResetAllData={game.resetAllData}
                 weeklyBonusClaimed={game.weeklyBonusClaimed}
                 onClaimWeeklyBonus={game.claimWeeklyBonus}
-                onClaimStreakAdBonus={game.claimStreakAdBonus}
-                streakAdBonusClaimed={game.streakAdBonusClaimed}
               />
             )}
             {phase === 'game' && <GameBoard key="game" onBackToDashboard={handleBackToDashboard} onPlayAgain={handlePlayAgain} />}

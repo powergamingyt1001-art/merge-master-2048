@@ -111,7 +111,7 @@ export function PlayDashboard({
   onPlayClassic, onStartBotBattle, onStartCoinGame,
   onJoinTournament, onStartTournamentGame,
   onUseSpinTicket, onAddSpinTickets, onClaimWelcome, onClaimStreakDay,
-  onAddCoins, onAddPowerUp, onAddUndos, onClaimCommission, onClaimFirebaseCommission, onToggleAutoClaim,
+  onAddCoins, onDeductCoins, onAddPowerUp, onAddUndos, onClaimCommission, onClaimFirebaseCommission, onToggleAutoClaim,
   onAddNotification, onMarkNotificationRead, onMarkAllNotificationsRead,
   onUpdatePlayerName, onUpdatePlayerAvatar,
   dailyTasks, onClaimDailyTask, onCompleteVisitWebsiteTask, onResetAllData,
