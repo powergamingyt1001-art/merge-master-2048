@@ -380,3 +380,98 @@ Stage Summary:
 - Delete All / Select Delete added to both admin History tab and Store HistoryTab
 - Lock Duration setting added to admin History tab
 - All changes pass lint with zero errors
+---
+Task ID: 2
+Agent: gameboard-abilities-agent
+Task: Game board abilities bigger + press effects
+
+Work Log:
+- Read OvalAbilitySlot component (lines 979-1059) and empty slot placeholder (line 797) in GameBoard.tsx
+- Changed button dimensions: width 72→86, height 34→44, borderRadius 17→22
+- Changed icon fontSize: 14→18, label fontSize: 8→9, count badge fontSize: 8→9
+- Changed whileTap scale: 0.90→0.85 (more dramatic press effect)
+- Added backgroundColor flash on press: `${glowColor}66` (40% opacity glow color)
+- Increased press glow shadow spreads by 50%: 14→21, 28→42, 40→60
+- Increased active glow intensity: low 8→12/18→24, high 14→18/30→36 with stronger opacity
+- Made active border thicker: 1.5px→2px with opacity 80→90
+- Made inactive border more visible: 1px solid rgba(255,255,255,0.15)→1.5px solid rgba(255,255,255,0.25)
+- Changed ability section gap between rows: 4→6
+- Updated empty slot placeholder: width 72→86, height 34→44
+- Ran `bun run lint` — passed with no errors
+
+Stage Summary:
+- All 8 required changes applied to OvalAbilitySlot component in GameBoard.tsx
+- Lint passes cleanly with zero errors
+- Buttons are now 86×44px (from 72×34), with more visible borders, stronger press shrink (0.85), background color flash on press, and 50% larger press glow shadows
+---
+Task ID: 1
+Agent: dashboard-layout-agent
+Task: Dashboard ability layout redesign
+
+Work Log:
+- Read PlayDashboard.tsx to understand current 3-column inventory bar structure and AbilityBtn component
+- Made outer inventory bar border visible: changed from `1px solid rgba(255,255,255,0.06)` to `1.5px solid rgba(255,255,255,0.2)` and increased bg from 3% to 4% opacity
+- Redesigned center column: replaced single "CODE" button with two stacked elements — (1) Coin display box showing 💰 + formatCoinCount(coins) with gold border/glow, (2) "🎟️ Redeem" button that opens existing coupon modal via setShowCoupon
+- Redesigned right column: kept 5x/2.5x multiplier buttons in top row, then added spin tickets count (🎫) below on its own row with visible green border, and extra time count (⏱️) below that with visible cyan border. Removed old games-left row. Added conditional glow on spin tickets and extra time when count > 0
+- Updated AbilityBtn component: border width from 1px to 1.5px, active border opacity from `${color}30` to `${color}55`, inactive border from `rgba(255,255,255,0.06)` to `rgba(255,255,255,0.15)`, background opacity from `${color}15` to `${color}20`, boxShadow glow from `${color}25` to `${color}40`
+- Ran lint with zero errors
+
+Stage Summary:
+- All ability borders are now clearly visible with at least 30% opacity and 1.5px width
+- Center column now serves as the "main" area with coin counter and coupon redeem button
+- Right column follows the requested layout: 5x/2.5x top, spin tickets below 5x, extra time below 2.5x
+- AbilityBtn components have prominent borders and glow effects when items are available
+- Key file modified: `/home/z/my-project/src/components/game/PlayDashboard.tsx`
+
+---
+Task ID: 3
+Agent: store-payment-fix-agent
+Task: Fix store payment not appearing in admin panel + history deletion
+
+Work Log:
+- Read Store.tsx and CouponCode.tsx thoroughly to understand the data flow
+- Identified root cause of store payments not appearing in admin panel:
+  1. CouponCode's storeOrders state was only refreshed when showAdminPanel changed (false→true). If the CouponCode component was already open/mounted when a Store order was placed, the stale state wouldn't update
+  2. No reload mechanism when switching admin tabs (payments/history), so newly placed orders wouldn't appear even if the admin panel was already open
+- Fixed CouponCode.tsx with three improvements:
+  1. Added `useEffect` on `isOpen` prop: reloads storeOrders and purchaseHistory whenever the CouponCode modal opens, ensuring fresh data from localStorage
+  2. Added `useEffect` on `adminTab` + `showAdminPanel`: reloads store orders and purchase history when switching to payments or history tabs in the admin panel
+  3. Fixed StoreOrder→PurchaseHistoryEntry type mapping in `mergedAllPurchases`:
+     - 5x/2.5x multiplier orders now correctly mapped to `type: 'inr_ability'` (was hardcoded to `'coins'`)
+     - Added `abilityType` and `abilityCount` fields for multiplier orders
+     - Set `coinAmount: undefined` for INR ability orders (was incorrectly set to `order.quantity`)
+- Verified admin panel History tab already has Delete All and select+delete functionality working for both purchaseHistory and storeOrders
+- Verified Store.tsx History tab Delete All and select+delete works correctly
+- Ran `bun run lint` - 0 errors
+
+Stage Summary:
+- Main bug fixed: Store payments now reliably appear in admin panel via three refresh mechanisms (modal open, admin panel open, tab switch)
+- Type mapping bug fixed: 5x/2.5x multiplier orders now correctly categorized as 'inr_ability' in admin panel
+- Admin panel and Store history deletion already working correctly - no changes needed
+- All lint checks pass
+
+---
+Task ID: 4
+Agent: profile-admin-fixes-agent
+Task: Profile coin value fix + admin pricing editor + theme toggle
+
+Work Log:
+- ProfilePanel.tsx: Added correct coin-to-₹ conversion display (1000 coins ≈ ₹1) as subtitle in StatBox
+- ProfilePanel.tsx: Enhanced StatBox component to support optional `subtitle` prop
+- ProfilePanel.tsx: Integrated next-themes for proper theme toggle — replaced manual localStorage/class toggling with useTheme() hook
+- layout.tsx: Added ThemeProvider from next-themes wrapping app content with attribute="class" and defaultTheme="dark"
+- CouponCode.tsx: Updated DEFAULT_COIN_PACKAGES to match Store's actual packs (10K/₹10, 30K/₹30, 50K/₹50, 80K/₹80, 80K/₹80)
+- CouponCode.tsx: Updated DEFAULT_INR_ABILITY_PACKAGES to match Store's actual multiplier packs (5x and 2.5x with 5/15/35/80 uses)
+- Store.tsx: Added custom price override system reading from `adminCustomPrices` localStorage key
+- Store.tsx: Added getEffectiveCoinPacks() function to load admin-customized coin packages with fallback to defaults
+- Store.tsx: Added getEffectiveMultiplierItems() function to load admin-customized INR ability packages
+- Store.tsx: Added getEffectiveRegularAbilities() function to load admin-customized coin ability prices from `adminCoinAbilityPrices` localStorage key
+- Store.tsx: Updated CoinsTab, AbilityTab to use dynamic price loading instead of hardcoded arrays
+- Ran lint: 0 errors
+
+Stage Summary:
+- Profile now shows correct ₹ value (≈₹X where X = coins/1000) instead of any wrong per-coin pricing
+- Theme toggle properly integrated with next-themes (ThemeProvider added to layout, toggle uses useTheme())
+- Admin pricing defaults now match Store's actual coin packs and INR ability packages
+- Store.tsx reads custom prices from localStorage (adminCustomPrices, adminCoinAbilityPrices) so admin changes take effect immediately
+- All lint checks pass with zero errors

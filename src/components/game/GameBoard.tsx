@@ -777,7 +777,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
         style={{
           width: '100%',
           maxWidth: 500,
-          gap: 4,
+          gap: 6,
         }}
       >
         {/* Row 1: Hammer, Magnet, Bomb, Undo */}
@@ -794,7 +794,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
           <OvalAbilitySlot icon="🔥" count={game.multiplier2_5xCount} active={game.activeMultiplier === 2.5} onClick={() => handlePowerUp('multiplier2_5x')} label="2.5x" accentColor="#FF7A00" />
           <OvalAbilitySlot icon="⏱️" count={game.extraTimeCount} active={false} onClick={() => handlePowerUp('extraTime')} label="+10s" accentColor="#00E676" />
           {/* Empty slot for alignment */}
-          <div style={{ width: 72, height: 34 }} />
+          <div style={{ width: 86, height: 44 }} />
         </div>
       </div>
 
@@ -984,11 +984,11 @@ function OvalAbilitySlot({ icon, count, active, onClick, label, disabled, accent
   const glowColor = accentColor || ABILITY_GLOW_MAP[label] || (active ? '#EDC22E' : 'rgba(255,255,255,0.3)')
 
   // Active pulsing glow keyframes
-  const activeGlowLow = `0 0 8px ${glowColor}50, 0 0 18px ${glowColor}25`
-  const activeGlowHigh = `0 0 14px ${glowColor}80, 0 0 30px ${glowColor}45`
+  const activeGlowLow = `0 0 12px ${glowColor}60, 0 0 24px ${glowColor}35`
+  const activeGlowHigh = `0 0 18px ${glowColor}90, 0 0 36px ${glowColor}55`
 
   // Press/tap glow
-  const pressGlow = `0 0 14px ${glowColor}90, 0 0 28px ${glowColor}60, 0 0 40px ${glowColor}30`
+  const pressGlow = `0 0 21px ${glowColor}90, 0 0 42px ${glowColor}60, 0 0 60px ${glowColor}30`
 
   return (
     <motion.button
@@ -996,12 +996,12 @@ function OvalAbilitySlot({ icon, count, active, onClick, label, disabled, accent
       disabled={disabled}
       className="relative flex items-center justify-center rounded-full"
       style={{
-        width: 72,
-        height: 34,
-        borderRadius: 17,
+        width: 86,
+        height: 44,
+        borderRadius: 22,
         border: active
-          ? `1.5px solid ${glowColor}80`
-          : '1px solid rgba(255,255,255,0.15)',
+          ? `2px solid ${glowColor}90`
+          : '1.5px solid rgba(255,255,255,0.25)',
         backgroundColor: active
           ? `${glowColor}30`
           : 'rgba(255,255,255,0.06)',
@@ -1015,10 +1015,11 @@ function OvalAbilitySlot({ icon, count, active, onClick, label, disabled, accent
         transition: 'background-color 0.25s, border-color 0.25s',
       }}
       whileTap={!disabled ? {
-        scale: 0.90,
+        scale: 0.85,
         boxShadow: pressGlow,
         borderColor: glowColor,
-      } : {}}
+        backgroundColor: `${glowColor}66`,
+      } : {} }
       whileHover={!disabled ? {
         scale: 1.05,
         boxShadow: `0 0 10px ${glowColor}50, 0 0 20px ${glowColor}25`,
@@ -1030,14 +1031,14 @@ function OvalAbilitySlot({ icon, count, active, onClick, label, disabled, accent
       transition={{ duration: 1.2, repeat: active ? Infinity : 0, ease: 'easeInOut' }}
       title={label}
     >
-      <span style={{ fontSize: 14, lineHeight: 1 }}>{icon}</span>
-      <span style={{ fontSize: 8, lineHeight: 1, fontWeight: 700, color: active ? '#FFFFFF' : 'rgba(255,255,255,0.55)', marginLeft: 3 }}>
+      <span style={{ fontSize: 18, lineHeight: 1 }}>{icon}</span>
+      <span style={{ fontSize: 9, lineHeight: 1, fontWeight: 700, color: active ? '#FFFFFF' : 'rgba(255,255,255,0.55)', marginLeft: 3 }}>
         {label}
       </span>
       <span
         className="absolute font-bold"
         style={{
-          fontSize: 8,
+          fontSize: 9,
           top: -6,
           right: -3,
           minWidth: 16,

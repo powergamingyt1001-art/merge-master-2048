@@ -354,22 +354,23 @@ function saveCustomPrices(prices: CustomPriceOverride) {
 
 // Default COIN_PACKAGES (matching Store.tsx)
 const DEFAULT_COIN_PACKAGES = [
-  { coins: 2500, price: 3 },
-  { coins: 4999, price: 5 },
-  { coins: 11999, price: 10 },
-  { coins: 25000, price: 19 },
-  { coins: 62000, price: 49 },
-  { coins: 120000, price: 99 },
+  { coins: 10000, price: 10 },
+  { coins: 30000, price: 30 },
+  { coins: 50000, price: 50 },
+  { coins: 80000, price: 80 },
+  { coins: 80000, price: 80 },
 ]
 
 // Default INR_ABILITY_PACKAGES (matching Store.tsx)
 const DEFAULT_INR_ABILITY_PACKAGES = [
-  { type: '5x', uses: 1, price: 20 },
-  { type: '5x', uses: 5, price: 80 },
-  { type: '5x', uses: 10, price: 149 },
-  { type: '2.5x', uses: 1, price: 10 },
-  { type: '2.5x', uses: 5, price: 40 },
-  { type: '2.5x', uses: 10, price: 75 },
+  { type: '5x', uses: 5, price: 20 },
+  { type: '5x', uses: 15, price: 55 },
+  { type: '5x', uses: 35, price: 100 },
+  { type: '5x', uses: 80, price: 189 },
+  { type: '2.5x', uses: 5, price: 20 },
+  { type: '2.5x', uses: 15, price: 55 },
+  { type: '2.5x', uses: 35, price: 100 },
+  { type: '2.5x', uses: 80, price: 189 },
 ]
 
 export function CouponCode({
@@ -449,6 +450,14 @@ export function CouponCode({
     setDayCodeSettings(settings)
   }
 
+  // Refresh store orders and purchase history when CouponCode modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setStoreOrders(loadStoreOrders())
+      setPurchaseHistory(loadPurchaseHistory())
+    }
+  }, [isOpen])
+
   // Refresh admin data when panel opens
   useEffect(() => {
     if (showAdminPanel) {
@@ -474,6 +483,14 @@ export function CouponCode({
       } catch { /* ignore */ }
     }
   }, [showAdminPanel])
+
+  // Reload store orders when switching to payments/history tabs
+  useEffect(() => {
+    if (showAdminPanel && (adminTab === 'payments' || adminTab === 'history')) {
+      setStoreOrders(loadStoreOrders())
+      setPurchaseHistory(loadPurchaseHistory())
+    }
+  }, [adminTab, showAdminPanel])
 
   // Pick a random reward based on weights
   const pickRandomReward = useCallback((): RewardOption => {
@@ -961,19 +978,24 @@ export function CouponCode({
   // Merge purchaseHistory and storeOrders for display
   const mergedAllPurchases: PurchaseHistoryEntry[] = [
     ...purchaseHistory,
-    ...storeOrders.map(order => ({
-      id: `store_${order.id}`,
-      date: order.date,
-      item: order.item,
-      amount: `₹${order.price}`,
-      status: (order.status === 'pending' ? 'Pending' : order.status === 'approved' ? 'Delivered' : 'Denied') as 'Pending' | 'Delivered' | 'Denied',
-      type: 'coins' as const,
-      transactionId: order.transactionId,
-      whatsappNumber: order.whatsappNumber,
-      buyerName: order.name,
-      screenshotDataUrl: order.proofBase64,
-      coinAmount: order.quantity,
-    })),
+    ...storeOrders.map(order => {
+      const isInrAbility = order.item.includes('5x') || order.item.includes('2.5x')
+      return {
+        id: `store_${order.id}`,
+        date: order.date,
+        item: order.item,
+        amount: `₹${order.price}`,
+        status: (order.status === 'pending' ? 'Pending' : order.status === 'approved' ? 'Delivered' : 'Denied') as 'Pending' | 'Delivered' | 'Denied',
+        type: (isInrAbility ? 'inr_ability' : 'coins') as 'coins' | 'ability' | 'inr_ability',
+        transactionId: order.transactionId,
+        whatsappNumber: order.whatsappNumber,
+        buyerName: order.name,
+        screenshotDataUrl: order.proofBase64,
+        coinAmount: isInrAbility ? undefined : order.quantity,
+        abilityType: isInrAbility ? (order.item.includes('5x') ? '5x' : '2.5x') : undefined,
+        abilityCount: isInrAbility ? order.quantity : undefined,
+      }
+    }),
   ]
 
   const pendingPurchases = mergedAllPurchases.filter(p => p.status === 'Pending')

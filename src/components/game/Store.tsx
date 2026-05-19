@@ -91,6 +91,101 @@ const ORDERS_KEY = 'mergeMaster2048_orders'
 const PURCHASE_LIMIT_KEY = 'mergeMaster2048_abilityPurchaseLimits'
 const MAX_ABILITY_PER_2WEEKS = 15
 
+// ─── Custom Price Overrides (from Admin Panel) ────────────────────────────────
+
+interface CustomPriceOverride {
+  coinPackages: { coins: number; price: number; label?: string }[]
+  inrAbilityPackages: { type: string; uses: number; price: number }[]
+}
+
+function loadCustomPrices(): CustomPriceOverride | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const data = localStorage.getItem('adminCustomPrices')
+    return data ? JSON.parse(data) : null
+  } catch { return null }
+}
+
+interface CoinAbilityPrices {
+  hammer: number
+  magnet: number
+  bomb: number
+  timer: number
+  undo: number
+}
+
+const DEFAULT_COIN_ABILITY_PRICES: CoinAbilityPrices = {
+  hammer: 150,
+  magnet: 150,
+  bomb: 300,
+  timer: 200,
+  undo: 100,
+}
+
+function loadCoinAbilityPrices(): CoinAbilityPrices {
+  if (typeof window === 'undefined') return DEFAULT_COIN_ABILITY_PRICES
+  try {
+    const data = localStorage.getItem('adminCoinAbilityPrices')
+    return data ? JSON.parse(data) : DEFAULT_COIN_ABILITY_PRICES
+  } catch {
+    return DEFAULT_COIN_ABILITY_PRICES
+  }
+}
+
+function getEffectiveCoinPacks(): CoinPack[] {
+  const custom = loadCustomPrices()
+  if (custom?.coinPackages && custom.coinPackages.length > 0) {
+    return custom.coinPackages.map((pkg, idx) => {
+      // Preserve tags from default packs if the index matches
+      const defaultPack = COIN_PACKS[idx]
+      return {
+        id: defaultPack?.id || `coins-custom-${idx}`,
+        amount: pkg.coins,
+        price: pkg.price,
+        tag: defaultPack?.tag,
+      }
+    })
+  }
+  return COIN_PACKS
+}
+
+function getEffectiveMultiplierItems(
+  defaultItems: AbilityItem[],
+  type: '5x' | '2.5x'
+): AbilityItem[] {
+  const custom = loadCustomPrices()
+  if (custom?.inrAbilityPackages && custom.inrAbilityPackages.length > 0) {
+    const filtered = custom.inrAbilityPackages.filter(p => p.type === type)
+    if (filtered.length > 0) {
+      return filtered.map((pkg, idx) => {
+        const defaultItem = defaultItems[idx]
+        return {
+          id: defaultItem?.id || `${type}-custom-${idx}`,
+          emoji: type === '5x' ? '⚡' : '🔥',
+          name: type === '5x' ? '5x Multiplier' : '2.5x Multiplier',
+          quantity: pkg.uses,
+          price: pkg.price,
+          section: type,
+          tag: defaultItem?.tag,
+          currency: 'inr' as const,
+        }
+      })
+    }
+  }
+  return defaultItems
+}
+
+function getEffectiveRegularAbilities(): AbilityItem[] {
+  const prices = loadCoinAbilityPrices()
+  return [
+    { id: 'bomb-5', emoji: '💣', name: 'Bomb', quantity: 5, price: prices.bomb, section: 'regular', currency: 'coin', abilityType: 'blast' },
+    { id: 'magnet-5', emoji: '🧲', name: 'Magnet', quantity: 5, price: prices.magnet, section: 'regular', currency: 'coin', abilityType: 'magnet' },
+    { id: 'hammer-5', emoji: '🔨', name: 'Hammer', quantity: 5, price: prices.hammer, section: 'regular', currency: 'coin', abilityType: 'hammer' },
+    { id: 'timer-5', emoji: '⏱️', name: 'Timer (+10s)', quantity: 5, price: prices.timer, section: 'regular', currency: 'coin', abilityType: 'timer' },
+    { id: 'undo-5', emoji: '↩️', name: 'Undo', quantity: 5, price: prices.undo, section: 'regular', currency: 'coin', abilityType: 'undo' },
+  ]
+}
+
 // ─── Purchase Limit Tracking ─────────────────────────────────────────────────
 
 interface PurchaseRecord {
@@ -588,9 +683,10 @@ function UPIPaymentModal({
 // ─── Coins Tab ───────────────────────────────────────────────────────────────
 
 function CoinsTab({ onBuy }: { onBuy: (item: string, price: number, quantity: number) => void }) {
+  const effectivePacks = getEffectiveCoinPacks()
   return (
     <div className="grid grid-cols-2 gap-3">
-      {COIN_PACKS.map((pack, i) => (
+      {effectivePacks.map((pack, i) => (
         <motion.div
           key={pack.id}
           initial={{ opacity: 0, y: 20 }}
@@ -725,7 +821,7 @@ function AbilityTab({ onBuy, onCoinBuy, coins }: { onBuy: (item: string, price: 
           </span>
         </div>
         <div className="space-y-2">
-          {REGULAR_ABILITIES.map((item) => (
+          {getEffectiveRegularAbilities().map((item) => (
             <AbilityCard key={item.id} item={item} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} />
           ))}
         </div>
@@ -743,7 +839,7 @@ function AbilityTab({ onBuy, onCoinBuy, coins }: { onBuy: (item: string, price: 
           </span>
         </div>
         <div className="space-y-2">
-          {MULTIPLIER_5X.map((item) => (
+          {getEffectiveMultiplierItems(MULTIPLIER_5X, '5x').map((item) => (
             <AbilityCard key={item.id} item={item} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} />
           ))}
         </div>
@@ -761,7 +857,7 @@ function AbilityTab({ onBuy, onCoinBuy, coins }: { onBuy: (item: string, price: 
           </span>
         </div>
         <div className="space-y-2">
-          {MULTIPLIER_2_5X.map((item) => (
+          {getEffectiveMultiplierItems(MULTIPLIER_2_5X, '2.5x').map((item) => (
             <AbilityCard key={item.id} item={item} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} />
           ))}
         </div>
