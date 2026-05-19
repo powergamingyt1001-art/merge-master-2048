@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Coins, Zap, Clock, MessageCircle, AlertCircle, Tv } from 'lucide-react'
+import { X, Coins, Zap, Clock, AlertCircle, Tv, Copy, Check, Upload, FileText, ImageIcon } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -36,13 +36,20 @@ interface AbilityItem {
   abilityType?: 'hammer' | 'magnet' | 'blast' | 'timer' | 'undo'
 }
 
-interface StoreTransaction {
+interface StoreOrder {
   id: string
   date: string
+  playerId: string
   item: string
-  amount: number
-  status: 'Pending' | 'Delivered' | 'Delayed - 2x Bonus!'
+  price: number
+  quantity: number
+  whatsappNumber: string
+  name: string
   transactionId: string
+  utrNumber: string
+  proofBase64?: string
+  status: 'pending' | 'approved' | 'rejected'
+  upiId: string
 }
 
 type TabId = 'coins' | 'ability' | 'history'
@@ -50,11 +57,11 @@ type TabId = 'coins' | 'ability' | 'history'
 // ─── Data ────────────────────────────────────────────────────────────────────
 
 const COIN_PACKS: CoinPack[] = [
-  { id: 'coins-50k', amount: 50000, price: 10 },
-  { id: 'coins-10k', amount: 10000, price: 19, tag: { label: 'POPULAR', color: '#00E676' } },
-  { id: 'coins-30k', amount: 30000, price: 49 },
-  { id: 'coins-80k', amount: 80000, price: 109, tag: { label: 'HOT', color: '#F65E3B' } },
-  { id: 'coins-80k-best', amount: 80000, price: 109, tag: { label: 'BEST VALUE', color: '#EDC22E' } },
+  { id: 'coins-50k', amount: 50000, price: 50 },
+  { id: 'coins-10k', amount: 10000, price: 10, tag: { label: 'POPULAR', color: '#00E676' } },
+  { id: 'coins-30k', amount: 30000, price: 30 },
+  { id: 'coins-80k', amount: 80000, price: 80, tag: { label: 'HOT', color: '#F65E3B' } },
+  { id: 'coins-80k-best', amount: 80000, price: 80, tag: { label: 'BEST VALUE', color: '#EDC22E' } },
 ]
 
 const REGULAR_ABILITIES: AbilityItem[] = [
@@ -79,15 +86,15 @@ const MULTIPLIER_2_5X: AbilityItem[] = [
   { id: '2.5x-80', emoji: '🔥', name: '2.5x Multiplier', quantity: 80, price: 189, section: '2.5x', tag: { label: 'HOT', color: '#F65E3B' }, currency: 'inr' },
 ]
 
-const WHATSAPP_NUMBER = '919999999999'
-const HISTORY_KEY = 'mergeMaster2048_storeHistory'
+const UPI_ID = '9897186065@fam'
+const ORDERS_KEY = 'mergeMaster2048_orders'
 const PURCHASE_LIMIT_KEY = 'mergeMaster2048_abilityPurchaseLimits'
-const MAX_ABILITY_PER_2WEEKS = 15 // Max of each ability per 2 weeks for coin purchases
+const MAX_ABILITY_PER_2WEEKS = 15
 
 // ─── Purchase Limit Tracking ─────────────────────────────────────────────────
 
 interface PurchaseRecord {
-  [abilityType: string]: { count: number; resetAt: string } // resetAt = ISO date when 2-week window expires
+  [abilityType: string]: { count: number; resetAt: string }
 }
 
 function loadPurchaseLimits(): PurchaseRecord {
@@ -96,7 +103,6 @@ function loadPurchaseLimits(): PurchaseRecord {
     const raw = localStorage.getItem(PURCHASE_LIMIT_KEY)
     if (!raw) return {}
     const data: PurchaseRecord = JSON.parse(raw)
-    // Clean up expired entries
     const now = Date.now()
     const cleaned: PurchaseRecord = {}
     for (const [key, val] of Object.entries(data)) {
@@ -130,7 +136,6 @@ function recordPurchase(abilityType: string, quantity: number) {
   const twoWeeks = 14 * 24 * 60 * 60 * 1000
 
   if (!existing || new Date(existing.resetAt).getTime() <= now) {
-    // Start new 2-week window
     limits[abilityType] = { count: quantity, resetAt: new Date(now + twoWeeks).toISOString() }
   } else {
     limits[abilityType] = { ...existing, count: existing.count + quantity }
@@ -138,22 +143,24 @@ function recordPurchase(abilityType: string, quantity: number) {
   savePurchaseLimits(limits)
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Order Helpers ───────────────────────────────────────────────────────────
 
-function loadHistory(): StoreTransaction[] {
+function loadOrders(): StoreOrder[] {
   if (typeof window === 'undefined') return []
   try {
-    const raw = localStorage.getItem(HISTORY_KEY)
+    const raw = localStorage.getItem(ORDERS_KEY)
     return raw ? JSON.parse(raw) : []
   } catch {
     return []
   }
 }
 
-function saveHistory(history: StoreTransaction[]) {
+function saveOrders(orders: StoreOrder[]) {
   if (typeof window === 'undefined') return
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history))
+  localStorage.setItem(ORDERS_KEY, JSON.stringify(orders))
 }
+
+// ─── General Helpers ─────────────────────────────────────────────────────────
 
 function canWatchFreeAd(): boolean {
   if (typeof window === 'undefined') return true
@@ -173,11 +180,12 @@ function formatNumber(n: number): string {
   return n.toLocaleString('en-IN')
 }
 
-function openWhatsApp(item: string, price: number, playerId: string) {
-  const message = encodeURIComponent(
-    `Hi! I want to purchase ${item} for ₹${price}. My Player ID: ${playerId}`
-  )
-  window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, '_blank')
+function generateUpiLink(price: number): string {
+  return `upi://pay?pa=${UPI_ID}&pn=MergeMaster2048&am=${price}&cu=INR`
+}
+
+function generateQrUrl(upiLink: string): string {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(upiLink)}`
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -209,14 +217,377 @@ function BuyButton({ onPress }: { onPress: () => void }) {
       }}
     >
       <Zap className="w-3.5 h-3.5" />
-      BUY
+      BUY ₹
     </button>
+  )
+}
+
+// ─── UPI Payment Modal ───────────────────────────────────────────────────────
+
+interface PaymentModalProps {
+  isOpen: boolean
+  onClose: () => void
+  itemName: string
+  itemPrice: number
+  itemQuantity: number
+  playerId: string
+  onOrderPlaced: (order: StoreOrder) => void
+}
+
+function UPIPaymentModal({
+  isOpen,
+  onClose,
+  itemName,
+  itemPrice,
+  itemQuantity,
+  playerId,
+  onOrderPlaced,
+}: PaymentModalProps) {
+  const [whatsappNumber, setWhatsappNumber] = useState('')
+  const [name, setName] = useState('')
+  const [transactionId, setTransactionId] = useState('')
+  const [utrNumber, setUtrNumber] = useState('')
+  const [proofBase64, setProofBase64] = useState<string | undefined>(undefined)
+  const [proofFileName, setProofFileName] = useState<string | null>(null)
+  const [qrLoaded, setQrLoaded] = useState(true)
+  const [copied, setCopied] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const upiLink = generateUpiLink(itemPrice)
+  const qrUrl = generateQrUrl(upiLink)
+
+  const handleCopyUpiId = useCallback(() => {
+    navigator.clipboard.writeText(UPI_ID).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }).catch(() => {
+      // Fallback: select text approach
+      const textarea = document.createElement('textarea')
+      textarea.value = UPI_ID
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }, [])
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setProofFileName(file.name)
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const result = reader.result as string
+      setProofBase64(result)
+    }
+    reader.readAsDataURL(file)
+  }, [])
+
+  const handleBookOrder = useCallback(() => {
+    if (!whatsappNumber.trim() || !name.trim() || !transactionId.trim()) return
+
+    setSubmitting(true)
+
+    const order: StoreOrder = {
+      id: Date.now().toString(),
+      date: new Date().toISOString(),
+      playerId,
+      item: itemName,
+      price: itemPrice,
+      quantity: itemQuantity,
+      whatsappNumber: whatsappNumber.trim(),
+      name: name.trim(),
+      transactionId: transactionId.trim(),
+      utrNumber: utrNumber.trim(),
+      proofBase64,
+      status: 'pending',
+      upiId: UPI_ID,
+    }
+
+    onOrderPlaced(order)
+
+    // Reset form
+    setWhatsappNumber('')
+    setName('')
+    setTransactionId('')
+    setUtrNumber('')
+    setProofBase64(undefined)
+    setProofFileName(null)
+    setSubmitting(false)
+  }, [whatsappNumber, name, transactionId, utrNumber, proofBase64, itemName, itemPrice, itemQuantity, playerId, onOrderPlaced])
+
+  const isFormValid = whatsappNumber.trim() && name.trim() && transactionId.trim()
+
+  if (!isOpen) return null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="absolute inset-0 z-30 flex items-center justify-center p-3"
+      style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
+    >
+      <motion.div
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.9 }}
+        className="w-full rounded-2xl overflow-hidden max-h-[85vh] flex flex-col"
+        style={{
+          background: 'linear-gradient(135deg, #1a0533, #0d1b3e)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
+        }}
+      >
+        {/* Modal Header */}
+        <div className="flex items-center justify-between p-4 pb-3 shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <h4 className="text-sm font-bold" style={{ color: '#FFFFFF' }}>
+            💳 UPI Payment
+          </h4>
+          <button
+            onClick={onClose}
+            className="w-6 h-6 rounded-full flex items-center justify-center transition-transform active:scale-90"
+            style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}
+          >
+            <X className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
+          </button>
+        </div>
+
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+
+          {/* ── QR Code Section ── */}
+          <div className="flex flex-col items-center text-center">
+            {qrLoaded ? (
+              <div className="rounded-xl overflow-hidden mb-3 p-2" style={{ backgroundColor: '#FFFFFF' }}>
+                <img
+                  src={qrUrl}
+                  alt="UPI QR Code"
+                  width={180}
+                  height={180}
+                  className="rounded-lg"
+                  onError={() => setQrLoaded(false)}
+                />
+              </div>
+            ) : (
+              <div
+                className="w-[180px] h-[180px] rounded-xl flex items-center justify-center mb-3 p-3 text-center"
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.06)',
+                  border: '1px dashed rgba(255,255,255,0.15)',
+                }}
+              >
+                <p className="text-[10px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  Please complete payment. If QR doesn&apos;t load, use UPI ID below.
+                </p>
+              </div>
+            )}
+
+            {/* UPI ID with Copy Button */}
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm font-bold" style={{ color: '#EDC22E' }}>
+                {UPI_ID}
+              </span>
+              <button
+                onClick={handleCopyUpiId}
+                className="w-7 h-7 rounded-lg flex items-center justify-center transition-transform active:scale-90"
+                style={{ backgroundColor: 'rgba(237,194,46,0.15)', border: '1px solid rgba(237,194,46,0.3)' }}
+                title="Copy UPI ID"
+              >
+                {copied ? (
+                  <Check className="w-3.5 h-3.5" style={{ color: '#00E676' }} />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
+                )}
+              </button>
+            </div>
+            <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+              UPI ID: Copy and pay in any UPI app
+            </p>
+          </div>
+
+          {/* ── Package Details (Fixed, Non-editable) ── */}
+          <div
+            className="p-3 rounded-xl"
+            style={{
+              backgroundColor: 'rgba(237,194,46,0.06)',
+              border: '1px solid rgba(237,194,46,0.12)',
+            }}
+          >
+            <h4 className="text-[10px] font-bold mb-2" style={{ color: '#EDC22E' }}>
+              📦 PACKAGE DETAILS
+            </h4>
+            <div className="space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Item</span>
+                <span className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>{itemName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Price</span>
+                <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>₹{itemPrice}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Quantity</span>
+                <span className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>x{itemQuantity}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Payment Form ── */}
+          <div className="space-y-3">
+            <h4 className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              📝 PAYMENT DETAILS
+            </h4>
+
+            {/* WhatsApp Number */}
+            <div>
+              <label className="text-[9px] font-bold mb-1 block" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                WhatsApp Number <span style={{ color: '#F65E3B' }}>*</span>
+              </label>
+              <input
+                type="tel"
+                value={whatsappNumber}
+                onChange={(e) => setWhatsappNumber(e.target.value)}
+                placeholder="Enter WhatsApp number"
+                className="w-full px-3 py-2 rounded-lg text-xs outline-none"
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#FFFFFF',
+                }}
+              />
+            </div>
+
+            {/* Name */}
+            <div>
+              <label className="text-[9px] font-bold mb-1 block" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                Name <span style={{ color: '#F65E3B' }}>*</span>
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Enter your name"
+                className="w-full px-3 py-2 rounded-lg text-xs outline-none"
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#FFFFFF',
+                }}
+              />
+            </div>
+
+            {/* Transaction ID */}
+            <div>
+              <label className="text-[9px] font-bold mb-1 block" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                Transaction ID <span style={{ color: '#F65E3B' }}>*</span>
+              </label>
+              <input
+                type="text"
+                value={transactionId}
+                onChange={(e) => setTransactionId(e.target.value)}
+                placeholder="Enter UPI transaction ID"
+                className="w-full px-3 py-2 rounded-lg text-xs outline-none"
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#FFFFFF',
+                }}
+              />
+            </div>
+
+            {/* UTR Number */}
+            <div>
+              <label className="text-[9px] font-bold mb-1 block" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                UTR Number <span style={{ color: 'rgba(255,255,255,0.25)' }}>(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={utrNumber}
+                onChange={(e) => setUtrNumber(e.target.value)}
+                placeholder="Enter UTR number (optional)"
+                className="w-full px-3 py-2 rounded-lg text-xs outline-none"
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#FFFFFF',
+                }}
+              />
+            </div>
+
+            {/* Upload Proof */}
+            <div>
+              <label className="text-[9px] font-bold mb-1 block" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                Upload Proof (Screenshot)
+              </label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full px-3 py-2 rounded-lg text-xs flex items-center justify-center gap-2 transition-transform hover:scale-[1.01] active:scale-95"
+                style={{
+                  backgroundColor: proofFileName ? 'rgba(0,230,118,0.08)' : 'rgba(255,255,255,0.06)',
+                  border: proofFileName ? '1px solid rgba(0,230,118,0.2)' : '1px dashed rgba(255,255,255,0.15)',
+                  color: proofFileName ? '#00E676' : 'rgba(255,255,255,0.4)',
+                }}
+              >
+                {proofFileName ? (
+                  <>
+                    <FileText className="w-3.5 h-3.5" />
+                    {proofFileName.length > 25 ? proofFileName.substring(0, 22) + '...' : proofFileName}
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-3.5 h-3.5" />
+                    Upload Screenshot
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Action Buttons ── */}
+        <div className="shrink-0 p-4 pt-3 flex gap-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl font-bold text-xs transition-transform active:scale-95"
+            style={{
+              backgroundColor: 'rgba(255,255,255,0.06)',
+              color: 'rgba(255,255,255,0.5)',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            CANCEL
+          </button>
+          <button
+            onClick={handleBookOrder}
+            disabled={!isFormValid || submitting}
+            className="flex-1 py-2.5 rounded-xl font-bold text-xs transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{
+              background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
+              color: '#FFFFFF',
+            }}
+          >
+            {submitting ? 'BOOKING...' : 'BOOK ORDER'}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   )
 }
 
 // ─── Coins Tab ───────────────────────────────────────────────────────────────
 
-function CoinsTab({ playerId, onBuy }: { playerId: string; onBuy: (item: string, price: number) => void }) {
+function CoinsTab({ onBuy }: { onBuy: (item: string, price: number, quantity: number) => void }) {
   return (
     <div className="grid grid-cols-2 gap-3">
       {COIN_PACKS.map((pack, i) => (
@@ -242,10 +613,10 @@ function CoinsTab({ playerId, onBuy }: { playerId: string; onBuy: (item: string,
           </div>
           <div className="w-full">
             <p className="text-center text-xs font-bold mb-2" style={{ color: 'rgba(255,255,255,0.7)' }}>
-              ₹{pack.price}
+              {formatNumber(pack.amount)} Coins = ₹{pack.price}
             </p>
             <BuyButton
-              onPress={() => onBuy(`${formatNumber(pack.amount)} Coins`, pack.price)}
+              onPress={() => onBuy(`${formatNumber(pack.amount)} Coins`, pack.price, pack.amount)}
             />
           </div>
         </motion.div>
@@ -263,7 +634,7 @@ function AbilityCard({
   coins,
 }: {
   item: AbilityItem
-  onBuy: (item: string, price: number) => void
+  onBuy: (item: string, price: number, quantity: number) => void
   onCoinBuy: (item: AbilityItem) => void
   coins: number
 }) {
@@ -313,7 +684,7 @@ function AbilityCard({
           {isCoinCurrency ? `💰 ${formatNumber(item.price)}` : `₹${item.price}`}
         </span>
         <button
-          onClick={() => isCoinCurrency ? onCoinBuy(item) : onBuy(`${item.emoji} ${item.name} x${item.quantity}`, item.price)}
+          onClick={() => isCoinCurrency ? onCoinBuy(item) : onBuy(`${item.emoji} ${item.name} x${item.quantity}`, item.price, item.quantity)}
           disabled={isCoinCurrency && (!canAfford || isLimitReached)}
           className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
           style={{
@@ -332,7 +703,7 @@ function AbilityCard({
 
 // ─── Ability Tab ─────────────────────────────────────────────────────────────
 
-function AbilityTab({ playerId, onBuy, onCoinBuy, coins }: { playerId: string; onBuy: (item: string, price: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number }) {
+function AbilityTab({ onBuy, onCoinBuy, coins }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number }) {
   const [canWatchAd, setCanWatchAd] = useState(() => canWatchFreeAd())
 
   const handleWatchAd = useCallback(() => {
@@ -448,251 +819,125 @@ function AbilityTab({ playerId, onBuy, onCoinBuy, coins }: { playerId: string; o
 
 // ─── History Tab ─────────────────────────────────────────────────────────────
 
-function HistoryTab({
-  history,
-  onSubmitTransactionId,
-}: {
-  history: StoreTransaction[]
-  onSubmitTransactionId: (txId: string) => void
-}) {
-  const [txInput, setTxInput] = useState('')
-
-  const handleSubmit = useCallback(() => {
-    if (!txInput.trim()) return
-    onSubmitTransactionId(txInput.trim())
-    setTxInput('')
-  }, [txInput, onSubmitTransactionId])
+function HistoryTab({ orders }: { orders: StoreOrder[] }) {
+  const statusConfig: Record<string, { bg: string; color: string; label: string }> = {
+    pending: { bg: 'rgba(255,167,38,0.15)', color: '#FFA726', label: 'Pending' },
+    approved: { bg: 'rgba(0,230,118,0.15)', color: '#00E676', label: 'Approved' },
+    rejected: { bg: 'rgba(246,94,59,0.15)', color: '#F65E3B', label: 'Rejected' },
+  }
 
   return (
     <div className="space-y-4">
-      {/* Transaction ID input */}
-      <div
-        className="p-3 rounded-xl"
-        style={{
-          backgroundColor: 'rgba(237,194,46,0.06)',
-          border: '1px solid rgba(237,194,46,0.12)',
-        }}
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <MessageCircle className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
-          <h4 className="text-xs font-extrabold" style={{ color: '#EDC22E' }}>
-            SUBMIT TRANSACTION ID
-          </h4>
-        </div>
-        <p className="text-[10px] mb-3" style={{ color: 'rgba(255,255,255,0.4)' }}>
-          After completing your purchase on WhatsApp, enter the transaction ID here to track your order.
-        </p>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={txInput}
-            onChange={(e) => setTxInput(e.target.value)}
-            placeholder="Enter Transaction ID"
-            className="flex-1 px-3 py-2 rounded-lg text-xs outline-none"
-            style={{
-              backgroundColor: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              color: '#FFFFFF',
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSubmit()
-            }}
-          />
-          <button
-            onClick={handleSubmit}
-            disabled={!txInput.trim()}
-            className="px-4 py-2 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40"
-            style={{
-              background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
-              color: '#FFFFFF',
-            }}
-          >
-            SUBMIT
-          </button>
-        </div>
-      </div>
-
-      {/* Transaction list */}
-      <div>
-        <h4 className="text-xs font-extrabold mb-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
-          PURCHASE HISTORY
-        </h4>
-        {history.length === 0 ? (
-          <div
-            className="p-6 rounded-xl text-center"
-            style={{
-              backgroundColor: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(255,255,255,0.06)',
-            }}
-          >
-            <p className="text-2xl mb-2">🛒</p>
-            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
-              No purchases yet
-            </p>
-            <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
-              Your transactions will appear here
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2 max-h-72 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
-            {history.map((tx) => (
-              <motion.div
-                key={tx.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-3 rounded-xl"
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                }}
-              >
-                <div className="flex items-start justify-between mb-1">
-                  <div>
-                    <p className="text-xs font-bold" style={{ color: '#FFFFFF' }}>
-                      {tx.item}
-                    </p>
-                    <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                      {new Date(tx.date).toLocaleString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs font-bold" style={{ color: '#EDC22E' }}>
-                      ₹{tx.amount}
-                    </p>
-                    <span
-                      className="inline-block px-2 py-0.5 rounded-full text-[8px] font-bold"
-                      style={{
-                        backgroundColor:
-                          tx.status === 'Delivered'
-                            ? 'rgba(0,230,118,0.15)'
-                            : tx.status === 'Delayed - 2x Bonus!'
-                              ? 'rgba(237,194,46,0.15)'
-                              : 'rgba(255,255,255,0.08)',
-                        color:
-                          tx.status === 'Delivered'
-                            ? '#00E676'
-                            : tx.status === 'Delayed - 2x Bonus!'
-                              ? '#EDC22E'
-                              : '#FFA726',
-                      }}
-                    >
-                      {tx.status}
-                    </span>
-                  </div>
-                </div>
-                <p className="text-[8px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                  TX: {tx.transactionId}
-                </p>
-              </motion.div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ─── Transaction ID Modal ────────────────────────────────────────────────────
-
-function TransactionModal({
-  isOpen,
-  onClose,
-  itemName,
-  itemPrice,
-  onSubmit,
-}: {
-  isOpen: boolean
-  onClose: () => void
-  itemName: string
-  itemPrice: number
-  onSubmit: (txId: string) => void
-}) {
-  const [txId, setTxId] = useState('')
-
-  const handleSubmit = useCallback(() => {
-    if (!txId.trim()) return
-    onSubmit(txId.trim())
-    setTxId('')
-  }, [txId, onSubmit])
-
-  if (!isOpen) return null
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="absolute inset-0 z-30 flex items-center justify-center p-6"
-      style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
-    >
-      <motion.div
-        initial={{ scale: 0.9, y: 20 }}
-        animate={{ scale: 1, y: 0 }}
-        exit={{ scale: 0.9 }}
-        className="w-full rounded-2xl p-5"
-        style={{
-          background: 'linear-gradient(135deg, #1a0533, #0d1b3e)',
-          border: '1px solid rgba(255,255,255,0.1)',
-          boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
-        }}
-      >
-        <h4 className="text-sm font-bold mb-1" style={{ color: '#FFFFFF' }}>
-          📋 Submit Transaction ID
-        </h4>
-        <p className="text-[10px] mb-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
-          Item: <span style={{ color: '#EDC22E' }}>{itemName}</span> — ₹{itemPrice}
-        </p>
-        <p className="text-[9px] mb-4" style={{ color: 'rgba(255,255,255,0.35)' }}>
-          Your order will be delivered in 1-2 hours. If delayed beyond 12 hours, you&apos;ll receive DOUBLE the amount!
-        </p>
-        <input
-          type="text"
-          value={txId}
-          onChange={(e) => setTxId(e.target.value)}
-          placeholder="Enter Transaction ID from WhatsApp"
-          className="w-full px-3 py-2.5 rounded-xl text-xs outline-none mb-3"
+      {orders.length === 0 ? (
+        <div
+          className="p-6 rounded-xl text-center"
           style={{
-            backgroundColor: 'rgba(255,255,255,0.06)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            color: '#FFFFFF',
+            backgroundColor: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.06)',
           }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleSubmit()
-          }}
-          autoFocus
-        />
-        <div className="flex gap-2">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl font-bold text-xs transition-transform active:scale-95"
-            style={{
-              backgroundColor: 'rgba(255,255,255,0.06)',
-              color: 'rgba(255,255,255,0.5)',
-              border: '1px solid rgba(255,255,255,0.08)',
-            }}
-          >
-            Later
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!txId.trim()}
-            className="flex-1 py-2.5 rounded-xl font-bold text-xs transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-40"
-            style={{
-              background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
-              color: '#FFFFFF',
-            }}
-          >
-            Submit
-          </button>
+        >
+          <p className="text-2xl mb-2">🛒</p>
+          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            No orders yet
+          </p>
+          <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
+            Your orders will appear here
+          </p>
         </div>
-      </motion.div>
-    </motion.div>
+      ) : (
+        <div>
+          <h4 className="text-xs font-extrabold mb-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
+            ORDER HISTORY
+          </h4>
+          <div className="space-y-2 max-h-96 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+            {orders.map((order) => {
+              const sc = statusConfig[order.status] || statusConfig.pending
+              return (
+                <motion.div
+                  key={order.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-3 rounded-xl"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                  }}
+                >
+                  <div className="flex items-start justify-between mb-1">
+                    <div className="flex-1">
+                      <p className="text-xs font-bold" style={{ color: '#FFFFFF' }}>
+                        {order.item}
+                      </p>
+                      <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                        {new Date(order.date).toLocaleString('en-IN', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </p>
+                    </div>
+                    <div className="text-right ml-2">
+                      <p className="text-xs font-bold" style={{ color: '#EDC22E' }}>
+                        ₹{order.price}
+                      </p>
+                      <span
+                        className="inline-block px-2 py-0.5 rounded-full text-[8px] font-bold"
+                        style={{
+                          backgroundColor: sc.bg,
+                          color: sc.color,
+                        }}
+                      >
+                        {sc.label}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Proof thumbnail if available */}
+                  {order.proofBase64 && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <div
+                        className="w-8 h-8 rounded-lg overflow-hidden"
+                        style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+                      >
+                        <img
+                          src={order.proofBase64}
+                          alt="Proof"
+                          width={32}
+                          height={32}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <ImageIcon className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.3)' }} />
+                        <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                          Proof attached
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                    <p className="text-[8px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                      TX: {order.transactionId}
+                    </p>
+                    {order.utrNumber && (
+                      <p className="text-[8px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                        UTR: {order.utrNumber}
+                      </p>
+                    )}
+                    <p className="text-[8px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                      WA: {order.whatsappNumber}
+                    </p>
+                  </div>
+                </motion.div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -700,11 +945,12 @@ function TransactionModal({
 
 export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos }: StoreProps) {
   const [activeTab, setActiveTab] = useState<TabId>('coins')
-  const [history, setHistory] = useState<StoreTransaction[]>(() => loadHistory())
-  const [txModal, setTxModal] = useState<{ open: boolean; itemName: string; itemPrice: number }>({
+  const [orders, setOrders] = useState<StoreOrder[]>(() => loadOrders())
+  const [paymentModal, setPaymentModal] = useState<{ open: boolean; itemName: string; itemPrice: number; itemQuantity: number }>({
     open: false,
     itemName: '',
     itemPrice: 0,
+    itemQuantity: 0,
   })
 
   // Handle coin-based ability purchase
@@ -747,69 +993,29 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
     [coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos]
   )
 
+  // Handle real-money purchase: open payment modal
   const handleBuy = useCallback(
-    (itemName: string, price: number) => {
-      // 1. Open WhatsApp
-      openWhatsApp(itemName, price, playerId)
-      // 2. After a short delay, show the transaction ID form
-      setTimeout(() => {
-        setTxModal({ open: true, itemName, itemPrice: price })
-      }, 1500)
+    (itemName: string, price: number, quantity: number) => {
+      setPaymentModal({ open: true, itemName, itemPrice: price, itemQuantity: quantity })
     },
-    [playerId]
+    []
   )
 
-  const handleTransactionSubmit = useCallback(
-    (txId: string) => {
-      const tx: StoreTransaction = {
-        id: Date.now().toString(),
-        date: new Date().toISOString(),
-        item: txModal.itemName,
-        amount: txModal.itemPrice,
-        status: 'Pending',
-        transactionId: txId,
-      }
-      const newHistory = [tx, ...history].slice(0, 50)
-      setHistory(newHistory)
-      saveHistory(newHistory)
-      setTxModal({ open: false, itemName: '', itemPrice: 0 })
+  // Handle order placed from payment modal
+  const handleOrderPlaced = useCallback(
+    (order: StoreOrder) => {
+      const newOrders = [order, ...orders].slice(0, 50)
+      setOrders(newOrders)
+      saveOrders(newOrders)
+      setPaymentModal({ open: false, itemName: '', itemPrice: 0, itemQuantity: 0 })
       onAddNotification(
-        'Order Placed! 🛒',
-        `Your order for ${tx.item} (₹${tx.amount}) has been submitted. Transaction ID: ${txId}`,
+        'Order Booked! 🛒',
+        `Your order for ${order.item} (₹${order.price}) has been submitted. We'll verify and deliver soon!`,
         'system',
         '📦'
       )
     },
-    [txModal, history, onAddNotification]
-  )
-
-  const handleHistoryTxSubmit = useCallback(
-    (txId: string) => {
-      // When submitting a transaction ID from the History tab,
-      // update the most recent "Pending" transaction
-      const pendingIdx = history.findIndex((tx) => tx.status === 'Pending' && tx.transactionId === '')
-      if (pendingIdx >= 0) {
-        const updated = [...history]
-        updated[pendingIdx] = { ...updated[pendingIdx], transactionId: txId }
-        setHistory(updated)
-        saveHistory(updated)
-      } else {
-        // Create a generic pending entry
-        const tx: StoreTransaction = {
-          id: Date.now().toString(),
-          date: new Date().toISOString(),
-          item: 'Manual Entry',
-          amount: 0,
-          status: 'Pending',
-          transactionId: txId,
-        }
-        const newHistory = [tx, ...history].slice(0, 50)
-        setHistory(newHistory)
-        saveHistory(newHistory)
-      }
-      onAddNotification('Transaction ID Submitted 📋', `Transaction ID: ${txId} has been recorded.`, 'system', '✅')
-    },
-    [history, onAddNotification]
+    [orders, onAddNotification]
   )
 
   const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
@@ -901,7 +1107,7 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <CoinsTab playerId={playerId} onBuy={handleBuy} />
+                    <CoinsTab onBuy={handleBuy} />
                   </motion.div>
                 )}
                 {activeTab === 'ability' && (
@@ -912,7 +1118,7 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <AbilityTab playerId={playerId} onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} />
+                    <AbilityTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} />
                   </motion.div>
                 )}
                 {activeTab === 'history' && (
@@ -923,7 +1129,7 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <HistoryTab history={history} onSubmitTransactionId={handleHistoryTxSubmit} />
+                    <HistoryTab orders={orders} />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -946,15 +1152,17 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
               </div>
             </div>
 
-            {/* Transaction ID Modal (overlay within the store) */}
+            {/* UPI Payment Modal (overlay within the store) */}
             <AnimatePresence>
-              {txModal.open && (
-                <TransactionModal
-                  isOpen={txModal.open}
-                  onClose={() => setTxModal({ open: false, itemName: '', itemPrice: 0 })}
-                  itemName={txModal.itemName}
-                  itemPrice={txModal.itemPrice}
-                  onSubmit={handleTransactionSubmit}
+              {paymentModal.open && (
+                <UPIPaymentModal
+                  isOpen={paymentModal.open}
+                  onClose={() => setPaymentModal({ open: false, itemName: '', itemPrice: 0, itemQuantity: 0 })}
+                  itemName={paymentModal.itemName}
+                  itemPrice={paymentModal.itemPrice}
+                  itemQuantity={paymentModal.itemQuantity}
+                  playerId={playerId}
+                  onOrderPlaced={handleOrderPlaced}
                 />
               )}
             </AnimatePresence>

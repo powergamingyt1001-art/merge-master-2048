@@ -153,14 +153,13 @@ export function ProfilePanel({
                   )}
                 </div>
 
-                {/* Level Title - Tap to view all levels */}
-                <button onClick={() => setShowLevelList(true)}
-                  className="flex items-center gap-1 mt-1 px-3 py-1 rounded-full transition-transform hover:scale-105 active:scale-95"
+                {/* Level Title - Display only, NOT clickable for level list */}
+                <div
+                  className="flex items-center gap-1 mt-1 px-3 py-1 rounded-full"
                   style={{ backgroundColor: `${levelInfo.color}15`, border: `1.5px solid ${levelInfo.color}40` }}>
                   <span className="text-sm">{levelInfo.icon}</span>
                   <span className="text-[10px] font-bold" style={{ color: levelInfo.color }}>Lv.{playerLevel} {levelInfo.title}</span>
-                  <span className="text-[8px]" style={{ color: `${levelInfo.color}80` }}>▼ Levels</span>
-                </button>
+                </div>
 
                 {/* Level List Overlay */}
                 <AnimatePresence>
@@ -289,7 +288,7 @@ export function ProfilePanel({
                 <StatBox icon={<Trophy className="w-4 h-4" />} label="Best Score" value={bestScore.toLocaleString()} color="#EDC22E" />
                 <StatBox icon={<Swords className="w-4 h-4" />} label="Mod Best" value={modBestScore > 0 ? modBestScore.toLocaleString() : '-'} color="#F65E3B" />
                 <StatBox icon={<Target className="w-4 h-4" />} label="Level XP" value={`${levelXP.toLocaleString()} / ${nextLevelThreshold.toLocaleString()}`} color="#00E676" />
-                <StatBox icon={<Coins className="w-4 h-4" />} label="Coins" value={coins.toLocaleString()} color="#EDC22E" />
+                <StatBox icon={<Coins className="w-4 h-4" />} label={`Coins (1K=₹1)`} value={`${coins.toLocaleString()} ≈ ₹${Math.floor(coins/1000)}`} color="#EDC22E" />
                 <StatBox icon={<Calendar className="w-4 h-4" />} label="Games Today" value={`${gamesPlayedToday}/${maxGamesPerDay}`} color="#00FFFF" />
                 <StatBox icon={<Users className="w-4 h-4" />} label="Invited" value={invitedUsers.length.toString()} color="#F59563" />
               </div>

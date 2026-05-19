@@ -126,3 +126,144 @@ Stage Summary:
 - K format for large ability counts
 - Battle/Coin toggle exclusive
 - Commit: 509d433 pushed to main
+
+---
+Task ID: 3
+Agent: GameBoard Fix Agent
+Task: Redesign GameBoard abilities section
+
+Work Log:
+- Removed CODE button from ability section (center coupon capsule)
+- Removed CouponCode import and showCoupon state
+- Removed CouponCode modal rendering at bottom of component
+- Changed ability layout from 2x2 left + CODE + 2x2 right to two horizontal rows of 4 abilities each
+  - Row 1: 🔨 Hammer, 🧲 Magnet, 💣 Bomb, ↩️ Undo
+  - Row 2: ⚡ 5x, 🔥 2.5x, ⏱️ Timer, (empty spacer)
+- Made outer container rectangular touching screen edges (mx-0, w-full, no orange border, no background border)
+- Removed thick orange border from container (was 2px solid #FFA500)
+- Made container thinner (py-1 instead of py-2)
+- Redesigned OvalAbilitySlot component:
+  - Removed visible border (border: none)
+  - Changed to capsule/pill shape (rounded-full, borderRadius: 13)
+  - Reduced size slightly (60x26 instead of 52x28)
+  - When active: glow effect (boxShadow with color) instead of border
+  - When inactive: subtle semi-transparent background (rgba(255,255,255,0.06))
+  - Added accentColor prop for row 2 abilities (red/orange/green)
+  - Added label text next to emoji icon for clarity
+  - Count badge now uses accentColor with subtle glow
+- Ran bun run lint - no errors
+
+Stage Summary:
+- Ability section redesigned to clean two-row horizontal layout
+- CODE button and CouponCode modal completely removed
+- Ability slots are borderless capsules with glow on activation
+- Container is edge-to-edge with no visible border
+- Game board looks cleaner and more modern
+
+---
+Task ID: 1
+Agent: Dashboard Fix Agent
+Task: Fix PlayDashboard crash and redesign UI
+
+Work Log:
+- Fixed onDeductCoins not being destructured in PlayDashboard component function (was in interface but missing from destructured props, causing "onDeductCoins is not defined" crash at Store component)
+- Removed mismatched props from page.tsx that don't exist in PlayDashboardProps:
+  - Removed: undoTotal, multiply5Count, multiply2_5Count, timeExtendCount, levelXP, onDeleteNotification, onDeleteReadNotifications, streakAdBonusClaimed, onClaimStreakAdBonus
+  - Fixed prop names: multiply5Count → multiplier5xCount, multiply2_5Count → multiplier2_5xCount, timeExtendCount → extraTimeCount
+- Redesigned Quick Actions layout:
+  - Row 1: Changed from 4 cols (Daily, Spin, Store, Coupon) to 3 cols (Daily, Spin, Store) with grid-cols-3
+  - Row 2: Changed from 3 cols (Weekly, Rank, Invite) to 2 cols (Rank, Invite) with grid-cols-2
+  - Removed Weekly Claim button from Row 2
+  - Removed Coupon button from Row 1 (moved to inventory bar)
+- Made Rank and Invite buttons in Row 2 wider/longer:
+  - Changed from vertical flex-col to horizontal layout with emoji + text side-by-side
+  - Increased padding from py-2 to py-3
+  - Increased emoji size from text-base to text-lg
+  - Increased text size from text-[7px] to text-[9px]
+  - Added descriptive subtitle text ("Leaderboard", "Earn 5%")
+- Added Coupon Code button to Inventory bar:
+  - Small "🎟️ Code" capsule button at the end of inventory items, before spin tickets/games-left
+  - Opens the existing coupon modal (showCoupon state)
+  - Uses rounded-full capsule shape with green accent
+- Redesigned Inventory items as capsule-shaped (pill shape):
+  - Replaced InventoryItem with InventoryCapsule component
+  - Changed from plain div to rounded-full capsule with px-1.5 py-0.5 padding
+  - Removed outer border from inventory bar container
+  - Each capsule has subtle semi-transparent background (color + 12 hex alpha)
+  - No borders on capsules
+  - Spin tickets and games-left also use rounded-full capsule shape
+- Ran bun run lint - no errors
+
+Stage Summary:
+- Crash bug fixed (onDeductCoins now destructured properly)
+- Mismatched props removed from page.tsx, correct prop names applied
+- Quick actions redesigned: Row 1 = 3 items (Daily/Spin/Store), Row 2 = 2 wider items (Rank/Invite)
+- Weekly button removed from dashboard
+- Coupon moved from quick actions to inventory bar as "🎟️ Code" capsule
+- Inventory items are now borderless capsule pills
+- Rank and Invite buttons are wider with horizontal layout
+
+---
+Task ID: 4
+Agent: Store Redesign Agent
+Task: Redesign Store with QR code payment flow
+
+Work Log:
+- Removed WhatsApp redirect: deleted WHATSAPP_NUMBER constant and openWhatsApp() function
+- Replaced TransactionModal with new UPIPaymentModal component
+- Added UPI QR code generation using api.qrserver.com with UPI deep link format
+- UPI deep link: upi://pay?pa=9897186065@fam&pn=MergeMaster2048&am=${price}&cu=INR
+- Added QR code fallback text when image fails to load
+- Added UPI ID display (9897186065@fam) with copy-to-clipboard button
+- Added "UPI ID: Copy and pay in any UPI app" helper text
+- Added Package Details section (read-only: item name, price, quantity)
+- Added Payment Form section with:
+  - WhatsApp Number (required)
+  - Name (required)
+  - Transaction ID (required)
+  - UTR Number (optional)
+  - Upload Proof button (file input → base64 conversion → stored with order)
+- Added CANCEL and BOOK ORDER action buttons
+- Updated coin pack pricing format to "10,000 Coins = ₹10" display
+- Updated COIN_PACKS prices to 1000 coins = ₹1 ratio (10k=₹10, 30k=₹30, 50k=₹50, 80k=₹80)
+- Changed coin pack BuyButton text to "BUY ₹" for real-money purchases
+- Replaced StoreTransaction interface with StoreOrder interface
+- Changed localStorage key from mergeMaster2048_storeHistory to mergeMaster2048_orders
+- StoreOrder includes: id, date, playerId, item, price, quantity, whatsappNumber, name, transactionId, utrNumber, proofBase64, status, upiId
+- Updated HistoryTab to show orders with status badges (Pending/Approved/Rejected)
+- Added proof image thumbnail display in history when proof is attached
+- Removed playerId prop from CoinsTab (no longer needed)
+- Updated handleBuy to open payment modal instead of WhatsApp redirect
+- Added handleOrderPlaced callback to save orders and show confirmation notification
+- Renamed lucide Image import to ImageIcon to avoid JSX a11y lint warning
+- Ran bun run lint - 0 errors, 0 warnings
+
+Stage Summary:
+- Store completely redesigned with proper UPI payment flow
+- QR code with UPI ID 9897186065@fam for payment
+- Orders stored in localStorage (mergeMaster2048_orders) for admin panel
+- No more WhatsApp redirect - all payment happens within the store modal
+- Proof upload with base64 conversion for admin verification
+- History tab shows order status and proof thumbnails
+---
+Task ID: 5
+Agent: Main Agent
+Task: Fix ProfilePanel + Add searching animation + Tournament weekly claim
+
+Work Log:
+- Fixed ProfilePanel: Level title button no longer opens level list (was a <button>, now a <div>)
+- Only the progress bar box opens the level list now
+- Added coins pricing format: 1000 coins = ₹1 in stats display
+- Added searching animation overlay for Battle and Coin modes
+- Searching shows player profile on left, spinning search icon in center, unknown opponent on right
+- After 2-4 seconds, opponent is revealed with name and avatar
+- After 1.5s of showing opponent, game starts automatically
+- Cancel button available during search
+- Weekly claim bonus now passed to Tournament component (was already in Tournament UI)
+- All lint checks pass with zero errors
+
+Stage Summary:
+- ProfilePanel: Level list only opens on progress bar click
+- Coins display shows ₹ value (1000=₹1)
+- Searching animation added for online Battle/Coin modes
+- Weekly claim properly wired to Tournament

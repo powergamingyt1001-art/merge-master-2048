@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Direction, PowerUp } from '@/hooks/useGame'
 import { useGameContext } from '@/context/GameContext'
 import { TileComponent } from './Tile'
-import { CouponCode } from './CouponCode'
+// CouponCode removed - no longer needed
 import {
   Trophy, RotateCcw, Undo2, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
   Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle, Swords, Coins,
@@ -122,7 +122,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   const [gameOverDismissed, setGameOverDismissed] = useState(false)
   const [waitingForReturn, setWaitingForReturn] = useState(false) // User visiting ad site
   const [showWelcomeBack, setShowWelcomeBack] = useState(false) // Show welcome back overlay
-  const [showCoupon, setShowCoupon] = useState(false) // Coupon code modal
+  // showCoupon state removed - CODE button removed
 
   // Determine game type
   const isBattleMode = gameMode === 'bot' || gameMode === 'coins' || gameMode === 'tournament'
@@ -768,53 +768,33 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
       </div>
 
       {/* ============================================================ */}
-      {/* ABILITY SECTION - 2x2 left, Coupon center, 2x2 right        */}
-      {/* Based on user's CSS design with oval slots and capsule box   */}
+      {/* ABILITY SECTION - Two rows of 4 abilities each               */}
+      {/* Row 1: Hammer, Magnet, Bomb, Undo                            */}
+      {/* Row 2: 5x, 2.5x, Timer, (empty)                             */}
       {/* ============================================================ */}
       <div
-        className="flex items-center justify-between flex-shrink-0 mx-2 my-1.5 px-3 py-2 rounded-lg"
+        className="flex flex-col items-center flex-shrink-0 mx-0 my-1 px-2 py-1"
         style={{
-          border: '2px solid #FFA500',
-          backgroundColor: 'rgba(26,26,26,0.9)',
+          width: '100%',
           maxWidth: 500,
-          gap: 8,
+          gap: 4,
         }}
       >
-        {/* LEFT GROUP - 2x2 grid: Hammer, Magnet, Bomb, Undo */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 5 }}>
-          <OvalAbilitySlot icon="🔨" count={hammerCount} active={activePowerUp === 'hammer'} onClick={() => handlePowerUp('hammer')} borderColor="#D3D3D3" label="Hammer" />
-          <OvalAbilitySlot icon="🧲" count={magnetCount} active={activePowerUp === 'magnet'} onClick={() => handlePowerUp('magnet')} borderColor="#D3D3D3" label="Magnet" />
-          <OvalAbilitySlot icon="💣" count={blastCount} active={false} onClick={() => handlePowerUp('blast')} borderColor="#D3D3D3" label="Bomb" />
-          <OvalAbilitySlot icon="↩️" count={undoTotal - undoCount} active={false} onClick={undo} borderColor="#D3D3D3" label="Undo" disabled={!canUndo || undoCount >= undoTotal} />
+        {/* Row 1: Hammer, Magnet, Bomb, Undo */}
+        <div className="flex items-center justify-center w-full" style={{ gap: 6 }}>
+          <OvalAbilitySlot icon="🔨" count={hammerCount} active={activePowerUp === 'hammer'} onClick={() => handlePowerUp('hammer')} label="Hammer" />
+          <OvalAbilitySlot icon="🧲" count={magnetCount} active={activePowerUp === 'magnet'} onClick={() => handlePowerUp('magnet')} label="Magnet" />
+          <OvalAbilitySlot icon="💣" count={blastCount} active={false} onClick={() => handlePowerUp('blast')} label="Bomb" />
+          <OvalAbilitySlot icon="↩️" count={undoTotal - undoCount} active={false} onClick={undo} label="Undo" disabled={!canUndo || undoCount >= undoTotal} />
         </div>
 
-        {/* CENTER - Coupon Code capsule */}
-        <button
-          onClick={() => setShowCoupon(true)}
-          className="flex items-center justify-center flex-shrink-0"
-          style={{
-            flexGrow: 1,
-            maxWidth: 120,
-            height: 50,
-            border: '3px solid #000000',
-            borderRadius: 25,
-            backgroundColor: '#FFFFFF',
-            cursor: 'pointer',
-            minWidth: 80,
-          }}
-        >
-          <span style={{ fontFamily: 'sans-serif', fontWeight: 'bold', color: '#000000', fontSize: 13, letterSpacing: 1 }}>
-            CODE
-          </span>
-        </button>
-
-        {/* RIGHT GROUP - 2x2 grid: 5x, 2.5x, Timer, (empty) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 5 }}>
-          <OvalAbilitySlot icon="⚡" count={game.multiplier5xCount} active={game.activeMultiplier === 5} onClick={() => handlePowerUp('multiplier5x')} borderColor="#FF4D4D" label="5x" />
-          <OvalAbilitySlot icon="🔥" count={game.multiplier2_5xCount} active={game.activeMultiplier === 2.5} onClick={() => handlePowerUp('multiplier2_5x')} borderColor="#FF4D4D" label="2.5x" />
-          <OvalAbilitySlot icon="⏱️" count={game.extraTimeCount} active={false} onClick={() => handlePowerUp('extraTime')} borderColor="#FF4D4D" label="+10s" />
-          {/* Empty slot for symmetry */}
-          <div style={{ width: 52, height: 28, borderRadius: 14, border: '2px solid rgba(255,77,77,0.15)', backgroundColor: 'rgba(255,77,77,0.03)' }} />
+        {/* Row 2: 5x, 2.5x, Timer, (empty) */}
+        <div className="flex items-center justify-center w-full" style={{ gap: 6 }}>
+          <OvalAbilitySlot icon="⚡" count={game.multiplier5xCount} active={game.activeMultiplier === 5} onClick={() => handlePowerUp('multiplier5x')} label="5x" accentColor="#FF4D4D" />
+          <OvalAbilitySlot icon="🔥" count={game.multiplier2_5xCount} active={game.activeMultiplier === 2.5} onClick={() => handlePowerUp('multiplier2_5x')} label="2.5x" accentColor="#FF7A00" />
+          <OvalAbilitySlot icon="⏱️" count={game.extraTimeCount} active={false} onClick={() => handlePowerUp('extraTime')} label="+10s" accentColor="#00E676" />
+          {/* Empty slot for alignment */}
+          <div style={{ width: 60, height: 26 }} />
         </div>
       </div>
 
@@ -863,20 +843,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
         )}
       </AnimatePresence>
 
-      {/* Coupon Code Modal */}
-      <CouponCode
-        isOpen={showCoupon}
-        onClose={() => setShowCoupon(false)}
-        coins={game.coins}
-        hammerCount={game.hammerCount}
-        magnetCount={game.magnetCount}
-        blastCount={game.blastCount}
-        spinTickets={game.spinTickets}
-        onAddCoins={addCoins}
-        onAddPowerUp={(pu, count) => game.addPowerUp(pu, count)}
-        onAddSpinTickets={(count) => game.addSpinTickets(count)}
-        onAddNotification={(title, message, type, emoji) => addNotification(title, message, type as 'reward' | 'battle' | 'system' | 'commission', emoji)}
-      />
+      {/* Coupon Code Modal removed - moved to dashboard */}
 
       {/* Mobile direction buttons */}
       <div className="flex gap-1 sm:hidden flex-shrink-0">
@@ -998,47 +965,58 @@ function formatAbilityCount(count: number): string {
   return count.toString()
 }
 
-// Oval-shaped ability slot matching user's CSS design
-function OvalAbilitySlot({ icon, count, active, onClick, borderColor, label, disabled }: {
-  icon: string; count: number; active: boolean; onClick: () => void; borderColor: string; label: string; disabled?: boolean
+// Capsule-shaped ability slot - no border, glow when active
+function OvalAbilitySlot({ icon, count, active, onClick, label, disabled, accentColor }: {
+  icon: string; count: number; active: boolean; onClick: () => void; label: string; disabled?: boolean; accentColor?: string
 }) {
+  const glow = accentColor || (active ? '#EDC22E' : 'rgba(255,255,255,0.3)')
   return (
     <motion.button
       onClick={onClick}
       disabled={disabled}
-      className="relative flex items-center justify-center"
+      className="relative flex items-center justify-center rounded-full"
       style={{
-        width: 52,
-        height: 28,
-        borderRadius: 14, // Oval shape
-        border: active ? `2px solid ${borderColor}` : `2px solid ${borderColor}`,
-        backgroundColor: active ? `${borderColor}25` : `${borderColor}0A`,
+        width: 60,
+        height: 26,
+        borderRadius: 13,
+        border: 'none',
+        backgroundColor: active
+          ? `${glow}30`
+          : 'rgba(255,255,255,0.06)',
+        boxShadow: active
+          ? `0 0 10px ${glow}60, 0 0 20px ${glow}25`
+          : 'none',
         opacity: disabled ? 0.35 : 1,
         cursor: disabled ? 'not-allowed' : 'pointer',
         padding: 0,
         outline: 'none',
+        transition: 'background-color 0.25s, box-shadow 0.25s',
       }}
-      whileTap={!disabled ? { scale: 0.9 } : {}}
-      animate={active ? { scale: [1, 1.05, 1] } : {}}
+      whileTap={!disabled ? { scale: 0.92 } : {}}
+      animate={active ? { scale: [1, 1.06, 1] } : {}}
       transition={{ duration: 0.8, repeat: active ? Infinity : 0 }}
       title={label}
     >
       <span style={{ fontSize: 11, lineHeight: 1 }}>{icon}</span>
+      <span style={{ fontSize: 7, lineHeight: 1, fontWeight: 700, color: active ? '#FFFFFF' : 'rgba(255,255,255,0.5)', marginLeft: 2 }}>
+        {label}
+      </span>
       <span
         className="absolute font-bold"
         style={{
           fontSize: 7,
           top: -5,
-          right: -3,
+          right: -2,
           minWidth: 14,
           height: 14,
           borderRadius: 7,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: count > 0 ? borderColor : 'rgba(255,255,255,0.08)',
+          backgroundColor: count > 0 ? (accentColor || 'rgba(255,255,255,0.2)') : 'rgba(255,255,255,0.06)',
           color: '#FFFFFF',
           padding: '0 3px',
+          boxShadow: count > 0 ? `0 0 4px ${(accentColor || 'rgba(255,255,255,0.15)')}50` : 'none',
         }}
       >
         {formatAbilityCount(count)}

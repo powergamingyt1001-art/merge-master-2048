@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Swords, Clock, Trophy, Coins, Crown, Bell, Lock } from 'lucide-react'
+import { Play, Swords, Clock, Trophy, Coins, Crown, Bell, Lock, Search, Loader2 } from 'lucide-react'
 import { SpinWheel, SpinPrize } from './SpinWheel'
 import { LoginStreak } from './LoginStreak'
 import { WelcomeGift } from './WelcomeGift'
@@ -135,6 +135,9 @@ export function PlayDashboard({
   const [showStore, setShowStore] = useState(false)
   const [showCoupon, setShowCoupon] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
+  // Searching animation for Battle/Coin modes
+  const [searching, setSearching] = useState<{ active: boolean; type: 'battle' | 'coins'; timeLimit?: number; coinFee?: number; opponent?: { name: string; avatar: string } } | null>(null)
+  const searchTimerRef = useRef<NodeJS.Timeout | null>(null)
   // Decide which big banner to show (only 1 per session) - lazy init
   const [bigBannerSlot] = useState<string>(() => getDashboardBigBannerSlot())
 
@@ -192,8 +195,46 @@ export function PlayDashboard({
       onAddNotification('Not Enough Coins', `You need ${fee} coins to play. You have ${coins}.`, 'system', '💰')
       return
     }
-    onStartCoinGame(fee)
-  }, [isGameLimitReached, coins, onStartCoinGame, onAddNotification, maxGamesPerDay])
+    if (isOnline) {
+      // Show searching animation for online mode
+      setSearching({ active: true, type: 'coins', coinFee: fee })
+    } else {
+      onStartCoinGame(fee)
+    }
+  }, [isGameLimitReached, coins, onStartCoinGame, onAddNotification, maxGamesPerDay, isOnline])
+
+  // Searching animation effect - simulate finding opponent
+  useEffect(() => {
+    if (!searching?.active) return
+    const BOT_NAMES = [
+      { name: 'Aero 4', avatar: '🦅' }, { name: 'Blaze 7', avatar: '🔥' },
+      { name: 'Viper 9', avatar: '🐍' }, { name: 'Nova 3', avatar: '💫' },
+      { name: 'Storm 6', avatar: '⚡' }, { name: 'Raze 2', avatar: '💥' },
+      { name: 'Fang 8', avatar: '🐺' }, { name: 'Drift 5', avatar: '🌪️' },
+      { name: 'Apex 1', avatar: '🏆' }, { name: 'Volt 11', avatar: '⚡' },
+    ]
+    const opponent = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]
+    // Show searching for 2-4 seconds then reveal opponent
+    const searchTime = 2000 + Math.random() * 2000
+    searchTimerRef.current = setTimeout(() => {
+      setSearching(prev => prev ? { ...prev, opponent } : null)
+      // After showing opponent for 1.5s, start the game
+      searchTimerRef.current = setTimeout(() => {
+        if (searching?.type === 'battle' && searching.timeLimit) {
+          onStartBotBattle(searching.timeLimit)
+        } else if (searching?.type === 'coins' && searching.coinFee) {
+          onStartCoinGame(searching.coinFee)
+        }
+        setSearching(null)
+      }, 1500)
+    }, searchTime)
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current) }
+  }, [searching?.active])
+
+  const handleBattleMode = useCallback((seconds: number) => {
+    if (!isOnline || isGameLimitReached) return
+    setSearching({ active: true, type: 'battle', timeLimit: seconds })
+  }, [isOnline, isGameLimitReached])
 
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden"
@@ -258,22 +299,27 @@ export function PlayDashboard({
           </div>
 
           {/* Inventory bar + Games Left */}
-          <div className="w-full flex items-center justify-between px-2 py-1 rounded-lg"
-            style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="flex items-center gap-1.5">
-              <InventoryItem emoji="🔨" count={hammerCount} color="#F59563" />
-              <InventoryItem emoji="🧲" count={magnetCount} color="#00E676" />
-              <InventoryItem emoji="💣" count={blastCount} color="#FF7A00" />
-              <InventoryItem emoji="5️⃣" count={multiplier5xCount} color="#F65E3B" />
-              <InventoryItem emoji="⚡" count={multiplier2_5xCount} color="#FF7A00" />
-              <InventoryItem emoji="⏱️" count={extraTimeCount} color="#00FFFF" />
+          <div className="w-full flex items-center justify-between px-1 py-1">
+            <div className="flex items-center gap-1 flex-wrap">
+              <InventoryCapsule emoji="🔨" count={hammerCount} color="#F59563" />
+              <InventoryCapsule emoji="🧲" count={magnetCount} color="#00E676" />
+              <InventoryCapsule emoji="💣" count={blastCount} color="#FF7A00" />
+              <InventoryCapsule emoji="5️⃣" count={multiplier5xCount} color="#F65E3B" />
+              <InventoryCapsule emoji="⚡" count={multiplier2_5xCount} color="#FF7A00" />
+              <InventoryCapsule emoji="⏱️" count={extraTimeCount} color="#00FFFF" />
+              <button onClick={() => setShowCoupon(true)}
+                className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full transition-transform active:scale-95"
+                style={{ backgroundColor: 'rgba(0,230,118,0.1)' }}>
+                <span className="text-[9px]">🎟️</span>
+                <span className="text-[7px] font-bold" style={{ color: '#00E676' }}>Code</span>
+              </button>
             </div>
-            <div className="flex items-center gap-1.5">
-              <div className="flex items-center gap-0.5 px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(0,230,118,0.08)' }}>
+            <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(0,230,118,0.08)' }}>
                 <span className="text-[10px]">🎫</span>
                 <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>{spinTickets}</span>
               </div>
-              <div className="flex items-center gap-0.5 px-1 py-0.5 rounded" style={{ backgroundColor: isGameLimitReached ? 'rgba(246,94,59,0.12)' : 'rgba(255,255,255,0.06)' }}>
+              <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full" style={{ backgroundColor: isGameLimitReached ? 'rgba(246,94,59,0.12)' : 'rgba(255,255,255,0.06)' }}>
                 <span className="text-[10px]">{isGameLimitReached ? '🚫' : '🎮'}</span>
                 <span className="text-[8px] font-bold" style={{ color: isGameLimitReached ? '#F65E3B' : 'rgba(255,255,255,0.5)' }}>{gamesLeft}</span>
               </div>
@@ -334,7 +380,7 @@ export function PlayDashboard({
                       { time: '4m', seconds: 240, icon: <Clock className="w-2.5 h-2.5" /> },
                       { time: '10m', seconds: 600, icon: <Trophy className="w-2.5 h-2.5" /> },
                     ].map((mode, i) => (
-                      <button key={i} onClick={() => isOnline && !isGameLimitReached && onStartBotBattle(mode.seconds)}
+                      <button key={i} onClick={() => handleBattleMode(mode.seconds)}
                         className="flex flex-col items-center gap-0.5 py-1.5 rounded-lg transition-transform active:scale-95"
                         style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', opacity: isOnline && !isGameLimitReached ? 1 : 0.4 }}>
                         <div style={{ color: '#F65E3B' }}>{mode.icon}</div>
@@ -396,8 +442,8 @@ export function PlayDashboard({
             <AdsterraNativeBanner />
           </div>
 
-          {/* Quick Actions Row 1: Streak + Spin + Store + Coupon */}
-          <div className="w-full grid grid-cols-4 gap-1.5">
+          {/* Quick Actions Row 1: Daily/Streak + Spin + Store */}
+          <div className="w-full grid grid-cols-3 gap-1.5">
             <button onClick={() => setShowStreak(true)}
               className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
               style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
@@ -419,41 +465,27 @@ export function PlayDashboard({
               <p className="text-[7px] font-bold" style={{ color: '#EDC22E' }}>Store</p>
               <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Buy</p>
             </button>
-            <button onClick={() => setShowCoupon(true)}
-              className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
-              style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
-              <span className="text-base">🎟️</span>
-              <p className="text-[7px] font-bold" style={{ color: '#00E676' }}>Coupon</p>
-              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Code</p>
-            </button>
           </div>
 
-          {/* Quick Actions Row 2: Weekly + Rank + Invite */}
-          <div className="w-full grid grid-cols-3 gap-1.5">
-            <button onClick={() => !weeklyBonusClaimed && onClaimWeeklyBonus?.()}
-              className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
-              style={{
-                backgroundColor: weeklyBonusClaimed ? 'rgba(255,255,255,0.02)' : 'rgba(237,194,46,0.1)',
-                border: weeklyBonusClaimed ? '1px solid rgba(255,255,255,0.04)' : '1px solid rgba(237,194,46,0.2)',
-                opacity: weeklyBonusClaimed ? 0.5 : 1,
-              }}>
-              <span className="text-base">🎁</span>
-              <p className="text-[7px] font-bold" style={{ color: weeklyBonusClaimed ? 'rgba(255,255,255,0.3)' : '#EDC22E' }}>Weekly</p>
-              <p className="text-[6px]" style={{ color: weeklyBonusClaimed ? 'rgba(255,255,255,0.2)' : '#00E676' }}>{weeklyBonusClaimed ? '✓' : '400💰'}</p>
-            </button>
+          {/* Quick Actions Row 2: Rank + Invite (wider) */}
+          <div className="w-full grid grid-cols-2 gap-1.5">
             <button onClick={() => setShowLeaderboard(true)}
-              className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
+              className="flex items-center justify-center gap-1.5 py-3 rounded-lg transition-transform active:scale-95"
               style={{ backgroundColor: 'rgba(246,94,59,0.06)', border: '1px solid rgba(246,94,59,0.12)' }}>
-              <span className="text-base">🏆</span>
-              <p className="text-[7px] font-bold" style={{ color: '#F65E3B' }}>Rank</p>
-              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Board</p>
+              <span className="text-lg">🏆</span>
+              <div className="text-left">
+                <p className="text-[9px] font-bold" style={{ color: '#F65E3B' }}>Rank</p>
+                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Leaderboard</p>
+              </div>
             </button>
             <button onClick={() => setShowInvite(true)}
-              className="flex flex-col items-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
+              className="flex items-center justify-center gap-1.5 py-3 rounded-lg transition-transform active:scale-95"
               style={{ backgroundColor: 'rgba(0,230,118,0.05)', border: '1px solid rgba(0,230,118,0.1)' }}>
-              <span className="text-base">🤝</span>
-              <p className="text-[7px] font-bold" style={{ color: '#00E676' }}>Invite</p>
-              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.3)' }}>5%</p>
+              <span className="text-lg">🤝</span>
+              <div className="text-left">
+                <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>Invite</p>
+                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Earn 5%</p>
+              </div>
             </button>
           </div>
 
@@ -577,6 +609,92 @@ export function PlayDashboard({
         {bigBannerSlot === 'footer' ? <AdsterraBanner728x90 /> : <AdsterraBanner320x50 />}
       </div>
 
+      {/* Searching Opponent Overlay */}
+      <AnimatePresence>
+        {searching?.active && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] flex items-center justify-center"
+            style={{ backgroundColor: 'rgba(0,0,0,0.9)' }}
+          >
+            <div className="flex flex-col items-center gap-4">
+              {/* Your profile */}
+              <div className="flex items-center gap-6">
+                <div className="flex flex-col items-center">
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center"
+                    style={{ background: `linear-gradient(135deg, ${getLevelInfo(playerLevel).color}, ${getLevelInfo(playerLevel).color}88)`, border: '2px solid rgba(255,255,255,0.3)' }}>
+                    <span className="text-3xl">{playerAvatar}</span>
+                  </div>
+                  <p className="text-[10px] font-bold mt-1" style={{ color: '#FFFFFF' }}>{playerName}</p>
+                  <p className="text-[8px]" style={{ color: getLevelInfo(playerLevel).color }}>Lv.{playerLevel}</p>
+                </div>
+
+                {/* VS / Searching indicator */}
+                <div className="flex flex-col items-center">
+                  {searching.opponent ? (
+                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300 }}>
+                      <span className="text-2xl font-black" style={{ color: '#F65E3B' }}>VS</span>
+                    </motion.div>
+                  ) : (
+                    <div className="flex flex-col items-center">
+                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}>
+                        <Search className="w-8 h-8" style={{ color: '#EDC22E' }} />
+                      </motion.div>
+                      <p className="text-[9px] font-bold mt-1" style={{ color: '#EDC22E' }}>Searching...</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Opponent profile */}
+                {searching.opponent ? (
+                  <motion.div initial={{ x: 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 200 }}
+                    className="flex flex-col items-center">
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center"
+                      style={{ background: 'linear-gradient(135deg, #F65E3B, #FF7A00)', border: '2px solid rgba(255,255,255,0.3)' }}>
+                      <span className="text-3xl">{searching.opponent.avatar}</span>
+                    </div>
+                    <p className="text-[10px] font-bold mt-1" style={{ color: '#FFFFFF' }}>{searching.opponent.name}</p>
+                    <p className="text-[8px]" style={{ color: '#F65E3B' }}>Opponent</p>
+                  </motion.div>
+                ) : (
+                  <div className="flex flex-col items-center">
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '2px dashed rgba(255,255,255,0.2)' }}>
+                      <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.5, repeat: Infinity }}>
+                        <span className="text-2xl">❓</span>
+                      </motion.div>
+                    </div>
+                    <p className="text-[10px] font-bold mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>???</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Mode info */}
+              <div className="text-center">
+                <p className="text-xs font-bold" style={{ color: searching.type === 'battle' ? '#F65E3B' : '#EDC22E' }}>
+                  {searching.type === 'battle' ? `⚔️ Battle Mode` : `🪙 Coin Game`}
+                </p>
+                {searching.type === 'battle' && searching.timeLimit && (
+                  <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{searching.timeLimit}s Time Limit</p>
+                )}
+                {searching.type === 'coins' && searching.coinFee && (
+                  <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Entry: {searching.coinFee} coins</p>
+                )}
+              </div>
+
+              {/* Cancel button */}
+              <button onClick={() => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); setSearching(null) }}
+                className="px-6 py-2 rounded-xl text-xs font-bold transition-transform active:scale-95"
+                style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.15)' }}>
+                Cancel
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Modals */}
       <SpinWheel isOpen={showSpin} onClose={() => setShowSpin(false)} spinTickets={spinTickets}
         onUseTicket={onUseSpinTicket} onWinPrize={handleSpinPrize} onWatchAdForSpin={() => { onAddSpinTickets(1) }} isOnline={isOnline} />
@@ -594,7 +712,9 @@ export function PlayDashboard({
         tournamentGamesPlayed={tournamentGamesPlayed}
         onJoinTournament={onJoinTournament}
         onStartTournamentGame={onStartTournamentGame}
-        playerName={playerName} playerAvatar={playerAvatar} playerId={playerId} />
+        playerName={playerName} playerAvatar={playerAvatar} playerId={playerId}
+        weeklyBonusClaimed={weeklyBonusClaimed}
+        onClaimWeeklyBonus={onClaimWeeklyBonus} />
       <InvitePanel isOpen={showInvite} onClose={() => setShowInvite(false)}
         inviteCode={inviteCode} invitedUsers={invitedUsers}
         commissionBalance={commissionBalance} commissionClaimed={commissionClaimed}
@@ -620,11 +740,12 @@ export function PlayDashboard({
   )
 }
 
-function InventoryItem({ emoji, count, color }: { emoji: string; count: number; color: string }) {
+function InventoryCapsule({ emoji, count, color }: { emoji: string; count: number; color: string }) {
   return (
-    <div className="flex items-center gap-0.5">
-      <span className="text-sm">{emoji}</span>
-      <span className="text-[10px] font-bold" style={{ color: count > 0 ? color : 'rgba(255,255,255,0.2)' }}>{count}</span>
+    <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full"
+      style={{ backgroundColor: count > 0 ? `${color}12` : 'rgba(255,255,255,0.03)' }}>
+      <span className="text-[11px]">{emoji}</span>
+      <span className="text-[9px] font-bold" style={{ color: count > 0 ? color : 'rgba(255,255,255,0.2)' }}>{count}</span>
     </div>
   )
 }
