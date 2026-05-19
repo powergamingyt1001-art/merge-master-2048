@@ -1,4 +1,4 @@
-const CACHE_NAME = 'merge-2048-v2';
+const CACHE_NAME = 'merge-2048-v3';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',

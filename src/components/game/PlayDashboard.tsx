@@ -168,6 +168,9 @@ export function PlayDashboard({
       case 'spin': onAddSpinTickets(prize.count); break
       case 'coin': onAddCoins(prize.count); break
       case 'respin': onAddSpinTickets(1); break
+      case 'multiply5': onAddPowerUp('multiplier5x', prize.count); break
+      case 'multiply2_5': onAddPowerUp('multiplier2_5x', prize.count); break
+      case 'timeExtend': onAddPowerUp('extraTime', prize.count); break
     }
     onAddNotification('Spin Prize!', `You won ${prize.emoji} ${prize.label}!`, 'reward', '🎰')
   }, [onAddPowerUp, onAddUndos, onAddSpinTickets, onAddCoins, onAddNotification])

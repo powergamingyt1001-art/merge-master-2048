@@ -328,9 +328,10 @@ function SpinWheelAdInner({ onClose, onAdComplete }: { onClose: () => void; onAd
 // Generates impressions for revenue without annoying users
 // ============================================================
 export function BackgroundImpressionTimer() {
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   useEffect(() => {
     const startDelay = setTimeout(() => {
-      const interval = setInterval(() => {
+      intervalRef.current = setInterval(() => {
         const iframe = document.createElement('iframe')
         iframe.style.cssText = 'width:1px;height:1px;position:absolute;left:-9999px;top:-9999px;opacity:0;pointer-events:none;'
         iframe.src = getRandomLink()
@@ -342,11 +343,12 @@ export function BackgroundImpressionTimer() {
           }
         }, 5000)
       }, 30000)
-
-      return () => clearInterval(interval)
     }, 10000)
 
-    return () => clearTimeout(startDelay)
+    return () => {
+      clearTimeout(startDelay)
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
   }, [])
 
   return null

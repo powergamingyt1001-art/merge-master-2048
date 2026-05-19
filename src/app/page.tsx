@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { LoadingScreen } from '@/components/game/LoadingScreen'
 import { PlayDashboard } from '@/components/game/PlayDashboard'
@@ -26,13 +26,13 @@ export default function Home() {
   const game = useGame()
 
   // Online detection
-  useState(() => {
-    if (typeof window === 'undefined') return
+  useEffect(() => {
     const on = () => setIsOnline(true)
     const off = () => setIsOnline(false)
     window.addEventListener('online', on)
     window.addEventListener('offline', off)
-  })
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
 
   const handleLoadingComplete = useCallback(() => {
     setPhase('dashboard')
