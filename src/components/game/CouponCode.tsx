@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Gift, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap } from 'lucide-react'
+import { X, Gift, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus } from 'lucide-react'
 
 interface CouponCodeProps {
   isOpen: boolean
@@ -184,6 +184,83 @@ function savePurchaseHistory(history: PurchaseHistoryEntry[]) {
   localStorage.setItem('purchaseHistory', JSON.stringify(history))
 }
 
+// Store order type (matching Store.tsx)
+interface StoreOrder {
+  id: string
+  date: string
+  playerId: string
+  item: string
+  price: number
+  quantity: number
+  whatsappNumber: string
+  name: string
+  transactionId: string
+  utrNumber: string
+  proofBase64?: string
+  status: 'pending' | 'approved' | 'rejected'
+  upiId: string
+}
+
+function loadStoreOrders(): StoreOrder[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const data = localStorage.getItem('mergeMaster2048_orders')
+    return data ? JSON.parse(data) : []
+  } catch {
+    return []
+  }
+}
+
+function saveStoreOrders(orders: StoreOrder[]) {
+  localStorage.setItem('mergeMaster2048_orders', JSON.stringify(orders))
+}
+
+// Coin-ability pricing
+interface CoinAbilityPrice {
+  hammer: number
+  magnet: number
+  bomb: number
+  timer: number
+  undo: number
+}
+
+const DEFAULT_COIN_ABILITY_PRICES: CoinAbilityPrice = {
+  hammer: 150,
+  magnet: 150,
+  bomb: 300,
+  timer: 200,
+  undo: 100,
+}
+
+function loadCoinAbilityPrices(): CoinAbilityPrice {
+  if (typeof window === 'undefined') return DEFAULT_COIN_ABILITY_PRICES
+  try {
+    const data = localStorage.getItem('adminCoinAbilityPrices')
+    return data ? JSON.parse(data) : DEFAULT_COIN_ABILITY_PRICES
+  } catch {
+    return DEFAULT_COIN_ABILITY_PRICES
+  }
+}
+
+function saveCoinAbilityPrices(prices: CoinAbilityPrice) {
+  localStorage.setItem('adminCoinAbilityPrices', JSON.stringify(prices))
+}
+
+// Lock duration
+function loadLockDuration(): number {
+  if (typeof window === 'undefined') return 2
+  try {
+    const data = localStorage.getItem('adminLockDuration')
+    return data ? parseInt(data, 10) : 2
+  } catch {
+    return 2
+  }
+}
+
+function saveLockDuration(weeks: number) {
+  localStorage.setItem('adminLockDuration', String(weeks))
+}
+
 // Custom admin-created coupon codes
 interface CustomCouponCode {
   code: string
@@ -326,6 +403,10 @@ export function CouponCode({
   const [customCodes, setCustomCodes] = useState<CustomCouponCode[]>(() => loadCustomCouponCodes())
   const [nightCodeSettings, setNightCodeSettings] = useState<NightCodeSettings>(() => loadNightCodeSettings())
   const [customPrices, setCustomPrices] = useState<CustomPriceOverride | null>(() => loadCustomPrices())
+  const [storeOrders, setStoreOrders] = useState<StoreOrder[]>(() => loadStoreOrders())
+  const [coinAbilityPrices, setCoinAbilityPrices] = useState<CoinAbilityPrice>(() => loadCoinAbilityPrices())
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set())
+  const [lockDuration, setLockDuration] = useState<number>(() => loadLockDuration())
 
   // New coupon form state
   const [newCodeInput, setNewCodeInput] = useState('')
@@ -377,6 +458,10 @@ export function CouponCode({
       setNcRewardType(loadNightCodeSettings().rewardType)
       setNcRewardAmount(loadNightCodeSettings().rewardAmount)
       setCustomPrices(loadCustomPrices())
+      setStoreOrders(loadStoreOrders())
+      setCoinAbilityPrices(loadCoinAbilityPrices())
+      setLockDuration(loadLockDuration())
+      setSelectedHistoryIds(new Set())
       // Also reload day code settings
       try {
         const dcData = localStorage.getItem('adminDayCodeSettings')
@@ -670,14 +755,32 @@ export function CouponCode({
 
   // ===== ADMIN PANEL HANDLERS =====
 
-  // Approve a purchase
+  // Approve a purchase (works with both purchaseHistory and storeOrders)
   const handleApprovePurchase = useCallback((entry: PurchaseHistoryEntry) => {
     const purchaseDate = new Date(entry.date).getTime()
     const now = Date.now()
     const hoursSincePurchase = (now - purchaseDate) / (1000 * 60 * 60)
     const isDelayed = hoursSincePurchase > 12
 
-    if (entry.type === 'inr_ability') {
+    // Check if it's a store order
+    const isStoreOrder = entry.id.startsWith('store_')
+    const storeOrderId = isStoreOrder ? entry.id.replace('store_', '') : null
+
+    if (isStoreOrder && storeOrderId) {
+      // Update store order status
+      const updatedOrders = storeOrders.map(o =>
+        o.id === storeOrderId ? { ...o, status: 'approved' as const } : o
+      )
+      setStoreOrders(updatedOrders)
+      saveStoreOrders(updatedOrders)
+
+      let coinAmount = entry.coinAmount || getCoinAmountFromItem(entry.item)
+      if (isDelayed) coinAmount = Math.floor(coinAmount * 1.5)
+      onAddCoins(coinAmount)
+
+      const bonusText = isDelayed ? ` (+50% bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
+      onAddNotification('Order Approved! ✅', `${entry.item} delivered! ${coinAmount} coins added${bonusText}`, 'reward', '📦')
+    } else if (entry.type === 'inr_ability') {
       // INR ability purchase (5x/2.5x) - mark as delivered
       const updated = purchaseHistory.map(p =>
         p.id === entry.id ? { ...p, status: 'Delivered' as const } : p
@@ -686,12 +789,7 @@ export function CouponCode({
       savePurchaseHistory(updated)
 
       const bonusText = isDelayed ? ` (+50% bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
-      onAddNotification(
-        'Ability Approved! ✅',
-        `${entry.item} delivered!${bonusText}`,
-        'reward',
-        '📦'
-      )
+      onAddNotification('Ability Approved! ✅', `${entry.item} delivered!${bonusText}`, 'reward', '📦')
     } else {
       // Coin or coin-price ability purchase
       let coinAmount = entry.coinAmount || getCoinAmountFromItem(entry.item)
@@ -709,34 +807,52 @@ export function CouponCode({
       savePurchaseHistory(updated)
 
       const bonusText = isDelayed ? ` (+50% bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
-      onAddNotification(
-        'Order Approved! ✅',
-        `${entry.item} delivered! ${coinAmount} coins added${bonusText}`,
-        'reward',
-        '📦'
-      )
+      onAddNotification('Order Approved! ✅', `${entry.item} delivered! ${coinAmount} coins added${bonusText}`, 'reward', '📦')
     }
-  }, [purchaseHistory, onAddCoins, onAddNotification])
+  }, [purchaseHistory, storeOrders, onAddCoins, onAddNotification])
 
-  // Deny a purchase
+  // Deny a purchase (works with both purchaseHistory and storeOrders)
   const handleDenyPurchase = useCallback((entry: PurchaseHistoryEntry) => {
-    const updated = purchaseHistory.map(p =>
-      p.id === entry.id ? { ...p, status: 'Denied' as const } : p
-    )
-    setPurchaseHistory(updated)
-    savePurchaseHistory(updated)
-  }, [purchaseHistory])
+    const isStoreOrder = entry.id.startsWith('store_')
+    const storeOrderId = isStoreOrder ? entry.id.replace('store_', '') : null
+
+    if (isStoreOrder && storeOrderId) {
+      const updatedOrders = storeOrders.map(o =>
+        o.id === storeOrderId ? { ...o, status: 'rejected' as const } : o
+      )
+      setStoreOrders(updatedOrders)
+      saveStoreOrders(updatedOrders)
+    } else {
+      const updated = purchaseHistory.map(p =>
+        p.id === entry.id ? { ...p, status: 'Denied' as const } : p
+      )
+      setPurchaseHistory(updated)
+      savePurchaseHistory(updated)
+    }
+  }, [purchaseHistory, storeOrders])
 
   // Disapprove (undo) a previously approved purchase - only within 24 hours
   const handleDisapprovePurchase = useCallback((entry: PurchaseHistoryEntry) => {
     const hoursSince = (Date.now() - new Date(entry.date).getTime()) / (1000 * 60 * 60)
     if (hoursSince > 24) return // Can only undo within 24 hours
-    const updated = purchaseHistory.map(p =>
-      p.id === entry.id ? { ...p, status: 'Denied' as const } : p
-    )
-    setPurchaseHistory(updated)
-    savePurchaseHistory(updated)
-  }, [purchaseHistory])
+
+    const isStoreOrder = entry.id.startsWith('store_')
+    const storeOrderId = isStoreOrder ? entry.id.replace('store_', '') : null
+
+    if (isStoreOrder && storeOrderId) {
+      const updatedOrders = storeOrders.map(o =>
+        o.id === storeOrderId ? { ...o, status: 'rejected' as const } : o
+      )
+      setStoreOrders(updatedOrders)
+      saveStoreOrders(updatedOrders)
+    } else {
+      const updated = purchaseHistory.map(p =>
+        p.id === entry.id ? { ...p, status: 'Denied' as const } : p
+      )
+      setPurchaseHistory(updated)
+      savePurchaseHistory(updated)
+    }
+  }, [purchaseHistory, storeOrders])
 
   // Create a custom coupon code
   const handleCreateCoupon = useCallback(() => {
@@ -842,8 +958,75 @@ export function CouponCode({
   const nightCode = generateNightCode()
   const rotationDay = getRotationSuffix()
 
-  const pendingPurchases = purchaseHistory.filter(p => p.status === 'Pending')
-  const allPurchases = purchaseHistory
+  // Merge purchaseHistory and storeOrders for display
+  const mergedAllPurchases: PurchaseHistoryEntry[] = [
+    ...purchaseHistory,
+    ...storeOrders.map(order => ({
+      id: `store_${order.id}`,
+      date: order.date,
+      item: order.item,
+      amount: `₹${order.price}`,
+      status: (order.status === 'pending' ? 'Pending' : order.status === 'approved' ? 'Delivered' : 'Denied') as 'Pending' | 'Delivered' | 'Denied',
+      type: 'coins' as const,
+      transactionId: order.transactionId,
+      whatsappNumber: order.whatsappNumber,
+      buyerName: order.name,
+      screenshotDataUrl: order.proofBase64,
+      coinAmount: order.quantity,
+    })),
+  ]
+
+  const pendingPurchases = mergedAllPurchases.filter(p => p.status === 'Pending')
+  const allPurchases = mergedAllPurchases
+
+  // Approve a store order
+  const handleApproveStoreOrder = useCallback((order: StoreOrder) => {
+    const updated = storeOrders.map(o =>
+      o.id === order.id ? { ...o, status: 'approved' as const } : o
+    )
+    setStoreOrders(updated)
+    saveStoreOrders(updated)
+  }, [storeOrders])
+
+  // Deny a store order
+  const handleDenyStoreOrder = useCallback((order: StoreOrder) => {
+    const updated = storeOrders.map(o =>
+      o.id === order.id ? { ...o, status: 'rejected' as const } : o
+    )
+    setStoreOrders(updated)
+    saveStoreOrders(updated)
+  }, [storeOrders])
+
+  // Delete selected history items
+  const handleDeleteSelectedHistory = useCallback(() => {
+    // Filter out selected items from both sources
+    const updatedPurchaseHistory = purchaseHistory.filter(p => !selectedHistoryIds.has(p.id))
+    const updatedStoreOrders = storeOrders.filter(o => !selectedHistoryIds.has(`store_${o.id}`))
+    setPurchaseHistory(updatedPurchaseHistory)
+    savePurchaseHistory(updatedPurchaseHistory)
+    setStoreOrders(updatedStoreOrders)
+    saveStoreOrders(updatedStoreOrders)
+    setSelectedHistoryIds(new Set())
+  }, [purchaseHistory, storeOrders, selectedHistoryIds])
+
+  // Delete all history
+  const handleDeleteAllHistory = useCallback(() => {
+    setPurchaseHistory([])
+    savePurchaseHistory([])
+    setStoreOrders([])
+    saveStoreOrders([])
+    setSelectedHistoryIds(new Set())
+  }, [])
+
+  // Toggle history item selection
+  const toggleHistorySelection = useCallback((id: string) => {
+    setSelectedHistoryIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
 
   return (
     <AnimatePresence>
@@ -1603,6 +1786,67 @@ export function CouponCode({
                           </div>
                         </div>
 
+                        {/* Coin Ability Prices (coins per 5 uses) */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(237,194,46,0.05)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                            <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Coin Ability Prices (coins/5)</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            {([
+                              { key: 'hammer' as const, emoji: '🔨', label: 'Hammer' },
+                              { key: 'magnet' as const, emoji: '🧲', label: 'Magnet' },
+                              { key: 'bomb' as const, emoji: '💣', label: 'Bomb' },
+                              { key: 'timer' as const, emoji: '⏱️', label: 'Timer' },
+                              { key: 'undo' as const, emoji: '↩️', label: 'Undo' },
+                            ]).map(ability => (
+                              <div key={ability.key} className="flex items-center gap-1.5">
+                                <span className="text-[9px]">{ability.emoji}</span>
+                                <span className="text-[8px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.5)' }}>{ability.label}</span>
+                                <button
+                                  onClick={() => {
+                                    const newPrice = Math.max(10, coinAbilityPrices[ability.key] - 10)
+                                    const updated = { ...coinAbilityPrices, [ability.key]: newPrice }
+                                    setCoinAbilityPrices(updated)
+                                    saveCoinAbilityPrices(updated)
+                                  }}
+                                  className="w-6 h-6 rounded-lg flex items-center justify-center transition-transform active:scale-90"
+                                  style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)' }}
+                                >
+                                  <Minus className="w-3 h-3" style={{ color: '#F65E3B' }} />
+                                </button>
+                                <span className="text-[10px] font-bold w-10 text-center" style={{ color: '#EDC22E' }}>
+                                  {coinAbilityPrices[ability.key]}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    const newPrice = coinAbilityPrices[ability.key] + 10
+                                    const updated = { ...coinAbilityPrices, [ability.key]: newPrice }
+                                    setCoinAbilityPrices(updated)
+                                    saveCoinAbilityPrices(updated)
+                                  }}
+                                  className="w-6 h-6 rounded-lg flex items-center justify-center transition-transform active:scale-90"
+                                  style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)' }}
+                                >
+                                  <Plus className="w-3 h-3" style={{ color: '#00E676' }} />
+                                </button>
+                                <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>coins/5</span>
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => {
+                              setCoinAbilityPrices(DEFAULT_COIN_ABILITY_PRICES)
+                              saveCoinAbilityPrices(DEFAULT_COIN_ABILITY_PRICES)
+                            }}
+                            className="w-full mt-2 py-1 rounded-lg text-[8px] font-bold flex items-center justify-center gap-1 transition-transform active:scale-95"
+                            style={{ backgroundColor: 'rgba(246,94,59,0.06)', border: '1px solid rgba(246,94,59,0.1)', color: '#F65E3B' }}
+                          >
+                            <RotateCcw className="w-2.5 h-2.5" /> Reset Defaults
+                          </button>
+                        </div>
+
                         {/* Reset to defaults */}
                         <button
                           onClick={() => {
@@ -1616,7 +1860,7 @@ export function CouponCode({
                           className="w-full py-1.5 rounded-lg text-[9px] font-bold flex items-center justify-center gap-1.5 transition-transform active:scale-95"
                           style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)', color: '#F65E3B' }}
                         >
-                          <RotateCcw className="w-3 h-3" /> Reset to Default Prices
+                          <RotateCcw className="w-3 h-3" /> Reset All Prices
                         </button>
 
                         <p className="text-[7px] text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>
@@ -1628,9 +1872,71 @@ export function CouponCode({
                     {/* ====== HISTORY TAB ====== */}
                     {adminTab === 'history' && (
                       <div className="space-y-2" style={{ maxHeight: 'calc(85vh - 100px)', overflowY: 'auto' }}>
-                        <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                          All Payment History ({allPurchases.length})
-                        </p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                            All Payment History ({allPurchases.length})
+                          </p>
+                          {allPurchases.length > 0 && (
+                            <div className="flex items-center gap-1.5">
+                              {selectedHistoryIds.size > 0 && (
+                                <button
+                                  onClick={handleDeleteSelectedHistory}
+                                  className="text-[7px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 transition-transform active:scale-95"
+                                  style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)', color: '#F65E3B' }}
+                                >
+                                  <Trash2 className="w-2.5 h-2.5" /> Delete Selected ({selectedHistoryIds.size})
+                                </button>
+                              )}
+                              <button
+                                onClick={handleDeleteAllHistory}
+                                className="text-[7px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 transition-transform active:scale-95"
+                                style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)', color: '#F65E3B' }}
+                              >
+                                <Trash2 className="w-2.5 h-2.5" /> Delete All
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Lock Duration Setting */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(255,109,0,0.05)', border: '1px solid rgba(255,109,0,0.15)' }}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <Clock className="w-3 h-3" style={{ color: '#FF6D00' }} />
+                              <p className="text-[9px] font-bold" style={{ color: '#FF6D00' }}>Lock Duration</p>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => {
+                                  const newDuration = Math.max(1, lockDuration - 1)
+                                  setLockDuration(newDuration)
+                                  saveLockDuration(newDuration)
+                                }}
+                                className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-90"
+                                style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)' }}
+                              >
+                                <Minus className="w-2.5 h-2.5" style={{ color: '#F65E3B' }} />
+                              </button>
+                              <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>{lockDuration} week{lockDuration !== 1 ? 's' : ''}</span>
+                              <button
+                                onClick={() => {
+                                  const newDuration = lockDuration + 1
+                                  setLockDuration(newDuration)
+                                  saveLockDuration(newDuration)
+                                }}
+                                className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-90"
+                                style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)' }}
+                              >
+                                <Plus className="w-2.5 h-2.5" style={{ color: '#00E676' }} />
+                              </button>
+                            </div>
+                          </div>
+                          <p className="text-[7px] mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                            Coins/abilities from store purchases are locked for this duration after delivery
+                          </p>
+                        </div>
+
                         {allPurchases.length === 0 ? (
                           <div className="text-center py-4">
                             <span className="text-2xl block mb-1">📋</span>
@@ -1679,38 +1985,47 @@ export function CouponCode({
                                     <div className="px-3 pb-2.5 space-y-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                                       {entries.map(entry => {
                                         const coinAmount = entry.coinAmount || getCoinAmountFromItem(entry.item)
+                                        const isSelected = selectedHistoryIds.has(entry.id)
                                         return (
-                                          <div key={entry.id} className="p-2 rounded-lg"
-                                            style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
-                                            <div className="flex items-center justify-between mb-1">
-                                              <p className="text-[9px] font-bold" style={{ color: '#FFFFFF' }}>{entry.item}</p>
-                                              <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full"
-                                                style={{
-                                                  backgroundColor: entry.status === 'Delivered' ? 'rgba(0,230,118,0.1)' : entry.status === 'Denied' ? 'rgba(246,94,59,0.1)' : 'rgba(237,194,46,0.1)',
-                                                  color: entry.status === 'Delivered' ? '#00E676' : entry.status === 'Denied' ? '#F65E3B' : '#EDC22E',
-                                                }}>
-                                                {entry.status}
-                                              </span>
-                                            </div>
-                                            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                              📅 {new Date(entry.date).toLocaleString()} • {entry.amount}
-                                            </p>
-                                            {entry.whatsappNumber && (
-                                              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                                📱 {entry.whatsappNumber}
-                                              </p>
-                                            )}
-                                            {entry.type !== 'inr_ability' && (
-                                              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                                💰 {coinAmount} coins
-                                              </p>
-                                            )}
-                                            {entry.screenshotDataUrl && (
-                                              <div className="mt-1 rounded-lg overflow-hidden cursor-pointer" style={{ border: '1px solid rgba(255,255,255,0.1)', maxHeight: 100 }}
-                                                onClick={() => setViewingScreenshot(entry.screenshotDataUrl!)}>
-                                                <img src={entry.screenshotDataUrl} alt="Proof" className="w-full h-auto object-contain" style={{ backgroundColor: '#FFFFFF' }} />
+                                          <div key={entry.id} className="flex items-start gap-2 p-2 rounded-lg"
+                                            style={{ backgroundColor: isSelected ? 'rgba(237,194,46,0.06)' : 'rgba(255,255,255,0.02)', border: `1px solid ${isSelected ? 'rgba(237,194,46,0.2)' : 'rgba(255,255,255,0.04)'}` }}>
+                                            <input
+                                              type="checkbox"
+                                              checked={isSelected}
+                                              onChange={() => toggleHistorySelection(entry.id)}
+                                              className="mt-1 w-3 h-3 accent-amber-500 shrink-0 cursor-pointer"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center justify-between mb-1">
+                                                <p className="text-[9px] font-bold" style={{ color: '#FFFFFF' }}>{entry.item}</p>
+                                                <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full"
+                                                  style={{
+                                                    backgroundColor: entry.status === 'Delivered' ? 'rgba(0,230,118,0.1)' : entry.status === 'Denied' ? 'rgba(246,94,59,0.1)' : 'rgba(237,194,46,0.1)',
+                                                    color: entry.status === 'Delivered' ? '#00E676' : entry.status === 'Denied' ? '#F65E3B' : '#EDC22E',
+                                                  }}>
+                                                  {entry.status}
+                                                </span>
                                               </div>
-                                            )}
+                                              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                                📅 {new Date(entry.date).toLocaleString()} • {entry.amount}
+                                              </p>
+                                              {entry.whatsappNumber && (
+                                                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                                  📱 {entry.whatsappNumber}
+                                                </p>
+                                              )}
+                                              {entry.type !== 'inr_ability' && (
+                                                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                                  💰 {coinAmount} coins
+                                                </p>
+                                              )}
+                                              {entry.screenshotDataUrl && (
+                                                <div className="mt-1 rounded-lg overflow-hidden cursor-pointer" style={{ border: '1px solid rgba(255,255,255,0.1)', maxHeight: 100 }}
+                                                  onClick={() => setViewingScreenshot(entry.screenshotDataUrl!)}>
+                                                  <img src={entry.screenshotDataUrl} alt="Proof" className="w-full h-auto object-contain" style={{ backgroundColor: '#FFFFFF' }} />
+                                                </div>
+                                              )}
+                                            </div>
                                           </div>
                                         )
                                       })}

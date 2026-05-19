@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Coins, Zap, Clock, AlertCircle, Tv, Copy, Check, Upload, FileText, ImageIcon } from 'lucide-react'
+import { X, Coins, Zap, Clock, AlertCircle, Tv, Copy, Check, Upload, FileText, ImageIcon, Trash2 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -819,7 +819,18 @@ function AbilityTab({ onBuy, onCoinBuy, coins }: { onBuy: (item: string, price: 
 
 // ─── History Tab ─────────────────────────────────────────────────────────────
 
-function HistoryTab({ orders }: { orders: StoreOrder[] }) {
+function HistoryTab({ orders, onDeleteAll, onDeleteSelected }: { orders: StoreOrder[]; onDeleteAll: () => void; onDeleteSelected: (ids: string[]) => void }) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  const toggleSelection = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
   const statusConfig: Record<string, { bg: string; color: string; label: string }> = {
     pending: { bg: 'rgba(255,167,38,0.15)', color: '#FFA726', label: 'Pending' },
     approved: { bg: 'rgba(0,230,118,0.15)', color: '#00E676', label: 'Approved' },
@@ -846,90 +857,125 @@ function HistoryTab({ orders }: { orders: StoreOrder[] }) {
         </div>
       ) : (
         <div>
-          <h4 className="text-xs font-extrabold mb-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
-            ORDER HISTORY
-          </h4>
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-xs font-extrabold" style={{ color: 'rgba(255,255,255,0.6)' }}>
+              ORDER HISTORY ({orders.length})
+            </h4>
+            <div className="flex items-center gap-1.5">
+              {selectedIds.size > 0 && (
+                <button
+                  onClick={() => {
+                    onDeleteSelected(Array.from(selectedIds))
+                    setSelectedIds(new Set())
+                  }}
+                  className="text-[8px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 transition-transform active:scale-95"
+                  style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)', color: '#F65E3B' }}
+                >
+                  <Trash2 className="w-2.5 h-2.5" /> Delete ({selectedIds.size})
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  onDeleteAll()
+                  setSelectedIds(new Set())
+                }}
+                className="text-[8px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 transition-transform active:scale-95"
+                style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)', color: '#F65E3B' }}
+              >
+                <Trash2 className="w-2.5 h-2.5" /> Delete All
+              </button>
+            </div>
+          </div>
           <div className="space-y-2 max-h-96 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
             {orders.map((order) => {
               const sc = statusConfig[order.status] || statusConfig.pending
+              const isSelected = selectedIds.has(order.id)
               return (
                 <motion.div
                   key={order.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="p-3 rounded-xl"
+                  className="flex items-start gap-2 p-3 rounded-xl"
                   style={{
-                    backgroundColor: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.08)',
+                    backgroundColor: isSelected ? 'rgba(237,194,46,0.06)' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${isSelected ? 'rgba(237,194,46,0.2)' : 'rgba(255,255,255,0.08)'}`,
                   }}
                 >
-                  <div className="flex items-start justify-between mb-1">
-                    <div className="flex-1">
-                      <p className="text-xs font-bold" style={{ color: '#FFFFFF' }}>
-                        {order.item}
-                      </p>
-                      <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                        {new Date(order.date).toLocaleString('en-IN', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </p>
-                    </div>
-                    <div className="text-right ml-2">
-                      <p className="text-xs font-bold" style={{ color: '#EDC22E' }}>
-                        ₹{order.price}
-                      </p>
-                      <span
-                        className="inline-block px-2 py-0.5 rounded-full text-[8px] font-bold"
-                        style={{
-                          backgroundColor: sc.bg,
-                          color: sc.color,
-                        }}
-                      >
-                        {sc.label}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Proof thumbnail if available */}
-                  {order.proofBase64 && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <div
-                        className="w-8 h-8 rounded-lg overflow-hidden"
-                        style={{ border: '1px solid rgba(255,255,255,0.08)' }}
-                      >
-                        <img
-                          src={order.proofBase64}
-                          alt="Proof"
-                          width={32}
-                          height={32}
-                          className="w-full h-full object-cover"
-                        />
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleSelection(order.id)}
+                    className="mt-1 w-3 h-3 accent-amber-500 shrink-0 cursor-pointer"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between mb-1">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold truncate" style={{ color: '#FFFFFF' }}>
+                          {order.item}
+                        </p>
+                        <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                          {new Date(order.date).toLocaleString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </p>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <ImageIcon className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.3)' }} />
-                        <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                          Proof attached
+                      <div className="text-right ml-2">
+                        <p className="text-xs font-bold" style={{ color: '#EDC22E' }}>
+                          ₹{order.price}
+                        </p>
+                        <span
+                          className="inline-block px-2 py-0.5 rounded-full text-[8px] font-bold"
+                          style={{
+                            backgroundColor: sc.bg,
+                            color: sc.color,
+                          }}
+                        >
+                          {sc.label}
                         </span>
                       </div>
                     </div>
-                  )}
 
-                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
-                    <p className="text-[8px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                      TX: {order.transactionId}
-                    </p>
-                    {order.utrNumber && (
-                      <p className="text-[8px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                        UTR: {order.utrNumber}
-                      </p>
+                    {/* Proof thumbnail if available */}
+                    {order.proofBase64 && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <div
+                          className="w-8 h-8 rounded-lg overflow-hidden"
+                          style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+                        >
+                          <img
+                            src={order.proofBase64}
+                            alt="Proof"
+                            width={32}
+                            height={32}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <ImageIcon className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.3)' }} />
+                          <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                            Proof attached
+                          </span>
+                        </div>
+                      </div>
                     )}
-                    <p className="text-[8px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                      WA: {order.whatsappNumber}
-                    </p>
+
+                    <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                      <p className="text-[8px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                        TX: {order.transactionId}
+                      </p>
+                      {order.utrNumber && (
+                        <p className="text-[8px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                          UTR: {order.utrNumber}
+                        </p>
+                      )}
+                      <p className="text-[8px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                        WA: {order.whatsappNumber}
+                      </p>
+                    </div>
                   </div>
                 </motion.div>
               )
@@ -1129,7 +1175,19 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <HistoryTab orders={orders} />
+                    <HistoryTab
+                      orders={orders}
+                      onDeleteAll={() => {
+                        setOrders([])
+                        saveOrders([])
+                      }}
+                      onDeleteSelected={(ids) => {
+                        const idSet = new Set(ids)
+                        const updated = orders.filter(o => !idSet.has(o.id))
+                        setOrders(updated)
+                        saveOrders(updated)
+                      }}
+                    />
                   </motion.div>
                 )}
               </AnimatePresence>

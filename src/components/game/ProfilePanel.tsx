@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users, TrendingUp, Percent, Gift, Trash2 } from 'lucide-react'
+import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users, TrendingUp, Percent, Gift, Trash2, Sun, Moon } from 'lucide-react'
 import { Notification, PLAYER_AVATARS, getLevelInfo, getLevelThreshold, MAX_LEVEL } from '@/hooks/useGame'
 import { AdsterraBanner320x50 } from '@/components/ads/AdsterraAds'
 
@@ -27,6 +27,13 @@ interface ProfilePanelProps {
   onResetAllData?: () => void
 }
 
+// Coin count formatter: 1000→1K, 1000000→1M
+function formatCoinCount(count: number): string {
+  if (count >= 1000000) return `${(count / 1000000).toFixed(1).replace(/\.0$/, '')}M`
+  if (count >= 1000) return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`
+  return count.toString()
+}
+
 // Level info is now imported from useGame.ts (1000 levels)
 
 export function ProfilePanel({
@@ -41,6 +48,10 @@ export function ProfilePanel({
   const [nameInput, setNameInput] = useState(playerName)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
   const [showLevelList, setShowLevelList] = useState(false)
+  const [isDarkTheme, setIsDarkTheme] = useState(() => {
+    if (typeof window === 'undefined') return true
+    try { return localStorage.getItem('theme') !== 'light' } catch { return true }
+  })
 
   const levelInfo = getLevelInfo(playerLevel)
   const currentLevelThreshold = getLevelThreshold(playerLevel)
@@ -288,7 +299,7 @@ export function ProfilePanel({
                 <StatBox icon={<Trophy className="w-4 h-4" />} label="Best Score" value={bestScore.toLocaleString()} color="#EDC22E" />
                 <StatBox icon={<Swords className="w-4 h-4" />} label="Mod Best" value={modBestScore > 0 ? modBestScore.toLocaleString() : '-'} color="#F65E3B" />
                 <StatBox icon={<Target className="w-4 h-4" />} label="Level XP" value={`${levelXP.toLocaleString()} / ${nextLevelThreshold.toLocaleString()}`} color="#00E676" />
-                <StatBox icon={<Coins className="w-4 h-4" />} label={`Coins (1K=₹1)`} value={`${coins.toLocaleString()} ≈ ₹${Math.floor(coins/1000)}`} color="#EDC22E" />
+                <StatBox icon={<Coins className="w-4 h-4" />} label="Coins" value={formatCoinCount(coins)} color="#EDC22E" />
                 <StatBox icon={<Calendar className="w-4 h-4" />} label="Games Today" value={`${gamesPlayedToday}/${maxGamesPerDay}`} color="#00FFFF" />
                 <StatBox icon={<Users className="w-4 h-4" />} label="Invited" value={invitedUsers.length.toString()} color="#F59563" />
               </div>
@@ -316,6 +327,34 @@ export function ProfilePanel({
                     <span style={{ color: '#00E676' }}>•</span> Daily limit: {maxGamesPerDay} games
                   </li>
                 </ul>
+              </div>
+
+              {/* Theme Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="flex items-center gap-2">
+                  {isDarkTheme ? <Moon className="w-4 h-4" style={{ color: '#7C4DFF' }} /> : <Sun className="w-4 h-4" style={{ color: '#FFB300' }} />}
+                  <span className="text-[10px] font-bold" style={{ color: isDarkTheme ? '#7C4DFF' : '#FFB300' }}>{isDarkTheme ? 'Dark Mode' : 'Light Mode'}</span>
+                </div>
+                <button onClick={() => {
+                  const newTheme = !isDarkTheme
+                  setIsDarkTheme(newTheme)
+                  try { localStorage.setItem('theme', newTheme ? 'dark' : 'light') } catch { /* ignore */ }
+                  // Apply theme class to html element
+                  document.documentElement.classList.toggle('dark', newTheme)
+                  document.documentElement.classList.toggle('light', !newTheme)
+                  // Update CSS variables for theme
+                  if (!newTheme) {
+                    document.body.style.setProperty('--bg-primary', '#f5f5f5')
+                    document.body.style.setProperty('--text-primary', '#1a1a1a')
+                  } else {
+                    document.body.style.removeProperty('--bg-primary')
+                    document.body.style.removeProperty('--text-primary')
+                  }
+                }} className="w-12 h-6 rounded-full relative transition-all" style={{ backgroundColor: isDarkTheme ? 'rgba(124,77,255,0.3)' : 'rgba(255,179,0,0.3)', border: `1px solid ${isDarkTheme ? 'rgba(124,77,255,0.5)' : 'rgba(255,179,0,0.5)'}` }}>
+                  <motion.div animate={{ x: isDarkTheme ? 0 : 24 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }} className="w-5 h-5 rounded-full absolute top-0.5 left-0.5 flex items-center justify-center" style={{ backgroundColor: isDarkTheme ? '#7C4DFF' : '#FFB300' }}>
+                    {isDarkTheme ? <Moon className="w-2.5 h-2.5" style={{ color: '#FFFFFF' }} /> : <Sun className="w-2.5 h-2.5" style={{ color: '#FFFFFF' }} />}
+                  </motion.div>
+                </button>
               </div>
 
               {/* Reset Data Button */}

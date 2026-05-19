@@ -35,6 +35,7 @@ interface PlayDashboardProps {
   multiplier5xCount: number
   multiplier2_5xCount: number
   extraTimeCount: number
+  undoTotal: number
   modBestScore: number
   gamePoints: number
   bestScore: number
@@ -100,9 +101,16 @@ const COIN_GAME_MODES = [
   { fee: 5000, win: 10000, color: '#FFD700', label: '₹5K' },
 ]
 
+/** Format large numbers: 1000 → 1K, 1000000 → 1M */
+function formatCoinCount(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K'
+  return String(n)
+}
+
 export function PlayDashboard({
   coins, spinTickets, streakDay, streakClaimed, welcomeClaimed,
-  hammerCount, magnetCount, blastCount, multiplier5xCount, multiplier2_5xCount, extraTimeCount,
+  hammerCount, magnetCount, blastCount, multiplier5xCount, multiplier2_5xCount, extraTimeCount, undoTotal,
   modBestScore, gamePoints, bestScore,
   inviteCode, invitedUsers, commissionBalance, commissionClaimed, autoClaimCommission,
   gamesPlayedToday, maxGamesPerDay, notifications,
@@ -293,35 +301,65 @@ export function PlayDashboard({
               <div className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg"
                 style={{ backgroundColor: 'rgba(237,194,46,0.12)', border: '1px solid rgba(237,194,46,0.25)' }}>
                 <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
-                <span className="text-[10px] font-extrabold" style={{ color: '#EDC22E' }}>{coins}</span>
+                <span className="text-[10px] font-extrabold" style={{ color: '#EDC22E' }}>{formatCoinCount(coins)}</span>
               </div>
             </div>
           </div>
 
-          {/* Inventory bar + Games Left */}
-          <div className="w-full flex items-center justify-between px-1 py-1">
-            <div className="flex items-center gap-1 flex-wrap">
-              <InventoryCapsule emoji="🔨" count={hammerCount} color="#F59563" />
-              <InventoryCapsule emoji="🧲" count={magnetCount} color="#00E676" />
-              <InventoryCapsule emoji="💣" count={blastCount} color="#FF7A00" />
-              <InventoryCapsule emoji="5️⃣" count={multiplier5xCount} color="#F65E3B" />
-              <InventoryCapsule emoji="⚡" count={multiplier2_5xCount} color="#FF7A00" />
-              <InventoryCapsule emoji="⏱️" count={extraTimeCount} color="#00FFFF" />
-              <button onClick={() => setShowCoupon(true)}
-                className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full transition-transform active:scale-95"
-                style={{ backgroundColor: 'rgba(0,230,118,0.1)' }}>
-                <span className="text-[9px]">🎟️</span>
-                <span className="text-[7px] font-bold" style={{ color: '#00E676' }}>Code</span>
-              </button>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(0,230,118,0.08)' }}>
-                <span className="text-[10px]">🎫</span>
-                <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>{spinTickets}</span>
+          {/* Inventory / Abilities Bar - 3-column grid */}
+          <div className="w-full px-1.5 py-1.5 rounded-lg"
+            style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="grid grid-cols-3 gap-1.5">
+              {/* Left Column: Tools */}
+              <div className="flex flex-col gap-1">
+                <div className="grid grid-cols-2 gap-1">
+                  <AbilityBtn emoji="🧲" count={magnetCount} color="#00E676" />
+                  <AbilityBtn emoji="💣" count={blastCount} color="#FF7A00" />
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                  <AbilityBtn emoji="🔨" count={hammerCount} color="#F59563" />
+                  <AbilityBtn emoji="↩️" count={undoTotal} color="#00BCD4" />
+                </div>
               </div>
-              <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full" style={{ backgroundColor: isGameLimitReached ? 'rgba(246,94,59,0.12)' : 'rgba(255,255,255,0.06)' }}>
-                <span className="text-[10px]">{isGameLimitReached ? '🚫' : '🎮'}</span>
-                <span className="text-[8px] font-bold" style={{ color: isGameLimitReached ? '#F65E3B' : 'rgba(255,255,255,0.5)' }}>{gamesLeft}</span>
+
+              {/* Center Column: Coupon Code */}
+              <button onClick={() => setShowCoupon(true)}
+                className="flex flex-col items-center justify-center gap-0.5 py-2 rounded-lg transition-transform active:scale-95"
+                style={{
+                  backgroundColor: 'rgba(0,230,118,0.08)',
+                  border: '1px solid rgba(0,230,118,0.2)',
+                  minHeight: '58px',
+                }}>
+                <span className="text-lg leading-none">🎟️</span>
+                <span className="text-[9px] font-bold" style={{ color: '#00E676' }}>CODE</span>
+              </button>
+
+              {/* Right Column: Multipliers + Spin/Timer/Games */}
+              <div className="flex flex-col gap-1">
+                <div className="grid grid-cols-2 gap-1">
+                  <AbilityBtn emoji="⚡" count={multiplier5xCount} color="#F65E3B" label="5x" />
+                  <AbilityBtn emoji="🔥" count={multiplier2_5xCount} color="#FF7A00" label="2.5x" />
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                  <div className="flex items-center justify-center gap-0.5 py-1 rounded-lg"
+                    style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.12)', minHeight: '28px' }}>
+                    <span className="text-[10px]">🎫</span>
+                    <span className="text-[9px] font-bold" style={{ color: '#00E676' }}>{formatCoinCount(spinTickets)}</span>
+                  </div>
+                  <div className="flex items-center justify-center gap-0.5 py-1 rounded-lg"
+                    style={{ backgroundColor: 'rgba(0,255,255,0.06)', border: '1px solid rgba(0,255,255,0.12)', minHeight: '28px' }}>
+                    <span className="text-[10px]">⏱️</span>
+                    <span className="text-[9px] font-bold" style={{ color: '#00FFFF' }}>{formatCoinCount(extraTimeCount)}</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-center gap-0.5 py-0.5 rounded-lg"
+                  style={{
+                    backgroundColor: isGameLimitReached ? 'rgba(246,94,59,0.08)' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${isGameLimitReached ? 'rgba(246,94,59,0.15)' : 'rgba(255,255,255,0.06)'}`,
+                  }}>
+                  <span className="text-[10px]">{isGameLimitReached ? '🚫' : '🎮'}</span>
+                  <span className="text-[8px] font-bold" style={{ color: isGameLimitReached ? '#F65E3B' : 'rgba(255,255,255,0.5)' }}>{gamesLeft}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -740,12 +778,24 @@ export function PlayDashboard({
   )
 }
 
-function InventoryCapsule({ emoji, count, color }: { emoji: string; count: number; color: string }) {
+function AbilityBtn({ emoji, count, color, label }: { emoji: string; count: number; color: string; label?: string }) {
+  const isActive = count > 0
   return (
-    <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full"
-      style={{ backgroundColor: count > 0 ? `${color}12` : 'rgba(255,255,255,0.03)' }}>
-      <span className="text-[11px]">{emoji}</span>
-      <span className="text-[9px] font-bold" style={{ color: count > 0 ? color : 'rgba(255,255,255,0.2)' }}>{count}</span>
-    </div>
+    <button
+      className="flex flex-col items-center justify-center gap-0 rounded-lg transition-transform active:scale-95"
+      style={{
+        minWidth: '40px',
+        minHeight: '28px',
+        padding: '3px 4px',
+        backgroundColor: isActive ? `${color}15` : 'rgba(255,255,255,0.03)',
+        border: `1px solid ${isActive ? `${color}30` : 'rgba(255,255,255,0.06)'}`,
+        boxShadow: isActive ? `0 0 8px ${color}25, inset 0 0 6px ${color}10` : 'none',
+      }}
+    >
+      <span className="text-[12px] leading-none">{emoji}</span>
+      <span className="text-[8px] font-bold leading-tight" style={{ color: isActive ? color : 'rgba(255,255,255,0.2)' }}>
+        {label ? `${label} ${formatCoinCount(count)}` : formatCoinCount(count)}
+      </span>
+    </button>
   )
 }

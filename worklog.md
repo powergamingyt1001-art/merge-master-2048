@@ -267,3 +267,116 @@ Stage Summary:
 - Coins display shows ₹ value (1000=₹1)
 - Searching animation added for online Battle/Coin modes
 - Weekly claim properly wired to Tournament
+
+---
+Task ID: 2
+Agent: Ability UI Fix Agent
+Task: Fix game board abilities - make them bigger and add shadow/glow press effects
+
+Work Log:
+- Modified OvalAbilitySlot component (GameBoard.tsx lines 968-1059):
+  - Increased size from 60x26 to 72x34px (borderRadius 13→17)
+  - Added visible subtle border: `1px solid rgba(255,255,255,0.15)` for inactive, `1.5px solid {glowColor}80` for active
+  - Added ABILITY_GLOW_MAP constant mapping labels to glow colors:
+    - Hammer: #FF9800 (orange), Magnet: #00E676 (green), Bomb: #FF5722 (red/orange)
+    - Undo: #42A5F5 (blue), 5x: #FF4D4D (red), 2.5x: #FF7A00 (orange), Timer: #00E676 (green)
+  - Added press/tap glow effect: whileTap scales to 0.90 with color-specific boxShadow (3-layer glow)
+  - Added hover glow effect: whileHover scales to 1.05 with subtle color shadow
+  - Added active pulsing glow animation: boxShadow pulses between low and high intensity keyframes
+  - Increased emoji text size from 11→14px, label text from 7→8px, count badge from 7→8px
+  - Count badge increased from 14x14 to 16x16, repositioned (top: -6, right: -3)
+  - Count badge glow enhanced with ABILITY_GLOW_MAP colors
+- Modified ability section container (lines 783-798):
+  - Increased gap between abilities from 6px to 10px in both rows
+  - Updated empty spacer div from 60x26 to 72x34 to match new slot size
+- Ran bun run lint: 0 errors, 0 warnings
+
+Stage Summary:
+- Ability slots are now 72x34px (was 60x26) with visible borders
+- Each ability has a unique color glow on press/tap (Hammer=orange, Magnet=green, etc.)
+- Active power-ups show a pulsing glow animation
+- Hover effect (scale 1.05) and press effect (scale 0.90) provide tactile feedback
+- Text sizes increased for better readability
+- Gap between abilities increased to 10px for easier tapping
+
+---
+Task ID: 1
+Agent: Dashboard Inventory Redesign Agent
+Task: Redesign the dashboard inventory/abilities bar in PlayDashboard.tsx
+
+Work Log:
+- Added `undoTotal` prop to PlayDashboardProps interface and destructuring
+- Passed `undoTotal` from page.tsx (`game.undoTotal`)
+- Added `formatCoinCount` helper function for K/M format: 1000→1K, 1000000→1M
+- Replaced old inventory bar (lines 301-327) with new 3-column grid layout:
+  - Left Column: 2x2 grid with 🧲 Magnet, 💣 Bomb (top), 🔨 Hammer, ↩️ Undo (bottom)
+  - Center Column: Coupon code button (🎟️ CODE) styled as a bordered box with green accent
+  - Right Column: ⚡ 5x + 🔥 2.5x (top), 🎫 spin tickets + ⏱️ timer (middle), 🎮 games-left (bottom)
+- Replaced `InventoryCapsule` component with new `AbilityBtn` component:
+  - Minimum 40x28px per item (was tiny capsule)
+  - Clickable button with visible borders and backgrounds
+  - Active power-ups (count > 0) have glow effect via boxShadow
+  - Inactive items show subtle semi-transparent background
+  - Supports optional `label` prop (used for "5x" and "2.5x")
+  - Uses `formatCoinCount` for displaying counts
+- Container has subtle background (rgba(255,255,255,0.03)) with border
+- Edge-to-edge (w-full, no horizontal scroll)
+- Ran `bun run lint`: 0 errors, 0 warnings
+
+Stage Summary:
+- Inventory bar completely redesigned from tiny capsules to proper 3-column grid
+- Each ability is a clickable button with borders, backgrounds, and glow effects
+- Coupon code is a proper bordered box in the center column
+- Spin tickets, timer, and games-left properly placed in right column
+- formatCoinCount helper added for K/M abbreviation
+- undoTotal prop added and passed from page.tsx
+
+---
+Task ID: 3
+Agent: Admin Panel Fix Agent
+Task: Fix admin panel to show store payment orders and add ability pricing editor + delete functionality
+
+Work Log:
+- Problem 1: Store orders not showing in admin panel
+  - Store.tsx saves orders to localStorage key `mergeMaster2048_orders`
+  - CouponCode.tsx admin panel only read from `purchaseHistory` key
+  - Added StoreOrder interface and loadStoreOrders/saveStoreOrders helpers
+  - Added storeOrders state and merged both sources into mergedAllPurchases
+  - Updated approve/deny/disapprove handlers to work with both data sources (store orders identified by `store_` prefix on id)
+  - Store orders mapped to PurchaseHistoryEntry format with status conversion (pending→Pending, approved→Delivered, rejected→Denied)
+
+- Problem 2: Added coin-ability pricing editor in admin Prices tab
+  - Added CoinAbilityPrice interface and DEFAULT_COIN_ABILITY_PRICES (Hammer 150, Magnet 150, Bomb 300, Timer 200, Undo 100 - all per 5)
+  - Added loadCoinAbilityPrices/saveCoinAbilityPrices functions using localStorage key `adminCoinAbilityPrices`
+  - Added coinAbilityPrices state with admin panel refresh
+  - Added new "Coin Ability Prices (coins/5)" section in Prices tab with increase/decrease buttons (+10/-10)
+  - Each ability has emoji, label, minus/plus buttons, current value, and "coins/5" unit
+  - Added "Reset Defaults" button for coin ability prices
+  - Changed "Reset to Default Prices" to "Reset All Prices"
+
+- Problem 3: Added delete functionality + lock duration to admin History tab
+  - Added selectedHistoryIds state (Set<string>) and toggleHistorySelection handler
+  - Added handleDeleteAllHistory and handleDeleteSelectedHistory callbacks
+  - History tab now shows "Delete All" and "Delete Selected (N)" buttons
+  - Each history item now has a checkbox for individual selection
+  - Selected items get highlighted background
+  - Added Lock Duration setting with +/- buttons (stored in localStorage key `adminLockDuration`, default 2 weeks)
+  - Lock duration section shows explanation text about coins/abilities lock period
+
+- Problem 4: Added delete functionality to Store's HistoryTab
+  - Added Trash2 import to Store.tsx
+  - Changed HistoryTab to accept onDeleteAll and onDeleteSelected callbacks
+  - Added selectedIds state and toggleSelection handler within HistoryTab
+  - Added "Delete All" and "Delete (N)" buttons in header
+  - Each order now has a checkbox for individual selection
+  - Selected items get highlighted background
+  - Connected callbacks in Store main component to update orders state and persist to localStorage
+
+- Ran `bun run lint` - 0 errors, 0 warnings
+
+Stage Summary:
+- Admin panel now shows store payment orders alongside purchaseHistory entries
+- Coin-ability pricing editor added with +/- buttons for all 5 abilities
+- Delete All / Select Delete added to both admin History tab and Store HistoryTab
+- Lock Duration setting added to admin History tab
+- All changes pass lint with zero errors

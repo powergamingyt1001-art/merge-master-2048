@@ -174,6 +174,7 @@ export default function Home() {
                 multiplier5xCount={game.multiplier5xCount}
                 multiplier2_5xCount={game.multiplier2_5xCount}
                 extraTimeCount={game.extraTimeCount}
+                undoTotal={game.undoTotal}
                 modBestScore={game.modBestScore}
                 gamePoints={game.gamePoints}
                 bestScore={game.bestScore}
