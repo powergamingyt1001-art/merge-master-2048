@@ -11,7 +11,7 @@ interface LoginStreakProps {
   streakDay: number
   streakClaimed: boolean[]
   onClaim: (day: number) => void
-  onClaimStreakAdBonus: () => void
+  onClaimStreakAdBonus?: () => void
   streakAdBonusClaimed?: boolean
 }
 
@@ -44,7 +44,7 @@ export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim
         // User returned from ad - claim the bonus
         adOpenedRef.current = false
         setAdBonusPending(false)
-        onClaimStreakAdBonus()
+        onClaimStreakAdBonus?.()
         setAdBonusClaimed(true)
       }
     }
@@ -118,7 +118,6 @@ export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim
                         backgroundColor: isCurrent ? `${reward.color}15` : isClaimed ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.02)',
                         border: isCurrent ? `1px solid ${reward.color}50` : isDay7 && isAvailable ? '1px solid rgba(237,194,46,0.3)' : '1px solid rgba(255,255,255,0.05)',
                         opacity: isLocked ? 0.35 : 1,
-                        ringColor: isCurrent ? reward.color : undefined,
                       }}
                       animate={isCurrent ? {
                         boxShadow: [

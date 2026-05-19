@@ -3,7 +3,14 @@
 import { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
-import { CouponCode } from '@/hooks/useGame'
+
+// Coupon code type for the panel
+interface CouponCode {
+  code: string
+  reward: string
+  claimed: boolean
+  expiresAt: number
+}
 
 interface CouponPanelProps {
   isOpen: boolean

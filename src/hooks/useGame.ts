@@ -1058,7 +1058,7 @@ export function useGame() {
 
       let newLives = prev.lives
       let isGameOver = false
-      let newTimerPaused = prev.timerPaused
+      let newTimerPaused: boolean = prev.timerPaused
       if (isStuck) {
         newLives = prev.lives - 1
         if (newLives <= 0) {

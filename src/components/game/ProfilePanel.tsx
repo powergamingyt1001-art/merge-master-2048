@@ -367,8 +367,8 @@ export function NotificationsPanel({
   notifications: Notification[]
   onMarkRead: (id: string) => void
   onMarkAllRead: () => void
-  onDeleteNotification: (id: string) => void
-  onDeleteReadNotifications: () => void
+  onDeleteNotification?: (id: string) => void
+  onDeleteReadNotifications?: () => void
 }) {
   const unreadCount = notifications.filter(n => !n.read).length
 
@@ -408,7 +408,7 @@ export function NotificationsPanel({
                   </button>
                 )}
                 {notifications.some(n => n.read) && (
-                  <button onClick={onDeleteReadNotifications} className="text-[8px] font-bold px-2 py-1 rounded-lg"
+                  <button onClick={() => onDeleteReadNotifications?.()} className="text-[8px] font-bold px-2 py-1 rounded-lg"
                     style={{ backgroundColor: 'rgba(246,94,59,0.08)', color: '#F65E3B' }}>
                     Clear All
                   </button>
@@ -451,7 +451,7 @@ export function NotificationsPanel({
                         </p>
                       </div>
                       <button
-                        onClick={(e) => { e.stopPropagation(); onDeleteNotification(notif.id) }}
+                        onClick={(e) => { e.stopPropagation(); onDeleteNotification?.(notif.id) }}
                         className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 opacity-40 hover:opacity-100 transition-opacity"
                         style={{ backgroundColor: 'rgba(246,94,59,0.1)' }}
                       >

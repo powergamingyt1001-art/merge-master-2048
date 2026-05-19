@@ -867,6 +867,11 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
       <CouponCode
         isOpen={showCoupon}
         onClose={() => setShowCoupon(false)}
+        coins={game.coins}
+        hammerCount={game.hammerCount}
+        magnetCount={game.magnetCount}
+        blastCount={game.blastCount}
+        spinTickets={game.spinTickets}
         onAddCoins={addCoins}
         onAddPowerUp={(pu, count) => game.addPowerUp(pu, count)}
         onAddSpinTickets={(count) => game.addSpinTickets(count)}

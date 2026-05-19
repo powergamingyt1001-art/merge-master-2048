@@ -171,6 +171,9 @@ export default function Home() {
                 hammerCount={game.hammerCount}
                 magnetCount={game.magnetCount}
                 blastCount={game.blastCount}
+                multiplier5xCount={game.multiplier5xCount}
+                multiplier2_5xCount={game.multiplier2_5xCount}
+                extraTimeCount={game.extraTimeCount}
                 modBestScore={game.modBestScore}
                 gamePoints={game.gamePoints}
                 bestScore={game.bestScore}
@@ -194,6 +197,7 @@ export default function Home() {
                 tournamentPoints={game.tournamentPoints}
                 tournamentCarryOver={game.tournamentCarryOver}
                 tournamentGamesPlayed={game.tournamentGamesPlayed}
+                levelXP={game.levelXP}
                 onPlayClassic={handlePlayClassic}
                 onStartBotBattle={handleStartBotBattle}
                 onStartCoinGame={handleStartCoinGame}
@@ -213,8 +217,6 @@ export default function Home() {
                 onAddNotification={game.addNotification}
                 onMarkNotificationRead={game.markNotificationRead}
                 onMarkAllNotificationsRead={game.markAllNotificationsRead}
-                onDeleteNotification={game.deleteNotification}
-                onDeleteReadNotifications={game.deleteReadNotifications}
                 onUpdatePlayerName={game.updatePlayerName}
                 onUpdatePlayerAvatar={game.updatePlayerAvatar}
                 dailyTasks={game.dailyTasks}

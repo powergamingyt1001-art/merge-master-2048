@@ -1014,9 +1014,9 @@ export function CouponCode({
                                         📱 WhatsApp: <span style={{ color: '#00E676' }}>{entry.whatsappNumber}</span>
                                       </p>
                                     )}
-                                    {(entry.buyerName || entry.name) && (
+                                    {(entry.buyerName) && (
                                       <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                        👤 Name: <span style={{ color: 'rgba(255,255,255,0.6)' }}>{entry.buyerName || entry.name}</span>
+                                        👤 Name: <span style={{ color: 'rgba(255,255,255,0.6)' }}>{entry.buyerName}</span>
                                       </p>
                                     )}
                                     {entry.type === 'inr_ability' ? (

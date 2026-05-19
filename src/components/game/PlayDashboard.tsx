@@ -50,7 +50,7 @@ interface PlayDashboardProps {
   playerAvatar: string
   playerLevel: number
   playerId: string
-  firebaseReferrals: { id: string; name: string; avatar?: string; joinedAt: number; commissionEarned: number }[]
+  firebaseReferrals: { id: string; name: string; avatar: string; joinedAt: number; commissionEarned: number }[]
   firebaseCommissionPending: number
   totalBattlesPlayed: number
   totalBattlesWon: number
@@ -58,6 +58,7 @@ interface PlayDashboardProps {
   tournamentPoints: number
   tournamentCarryOver: number
   tournamentGamesPlayed: number
+  levelXP: number
   onPlayClassic: () => void
   onStartBotBattle: (timeLimit: number) => void
   onStartCoinGame: (entryFee: number) => void
@@ -108,6 +109,7 @@ export function PlayDashboard({
   playerName, playerAvatar, playerLevel, playerId, firebaseReferrals, firebaseCommissionPending,
   totalBattlesPlayed, totalBattlesWon,
   tournamentJoined, tournamentPoints, tournamentCarryOver, tournamentGamesPlayed,
+  levelXP,
   onPlayClassic, onStartBotBattle, onStartCoinGame,
   onJoinTournament, onStartTournamentGame,
   onUseSpinTicket, onAddSpinTickets, onClaimWelcome, onClaimStreakDay,
@@ -599,7 +601,7 @@ export function PlayDashboard({
         firebaseReferrals={firebaseReferrals} firebaseCommissionPending={firebaseCommissionPending} />
       <ProfilePanel isOpen={showProfile} onClose={() => setShowProfile(false)}
         playerName={playerName} playerAvatar={playerAvatar} playerLevel={playerLevel}
-        gamePoints={gamePoints} bestScore={bestScore} modBestScore={modBestScore}
+        gamePoints={gamePoints} levelXP={levelXP} bestScore={bestScore} modBestScore={modBestScore}
         coins={coins} gamesPlayedToday={gamesPlayedToday} maxGamesPerDay={maxGamesPerDay}
         invitedUsers={invitedUsers} onUpdateName={onUpdatePlayerName} onUpdateAvatar={onUpdatePlayerAvatar}
         totalBattlesPlayed={totalBattlesPlayed} totalBattlesWon={totalBattlesWon}
@@ -610,7 +612,7 @@ export function PlayDashboard({
       <AboutPage isOpen={showAbout} onClose={() => setShowAbout(false)} />
       <ContactPage isOpen={showContact} onClose={() => setShowContact(false)} />
       <Store isOpen={showStore} onClose={() => setShowStore(false)} playerId={playerId} coins={coins} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} onDeductCoins={onDeductCoins} onAddPowerUp={onAddPowerUp} onAddUndos={onAddUndos} />
-      <CouponCode isOpen={showCoupon} onClose={() => setShowCoupon(false)} onAddCoins={onAddCoins} onAddPowerUp={onAddPowerUp} onAddSpinTickets={onAddSpinTickets} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} />
+      <CouponCode isOpen={showCoupon} onClose={() => setShowCoupon(false)} coins={coins} hammerCount={hammerCount} magnetCount={magnetCount} blastCount={blastCount} spinTickets={spinTickets} onAddCoins={onAddCoins} onAddPowerUp={onAddPowerUp} onAddSpinTickets={onAddSpinTickets} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} />
     </div>
   )
 }

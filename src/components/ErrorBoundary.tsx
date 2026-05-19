@@ -26,13 +26,30 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('ErrorBoundary caught:', error, errorInfo)
   }
 
-  handleReset = () => {
-    this.setState({ hasError: false, error: null })
-    // Clear cached data that might be corrupted
+  handleReset = async () => {
+    // Clear ALL cached data that might be corrupted
     try {
       localStorage.removeItem('mergeMaster2048')
+      localStorage.removeItem('mergeMaster2048_storeHistory')
+      localStorage.removeItem('mergeMaster2048_abilityPurchaseLimits')
+      localStorage.removeItem('mergeMaster2048_lastFreeAd')
     } catch {}
-    window.location.reload()
+
+    // Clear service worker caches
+    try {
+      if ('caches' in window) {
+        const cacheNames = await caches.keys()
+        await Promise.all(cacheNames.map(name => caches.delete(name)))
+      }
+      // Unregister service workers so fresh code loads
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(registrations.map(reg => reg.unregister()))
+      }
+    } catch {}
+
+    // Hard reload - bypass browser cache
+    window.location.href = window.location.pathname + '?t=' + Date.now()
   }
 
   render() {
