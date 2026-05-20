@@ -521,3 +521,66 @@ Stage Summary:
 - Banned users stored in localStorage with auto-expiry
 - Game checks ban status on load and shows suspension notification
 - All existing functionality preserved
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Dashboard capsule code button, tournament full countdown timer, dark/light mode theme support, game board layout 3+3
+
+Work Log:
+- Read worklog.md and all relevant source files (PlayDashboard.tsx, Tournament.tsx, globals.css, GameBoard.tsx, ProfilePanel.tsx, CouponCode.tsx)
+
+1. PlayDashboard.tsx - Center Column Capsule Code Button:
+   - Replaced circular coin display + "Redeem" coupon button with a single capsule/pill shaped "Code" button
+   - Yellow themed (rgba(237,194,46,0.15) bg, #EDC22E text) with 🎟️ emoji
+   - borderRadius: 9999px for full pill shape
+   - Button opens coupon modal (setShowCoupon)
+
+2. Tournament.tsx - Full Countdown Timer:
+   - Updated getTimeLeftInWeek() to return full format: `${days}d ${hours}h ${minutes}m ${seconds}s`
+   - Added minutes and seconds calculation
+   - Added useState + useEffect with 1-second interval to update timer in real-time
+   - Removed static `const timeLeft = getTimeLeftInWeek()` call
+
+3. globals.css - Dark/Light Mode CSS Variables:
+   - Added 9 CSS custom properties in :root (light mode):
+     - --game-bg-1: #f8f9fa, --game-bg-2: #e9ecef, --game-bg-3: #dee2e6
+     - --game-text: #1a0533, --game-text-secondary: rgba(26,5,51,0.5)
+     - --game-glass: rgba(255,255,255,0.7), --game-glass-border: rgba(26,5,51,0.1)
+     - --game-glass-light: rgba(255,255,255,0.85), --game-overlay: rgba(255,255,255,0.9)
+   - Added same 9 variables in .dark (dark mode):
+     - --game-bg-1: #1a0533, --game-bg-2: #0d1b3e, --game-bg-3: #1a0533
+     - --game-text: #FFFFFF, --game-text-secondary: rgba(255,255,255,0.5)
+     - --game-glass: rgba(255,255,255,0.06), --game-glass-border: rgba(255,255,255,0.1)
+     - --game-glass-light: rgba(255,255,255,0.04), --game-overlay: rgba(0,0,0,0.85)
+
+4. PlayDashboard.tsx - Theme Variable Usage:
+   - Main background gradient: #1a0533/#0d1b3e → var(--game-bg-1)/var(--game-bg-2)/var(--game-bg-3)
+   - Profile button: backgroundColor rgba(255,255,255,0.06) → var(--game-glass)
+   - Profile button: border rgba(255,255,255,0.08) → var(--game-glass-border)
+   - Bell button: same glass/border variable swap
+   - "MASTER" text: #FFFFFF → var(--game-text)
+   - Footer links: rgba(255,255,255,0.35) → var(--game-text-secondary)
+   - Kept all accent colors (#EDC22E, #F65E3B, #00E676, etc.) as-is
+
+5. ProfilePanel.tsx, CouponCode.tsx, Tournament.tsx - Background Gradients:
+   - All instances of `linear-gradient(135deg, #1a0533, #0d1b3e)` → `linear-gradient(135deg, var(--game-bg-1), var(--game-bg-2))`
+
+6. GameBoard.tsx - 3+3 Layout:
+   - Changed from two-row flex layout (4+3 with empty slot) to grid-cols-3 layout
+   - 7 ability slots in a 3x3 grid (3+3+1): Hammer, Magnet, Bomb / Undo, 5x, 2.5x / +10s
+   - Removed empty placeholder div
+   - OvalAbilitySlot button: width 94 → w-full (fills grid cell), height 48 → 40, borderRadius 24 → 20
+   - Icon fontSize: 20 → 16, label fontSize: 9 → 8, label marginLeft: 3 → 2
+   - Count badge fontSize: 9 → 8, top: -6 → -5, right: -3 → -2, minWidth: 16 → 14, height: 16 → 14, borderRadius: 8 → 7
+   - Active border: 2.5px → 2px
+   - Grid gap: 1.5, maxWidth: 360
+
+Lint check: 0 errors
+Git commit: 0343975 pushed to main
+
+Stage Summary:
+- Dashboard center column: capsule/pill "Code" button replaces circular coin + Redeem button
+- Tournament timer: full d h m s countdown updating every second
+- Dark/light mode: CSS variables enable theme switching for backgrounds, glass effects, and text
+- Game board: 3+3 grid layout with smaller ability buttons
