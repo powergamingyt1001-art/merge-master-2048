@@ -1,4 +1,52 @@
 ---
+Task ID: 1
+Agent: admin-panel-fix
+Task: Fix admin panel full screen display in CouponCode.tsx
+
+Work Log:
+- Read CouponCode.tsx (1907 lines) to understand nested modal structure
+- Identified the problem: Admin panel was rendered as `absolute inset-0 z-20` overlay INSIDE a parent modal with `max-h-[85vh]`, causing bottom cutoff
+- Admin panel AnimatePresence block was at lines 904-1729, nested inside the main coupon modal
+- Extracted admin inner content (lines 954-1726) and rebuilt as a separate full-screen overlay
+- Removed the nested admin panel from inside the main modal
+- Added new full-screen admin panel overlay between the main modal closing and Screenshot Viewer Modal
+- Changed wrapper from `absolute inset-0 z-20 rounded-2xl overflow-hidden` to `fixed inset-0 z-[300] flex items-center justify-center px-4`
+- Changed modal container to use `h-[92vh] rounded-2xl overflow-hidden flex flex-col` with spring animation
+- Added `flex-shrink-0` to Admin Header and Admin Tabs divs
+- Changed content div from `className="p-3 overflow-y-auto" style={{ maxHeight: 'calc(85vh - 100px)' }}` to `className="flex-1 overflow-y-auto p-3"`
+- Changed History tab from `style={{ maxHeight: 'calc(85vh - 100px)', overflowY: 'auto' }}` to `className="space-y-2 overflow-y-auto"`
+- De-indented admin content by 4 spaces to match new nesting level
+- Lint check passes with 0 errors
+
+Stage Summary:
+- Admin panel now renders as full-screen overlay at z-[300] with fixed positioning
+- Content area uses flex-1 overflow-y-auto instead of maxHeight calc
+- No more bottom cutoff - admin panel fills 92vh with proper flex layout
+- All admin content (payments, coupons, prices, history) preserved exactly as-is
+
+---
+Task ID: 2
+Agent: store-restructure
+Task: Restructure Store ability tab order and remove Free Reward Ad
+
+Work Log:
+- Read Store.tsx (899 lines)
+- Verified current AbilityTab structure (lines 321-379):
+  - 5x Multiplier is already FIRST (lines 324-340)
+  - 2.5x Multiplier is already SECOND (lines 342-358)
+  - Regular Abilities (Coins) is already THIRD/bottom (lines 360-376)
+- Searched for Free Reward Ad remnants: none found (no canWatchAd, handleWatchAd, Tv, canWatchFreeAd)
+- Verified lucide-react imports: X, Coins, Zap, Clock, MessageCircle, AlertCircle — all used, no Tv import
+- No code changes required — file already matches the desired structure
+
+Stage Summary:
+- Store ability tab already shows 5x/2.5x multipliers first
+- Regular coin abilities already at bottom
+- Free Reward Ad section already absent (was never present or previously removed)
+- All imports are clean with no unused items
+- Lint check passes with 0 errors
+
+---
 Task ID: 3
 Agent: Main Agent
 Task: Fix persistent game crash - comprehensive TypeScript and prop mismatch fixes
@@ -152,3 +200,24 @@ Stage Summary:
 - Spin wheel now correctly awards all 10 prize types (was missing 3)
 - BackgroundImpressionTimer memory leak fixed
 - Code pushed to GitHub for Vercel deployment
+
+---
+Task ID: 3
+Agent: dashboard-layout
+Task: Redesign PlayDashboard layout - rename Coupon to Code in quick actions
+
+Work Log:
+- Read PlayDashboard.tsx (631 lines) to understand current layout structure
+- Verified current Quick Actions Row 1 has 4 buttons: Daily, Spin, Store, Coupon
+- Verified header is clean - nothing extra above coin display (Profile + Title + Bell/Coins)
+- Renamed "Coupon" button to "Code" in Quick Actions Row 1 to match GameBoard's "CODE" capsule button
+- Changed sub-label from "Code" to "Redeem" since the main label is now "Code"
+- Updated comment from "Streak + Spin + Store + Coupon" to "Streak + Spin + Store + Code"
+- Kept same emoji (🎟️), same color scheme (#00E676), same onClick handler (setShowCoupon)
+- Lint check passes with 0 errors
+
+Stage Summary:
+- Quick Actions Row 1 now shows: Daily, Spin, Store, Code (was Coupon)
+- "Code" label matches the GameBoard's CODE capsule button
+- Sub-label changed to "Redeem" for clarity
+- No other layout changes needed - dashboard structure is clean

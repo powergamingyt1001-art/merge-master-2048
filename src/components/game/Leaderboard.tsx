@@ -229,6 +229,13 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
               {/* MODES BEST SCORE TAB */}
               {tab === 'modesScore' && (
                 <div>
+                  {/* Reset period indicator */}
+                  <div className="flex items-center justify-center gap-1.5 mb-2 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.12)' }}>
+                    <span className="text-[8px]">🔄</span>
+                    <span className="text-[8px] font-bold" style={{ color: '#F65E3B' }}>Tournament: Weekly Reset</span>
+                    <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>• Battle: Monthly</span>
+                    <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>• Classic: Yearly</span>
+                  </div>
                   {modesEntries.length <= 1 && !modesEntries.some(e => !e.isPlayer) ? (
                     <div className="flex flex-col items-center justify-center py-8">
                       <span className="text-3xl mb-2">🏆</span>
@@ -258,6 +265,11 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
               {/* COINS RANK TAB */}
               {tab === 'coinsRank' && (
                 <div>
+                  {/* Reset period indicator */}
+                  <div className="flex items-center justify-center gap-1.5 mb-2 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.12)' }}>
+                    <span className="text-[8px]">🔄</span>
+                    <span className="text-[8px] font-bold" style={{ color: '#EDC22E' }}>Coins Leaderboard: Monthly Reset</span>
+                  </div>
                   {coinsEntries.length <= 1 && !coinsEntries.some(e => !e.isPlayer) ? (
                     <div className="flex flex-col items-center justify-center py-8">
                       <span className="text-3xl mb-2">💰</span>
@@ -287,6 +299,11 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
               {/* OFFLINE RANK TAB */}
               {tab === 'offlineRank' && (
                 <div>
+                  {/* Reset period indicator */}
+                  <div className="flex items-center justify-center gap-1.5 mb-2 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.12)' }}>
+                    <span className="text-[8px]">🔄</span>
+                    <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>Offline Rank: Yearly Reset</span>
+                  </div>
                   {/* Current Progress */}
                   <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
                     <div className="flex items-center gap-2 mb-2">

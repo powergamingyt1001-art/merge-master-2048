@@ -150,6 +150,9 @@ export interface GameState {
   gameHistory: GameHistoryEntry[]
   // Weekly bonus
   weeklyBonusClaimed: boolean
+  // Leaderboard reset tracking
+  leaderboardMonth: number // Year*12+Month for monthly reset
+  leaderboardYear: number // Year for yearly reset
   // Daily tasks
   dailyTasks: DailyTask[]
   // New ability types
@@ -670,6 +673,8 @@ export function useGame() {
       levelXP: 0,
       gameHistory: [],
       weeklyBonusClaimed: false,
+      leaderboardMonth: new Date().getFullYear() * 12 + new Date().getMonth(),
+      leaderboardYear: new Date().getFullYear(),
       dailyTasks: generateDailyTasks(),
       multiplier5xCount: 0,
       multiplier2_5xCount: 0,
@@ -740,6 +745,30 @@ export function useGame() {
       }
     }
 
+    // Monthly reset for coins and battle scores
+    let coins = saved.coins || 0
+    let modBestScore = saved.modBestScore || 0
+    if (saved.leaderboardMonth) {
+      const now = new Date()
+      const currentMonth = now.getFullYear() * 12 + now.getMonth()
+      if (currentMonth > saved.leaderboardMonth) {
+        // Reset coins leaderboard and battle (mod) best score monthly
+        // Note: coins balance is NOT reset, only the leaderboard tracking
+        modBestScore = 0
+      }
+    }
+
+    // Yearly reset for classic best score and offline rank
+    let bestScore = saved.bestScore || 0
+    if (saved.leaderboardYear) {
+      const now = new Date()
+      const currentYear = now.getFullYear()
+      if (currentYear > saved.leaderboardYear) {
+        // Reset classic best score and offline rank yearly
+        bestScore = 0
+      }
+    }
+
     const gamePoints = saved.gamePoints || 0
 
     return {
@@ -781,6 +810,11 @@ export function useGame() {
       levelXP,
       gameHistory: saved.gameHistory || [],
       weeklyBonusClaimed,
+      leaderboardMonth: (() => {
+        const now = new Date()
+        return now.getFullYear() * 12 + now.getMonth()
+      })(),
+      leaderboardYear: new Date().getFullYear(),
       // Regenerate daily tasks if it's a new day or tasks are empty/stale
       dailyTasks: (() => {
         const savedTasks = saved.dailyTasks || []
@@ -843,6 +877,8 @@ export function useGame() {
       tournamentWeek: currentWeek,
       gameHistory: state.gameHistory.slice(0, 30),
       weeklyBonusClaimed: state.weeklyBonusClaimed,
+      leaderboardMonth: state.leaderboardMonth,
+      leaderboardYear: state.leaderboardYear,
       dailyTasks: state.dailyTasks,
       multiplier5xCount: state.multiplier5xCount,
       multiplier2_5xCount: state.multiplier2_5xCount,
@@ -1869,6 +1905,8 @@ export function useGame() {
       levelXP: 0,
       gameHistory: [],
       weeklyBonusClaimed: false,
+      leaderboardMonth: new Date().getFullYear() * 12 + new Date().getMonth(),
+      leaderboardYear: new Date().getFullYear(),
       dailyTasks: generateDailyTasks(),
       multiplier5xCount: 0,
       multiplier2_5xCount: 0,
