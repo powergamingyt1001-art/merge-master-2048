@@ -584,3 +584,35 @@ Stage Summary:
 - Tournament timer: full d h m s countdown updating every second
 - Dark/light mode: CSS variables enable theme switching for backgrounds, glass effects, and text
 - Game board: 3+3 grid layout with smaller ability buttons
+
+---
+Task ID: 2
+Agent: coupon-timer-fix
+Task: Remove QR codes, add day/night timer with 12hr cycle, fix admin coupon creation
+
+Work Log:
+- Read CouponCode.tsx to understand the "Today's Codes" section and QR code display
+- Removed QR code images and QR error/refresh logic from "Today's Codes" section
+- Removed actual code text (DAY..., NIGHT...) from user-facing display
+- Replaced with timer-based UI showing Day Code / Night Code status (ACTIVE/LOCKED) and countdown
+- Added `now` state with 1-second interval for real-time countdown
+- Added `isDayTime` (0-12h) and `isNightTime` (12-24h) logic
+- Added `getTimeUntilSwitch()` function calculating time until next 12-hour switch
+- New UI: Day Code ☀️ with ACTIVE badge (during day) or 🔒 LOCKED (during night)
+- New UI: Night Code 🌙 with ACTIVE badge (during night) or 🔒 LOCKED (during day)
+- New UI: Countdown timer showing "🌙 Night in Xh Xm Xs" or "☀️ Day in Xh Xm Xs"
+- Added time restrictions to handleClaim: Day code only redeemable 12AM-12PM, Night code only 12PM-12AM
+- Fixed admin coupon creation: Added `setCustomCodes(loadCustomCouponCodes())` to isOpen useEffect
+- Removed unused QR-related state variables: dayCodeImgError, nightCodeImgError, codeImgRefreshKey
+- Removed unused Gift import from lucide-react
+- Kept dayCode/nightCode variables for admin panel display (admin still sees actual codes)
+- Lint check passes with 0 errors
+- Git commit: ffeca04 pushed to main
+
+Stage Summary:
+- QR codes completely removed from user-facing "Today's Codes" section
+- Actual coupon code text (DAY20260520, NIGHT20260520) no longer visible to users
+- Users see Day/Night code status (ACTIVE/LOCKED) and a countdown timer to next switch
+- Day code only redeemable from 12AM to 12PM, Night code from 12PM to 12AM
+- Admin panel still shows actual code text for admin management
+- Custom codes now properly reloaded from localStorage when coupon modal opens

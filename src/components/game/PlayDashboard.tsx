@@ -349,6 +349,7 @@ export function PlayDashboard({
                     border: '2px solid rgba(237,194,46,0.5)',
                     boxShadow: '0 0 14px rgba(237,194,46,0.25)',
                     borderRadius: '9999px',
+                    transition: 'transform 0.15s, box-shadow 0.2s, background-color 0.2s',
                   }}>
                   <span className="text-[12px]">🎟️</span>
                   <span className="text-[10px] font-extrabold" style={{ color: '#EDC22E' }}>Code</span>
@@ -414,7 +415,7 @@ export function PlayDashboard({
           {/* Battle Mode - Expandable */}
           <AnimatePresence>
             {showBattleModes && (
-              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="w-full overflow-hidden">
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} className="w-full overflow-hidden">
                 <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <div className="grid grid-cols-4 gap-1.5">
                     {[
@@ -442,7 +443,7 @@ export function PlayDashboard({
           {/* Coin Games - Expandable */}
           <AnimatePresence>
             {showCoinGames && (
-              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="w-full overflow-hidden">
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} className="w-full overflow-hidden">
                 <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.04)', border: '1px solid rgba(237,194,46,0.08)' }}>
                   <div className="grid grid-cols-5 gap-1">
                     {COIN_GAME_MODES.map((mode) => {
@@ -677,7 +678,7 @@ export function PlayDashboard({
                 {/* VS / Searching indicator */}
                 <div className="flex flex-col items-center">
                   {searching.opponent ? (
-                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300 }}>
+                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 400, damping: 25 }}>
                       <span className="text-2xl font-black" style={{ color: '#F65E3B' }}>VS</span>
                     </motion.div>
                   ) : (
@@ -692,7 +693,7 @@ export function PlayDashboard({
 
                 {/* Opponent profile */}
                 {searching.opponent ? (
-                  <motion.div initial={{ x: 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 200 }}
+                  <motion.div initial={{ x: 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 300, damping: 25 }}
                     className="flex flex-col items-center">
                     <div className="w-16 h-16 rounded-full flex items-center justify-center"
                       style={{ background: 'linear-gradient(135deg, #F65E3B, #FF7A00)', border: '2px solid rgba(255,255,255,0.3)' }}>
@@ -796,6 +797,7 @@ function AbilityBtn({ emoji, count, color, label }: { emoji: string; count: numb
         backgroundColor: isActive ? `${color}20` : 'rgba(255,255,255,0.04)',
         border: `2px solid ${isActive ? `${color}55` : 'rgba(255,255,255,0.15)'}`,
         boxShadow: isActive ? `0 0 10px ${color}40, inset 0 0 8px ${color}15` : 'none',
+        transition: 'transform 0.15s, background-color 0.2s, border-color 0.2s, box-shadow 0.2s',
       }}
     >
       <span className="text-[12px] leading-none">{emoji}</span>

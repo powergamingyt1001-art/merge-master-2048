@@ -359,11 +359,13 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
           {/* Left: Back + Score */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button onClick={handleBack}
+              className="transition-transform active:scale-90"
               style={{
                 width: 36, height: 36, borderRadius: 10,
                 backgroundColor: 'rgba(255,255,255,0.08)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 border: 'none', cursor: 'pointer',
+                transition: 'background-color 0.15s, transform 0.1s',
               }}>
               <ArrowLeftCircle style={{ width: 20, height: 20, color: 'rgba(255,255,255,0.7)' }} />
             </button>
@@ -377,7 +379,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
                       initial={{ opacity: 1, y: 0 }}
                       animate={{ opacity: 0, y: -15 }}
                       exit={{ opacity: 0 }}
-                      transition={{ duration: 0.5 }}
+                      transition={{ duration: 0.4, ease: 'easeOut' }}
                       style={{ fontSize: 12, color: comboMultiplier >= 2 ? '#FF7A00' : '#EDC22E', marginLeft: 4, fontWeight: 700 }}
                     >
                       +{scoreGain}
@@ -579,6 +581,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
             </p>
             <button
               onClick={openAdAndRevive}
+              className="transition-transform active:scale-95"
               style={{
                 padding: '8px 24px',
                 borderRadius: 8,
@@ -593,6 +596,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
                 alignItems: 'center',
                 gap: 8,
                 margin: '0 auto',
+                transition: 'transform 0.1s, box-shadow 0.15s',
               }}>
               ❤️ Get Free Life
               <span style={{ fontSize: 8, fontWeight: 400, opacity: 0.7 }}> (opens ad)</span>
@@ -624,7 +628,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
           const row = Math.floor(i / 4), col = i % 4
           return <div key={`bg-${i}`} className="absolute rounded-lg" style={{
             width: cellSize, height: cellSize, backgroundColor: 'rgba(255,255,255,0.05)',
-            left: col * (cellSize + gap) + gap, top: row * (cellSize + gap) + gap,
+            transform: `translate(${col * (cellSize + gap) + gap}px, ${row * (cellSize + gap) + gap}px)`,
           }} />
         })}
 
@@ -684,8 +688,8 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
               <Heart className="w-8 h-8 mb-2" style={{ color: '#F65E3B' }} />
               <p className="text-lg font-bold mb-1" style={{ color: '#FFFFFF' }}>Stuck!</p>
               <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>-1 ❤️ • {lives} lives left</p>
-              <button onClick={handleStuckContinue} onTouchStart={(e) => e.stopPropagation()} className="px-5 py-2 rounded-lg font-bold text-xs"
-                style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>Continue</button>
+              <button onClick={handleStuckContinue} onTouchStart={(e) => e.stopPropagation()} className="px-5 py-2 rounded-lg font-bold text-xs transition-transform active:scale-95"
+                style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF', transition: 'transform 0.1s' }}>Continue</button>
             </motion.div>
           )}
         </AnimatePresence>
@@ -701,8 +705,8 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
               <p className="text-2xl sm:text-3xl font-extrabold mb-2" style={{ color: '#FFFFFF' }}>You Win! 🎉</p>
               <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.8)' }}>Score: {score}</p>
               <div className="flex gap-3">
-                <button onClick={continueGame} onTouchStart={(e) => e.stopPropagation()} className="px-4 py-2 rounded-lg font-bold text-xs" style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)' }}>Keep Going</button>
-                <button onClick={() => { onBackToDashboard(); }} onTouchStart={(e) => e.stopPropagation()} className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1" style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
+                <button onClick={continueGame} onTouchStart={(e) => e.stopPropagation()} className="px-4 py-2 rounded-lg font-bold text-xs transition-transform active:scale-95" style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)', transition: 'transform 0.1s' }}>Keep Going</button>
+                <button onClick={() => { onBackToDashboard(); }} onTouchStart={(e) => e.stopPropagation()} className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1 transition-transform active:scale-95" style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF', transition: 'transform 0.1s' }}>
                   <RotateCcw className="w-3 h-3" /> Dashboard
                 </button>
               </div>
@@ -754,11 +758,11 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
                 <button
                   onClick={handleBattleEnd}
                   onTouchStart={(e) => e.stopPropagation()}
-                  className="px-4 py-2 rounded-lg font-bold text-xs" style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)' }}>Dashboard</button>
+                  className="px-4 py-2 rounded-lg font-bold text-xs transition-transform active:scale-95" style={{ backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.3)', transition: 'transform 0.1s' }}>Dashboard</button>
                 <button
                   onClick={handlePlayAgain}
                   onTouchStart={(e) => e.stopPropagation()}
-                  className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1" style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
+                  className="px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1 transition-transform active:scale-95" style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF', transition: 'transform 0.1s' }}>
                   Play Again
                 </button>
               </div>
@@ -839,8 +843,8 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
       {/* Mobile direction buttons */}
       <div className="flex gap-1 sm:hidden flex-shrink-0">
         {(['up', 'down', 'left', 'right'] as Direction[]).map(dir => (
-          <button key={dir} onClick={() => onMove(dir)} className="w-10 h-10 rounded-lg flex items-center justify-center"
-            style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>
+          <button key={dir} onClick={() => onMove(dir)} className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform active:scale-90"
+            style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)', transition: 'background-color 0.15s, transform 0.1s' }}>
             {dir === 'up' ? <ArrowUp className="w-5 h-5" /> : dir === 'down' ? <ArrowDown className="w-5 h-5" /> : dir === 'left' ? <ArrowLeft className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
           </button>
         ))}
@@ -859,6 +863,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[150] flex items-center justify-center px-4" style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}>
             <motion.div initial={{ scale: 0.8, y: 30 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.8 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               className="w-full max-w-xs rounded-2xl p-6 text-center" style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}>
               <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 1.5 }}>
                 <Heart className="w-12 h-12 mx-auto mb-3" style={{ color: '#F65E3B' }} />
@@ -867,8 +872,8 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
               <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>Score: {score} • Best: {bestScore}</p>
               <div className="space-y-2">
                 <button onClick={openAdAndRevive}
-                  className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
-                  style={{ background: 'linear-gradient(135deg, #F65E3B, #F67C5F)', color: '#FFFFFF' }}>
+                  className="w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-transform active:scale-95"
+                  style={{ background: 'linear-gradient(135deg, #F65E3B, #F67C5F)', color: '#FFFFFF', transition: 'transform 0.1s' }}>
                   <Heart className="w-4 h-4" /> Get Free Life
                   <span style={{ fontSize: 8, fontWeight: 400, opacity: 0.7 }}> (opens ad)</span>
                 </button>
@@ -877,8 +882,8 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
                   setGameOverDismissed(false)
                   onBackToDashboard()
                 }}
-                  className="w-full py-2.5 rounded-xl font-semibold text-xs"
-                  style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  className="w-full py-2.5 rounded-xl font-semibold text-xs transition-transform active:scale-95"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.1)', transition: 'transform 0.1s' }}>
                   Back to Dashboard
                 </button>
               </div>
@@ -901,7 +906,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
               initial={{ scale: 0.85, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.85 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               className="w-full max-w-xs rounded-2xl p-6 text-center"
               style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.12)' }}
             >
@@ -922,6 +927,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
                   background: 'linear-gradient(135deg, #00E676, #00C853)',
                   color: '#FFFFFF',
                   boxShadow: '0 4px 15px rgba(0,230,118,0.3)',
+                  transition: 'transform 0.1s',
                 }}
               >
                 ❤️ Continue Game
@@ -1005,17 +1011,20 @@ function OvalAbilitySlot({ icon, count, active, onClick, label, disabled, accent
         cursor: disabled ? 'not-allowed' : 'pointer',
         padding: 0,
         outline: 'none',
-        transition: 'background-color 0.25s, border-color 0.25s, box-shadow 0.25s',
+        willChange: 'transform, box-shadow',
+        transition: 'background-color 0.2s, border-color 0.2s, box-shadow 0.2s',
       }}
       whileTap={!disabled ? {
-        scale: 0.9,
+        scale: 0.92,
         boxShadow: pressGlow,
         borderColor: glowColor,
         backgroundColor: `${glowColor}66`,
+        transition: { duration: 0.08 },
       } : {} }
       whileHover={!disabled ? {
         scale: 1.05,
         boxShadow: `0 0 12px ${glowColor}50, 0 0 24px ${glowColor}25, 0 4px 12px rgba(0,0,0,0.2)`,
+        transition: { duration: 0.15 },
       } : {}}
       animate={active ? {
         scale: [1, 1.04, 1],

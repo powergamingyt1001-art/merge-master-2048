@@ -62,13 +62,17 @@ export function TileComponent({ value, row, col, isNew, isMerged, flash, cellSiz
       animate={{
         x: offset(col),
         y: offset(row),
-        scale: isMerged ? [1, 1.18, 1] : isNew ? 1 : 1,
+        scale: isMerged ? [1, 1.15, 1] : isNew ? 1 : 1,
         opacity: 1,
       }}
       transition={{
-        layout: { type: 'spring', stiffness: 400, damping: 35, mass: 0.8 },
-        scale: { duration: 0.18, ease: 'easeOut' },
-        opacity: { duration: 0.08 },
+        layout: { type: 'spring', stiffness: 500, damping: 40, mass: 0.6 },
+        x: { duration: 0.12, ease: 'easeOut' },
+        y: { duration: 0.12, ease: 'easeOut' },
+        scale: isMerged
+          ? { type: 'spring', stiffness: 300, damping: 25 }
+          : { type: 'spring', stiffness: 400, damping: 25 },
+        opacity: { duration: 0.06 },
       }}
       className="absolute rounded-lg flex items-center justify-center font-extrabold select-none cursor-pointer"
       style={{
@@ -78,6 +82,7 @@ export function TileComponent({ value, row, col, isNew, isMerged, flash, cellSiz
         color: style.text,
         fontSize: getFontSize(value, cellSize),
         zIndex: isMerged ? 10 : 1,
+        willChange: 'transform',
         boxShadow: glowIntensity > 0
           ? `0 0 ${cellSize * 0.5}px ${cellSize * 0.15}px ${glowColor}${Math.round(glowIntensity * 255).toString(16).padStart(2, '0')}, 0 2px 8px rgba(0,0,0,0.15)`
           : '0 2px 8px rgba(0,0,0,0.1)',
@@ -87,20 +92,20 @@ export function TileComponent({ value, row, col, isNew, isMerged, flash, cellSiz
     >
       {flash && (
         <motion.div
-          initial={{ opacity: 0.6 }}
+          initial={{ opacity: 0.7 }}
           animate={{ opacity: 0 }}
-          transition={{ duration: 0.25 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
           className="absolute inset-0 rounded-lg"
-          style={{ backgroundColor: '#FFFFFF' }}
+          style={{ backgroundColor: '#FFFFFF', willChange: 'opacity' }}
         />
       )}
       {isMerged && (
         <motion.div
           initial={{ scale: 1, opacity: 0.5 }}
-          animate={{ scale: 1.5, opacity: 0 }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
+          animate={{ scale: 1.4, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 25 }}
           className="absolute inset-0 rounded-lg"
-          style={{ border: `3px solid ${style.glow || '#FF7A00'}` }}
+          style={{ border: `2px solid ${style.glow || '#FF7A00'}`, willChange: 'transform, opacity' }}
         />
       )}
       {value}
