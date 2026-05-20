@@ -616,3 +616,63 @@ Stage Summary:
 - Day code only redeemable from 12AM to 12PM, Night code from 12PM to 12AM
 - Admin panel still shows actual code text for admin management
 - Custom codes now properly reloaded from localStorage when coupon modal opens
+
+---
+Task ID: 3
+Agent: animation-smooth
+Task: Smooth all game animations
+
+Work Log:
+- Read worklog.md and all relevant source files (Tile.tsx, GameBoard.tsx, PlayDashboard.tsx, globals.css)
+
+1. Tile.tsx - Animation improvements:
+   - Changed movement transitions from `layout: { type: 'spring', stiffness: 400, damping: 35, mass: 0.8 }` to separate x/y transitions: `x: { duration: 0.12, ease: 'easeOut' }, y: { duration: 0.12, ease: 'easeOut' }` for snappier tile movement
+   - Changed layout spring to `stiffness: 500, damping: 40, mass: 0.6` for crisper positioning
+   - Changed merge scale animation from `[1, 1.18, 1]` to `[1, 1.15, 1]` with `type: 'spring', stiffness: 300, damping: 25` (spring-based instead of duration-based)
+   - Changed new tile appearance from `{ stiffness: 400, damping: 35 }` to `{ type: 'spring', stiffness: 400, damping: 25 }` for snappier feel
+   - Changed opacity duration from `0.08` to `0.06` for faster tile visibility
+   - Added `willChange: 'transform'` to tile container for GPU acceleration
+   - Changed flash animation: duration 0.25→0.2 with easeOut, added `willChange: 'opacity'`
+   - Changed merge ring animation from `{ duration: 0.4, ease: 'easeOut' }` to `{ type: 'spring', stiffness: 300, damping: 25 }` for spring-based expansion, border 3px→2px, added `willChange: 'transform, opacity'`
+
+2. GameBoard.tsx - Animation and transition improvements:
+   - Back button: Added `className="transition-transform active:scale-90"` and `transition: 'background-color 0.15s, transform 0.1s'`
+   - Background cells: Changed from `left`/`top` positioning to `transform: translate()` for GPU-accelerated rendering
+   - Mobile direction buttons: Added `transition-transform active:scale-90` and smooth transition
+   - Score gain animation: Changed duration from `0.5` to `0.4` with `easeOut` for snappier fade
+   - Timer paused "Get Free Life" button: Added `transition-transform active:scale-95` and `transition: 'transform 0.1s, box-shadow 0.15s'`
+   - Stuck overlay "Continue" button: Added `transition-transform active:scale-95` and `transition: 'transform 0.1s'`
+   - Win overlay buttons: Added `transition-transform active:scale-95` and `transition: 'transform 0.1s'`
+   - Battle result overlay buttons: Added `transition-transform active:scale-95` and `transition: 'transform 0.1s'`
+   - Game Over modal: Added spring transition `{ type: 'spring', stiffness: 400, damping: 30 }`
+   - Game Over modal buttons: Added `transition-transform active:scale-95` and `transition: 'transform 0.1s'`
+   - Welcome Back modal: Changed spring from `{ stiffness: 300, damping: 25 }` to `{ stiffness: 400, damping: 30 }` for snappier entrance
+   - Welcome Back "Continue Game" button: Added `transition: 'transform 0.1s'`
+   - OvalAbilitySlot: Added `willChange: 'transform, box-shadow'` for GPU acceleration, transition durations from 0.25s→0.2s, whileTap scale from 0.9→0.92 with `transition: { duration: 0.08 }`, whileHover with `transition: { duration: 0.15 }`
+
+3. PlayDashboard.tsx - Smooth transition improvements:
+   - AbilityBtn: Added `transition: 'transform 0.15s, background-color 0.2s, border-color 0.2s, box-shadow 0.2s'` for smooth property changes
+   - Battle Mode expandable: Changed from `transition={{ duration: 0.2 }}` to `transition={{ type: 'spring', stiffness: 400, damping: 30 }}` for smoother open/close
+   - Coin Games expandable: Same spring transition improvement
+   - Code capsule button: Added `transition: 'transform 0.15s, box-shadow 0.2s, background-color 0.2s'`
+   - VS indicator in search overlay: Changed spring from `stiffness: 300` to `stiffness: 400, damping: 25` for snappier appearance
+   - Opponent profile reveal: Changed spring from `stiffness: 200` to `stiffness: 300, damping: 25` for smoother entrance
+
+4. Dark mode verification:
+   - globals.css has 9 CSS custom properties properly defined in both `:root` (light) and `.dark` (dark)
+   - PlayDashboard.tsx uses CSS variables: `var(--game-bg-1)`, `var(--game-bg-2)`, `var(--game-bg-3)`, `var(--game-glass)`, `var(--game-glass-border)`, `var(--game-text)`, `var(--game-text-secondary)`
+   - GameBoard.tsx uses hardcoded dark colors intentionally (game board stays dark regardless of theme)
+   - Dark/light theme switching is functional
+
+5. Lint check: 0 errors
+6. Git push: Commit 4656d35 pushed to main
+
+Stage Summary:
+- Tile movements now use 120ms easeOut transitions instead of slower spring for snappier feel
+- Merge animations use spring physics (stiffness:300, damping:25) for natural bounce
+- GPU-accelerated tiles via `will-change: transform` and `transform: translate()` positioning
+- All interactive buttons have `active:scale-95/90` press feedback with 100-150ms transitions
+- Expandable sections use spring animations instead of fixed duration
+- Modal entrances use spring physics for smoother open/close
+- Search overlay VS/opponent animations are snappier
+- All transition durations reduced from 200-250ms to 150-200ms for more responsive feel
