@@ -794,7 +794,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
           <OvalAbilitySlot icon="🔥" count={game.multiplier2_5xCount} active={game.activeMultiplier === 2.5} onClick={() => handlePowerUp('multiplier2_5x')} label="2.5x" accentColor="#FF7A00" />
           <OvalAbilitySlot icon="⏱️" count={game.extraTimeCount} active={false} onClick={() => handlePowerUp('extraTime')} label="+10s" accentColor="#00E676" />
           {/* Empty slot for alignment */}
-          <div style={{ width: 100, height: 52 }} />
+          <div style={{ width: 94, height: 48 }} />
         </div>
       </div>
 
@@ -999,9 +999,9 @@ function OvalAbilitySlot({ icon, count, active, onClick, label, disabled, accent
       disabled={disabled}
       className="relative flex items-center justify-center rounded-full"
       style={{
-        width: 100,
-        height: 52,
-        borderRadius: 26,
+        width: 94,
+        height: 48,
+        borderRadius: 24,
         border: active
           ? `2.5px solid ${glowColor}90`
           : '1.5px solid rgba(255,255,255,0.25)',
@@ -1034,19 +1034,19 @@ function OvalAbilitySlot({ icon, count, active, onClick, label, disabled, accent
       transition={{ duration: 1.2, repeat: active ? Infinity : 0, ease: 'easeInOut' }}
       title={label}
     >
-      <span style={{ fontSize: 22, lineHeight: 1 }}>{icon}</span>
-      <span style={{ fontSize: 10, lineHeight: 1, fontWeight: 700, color: active ? '#FFFFFF' : 'rgba(255,255,255,0.55)', marginLeft: 4 }}>
+      <span style={{ fontSize: 20, lineHeight: 1 }}>{icon}</span>
+      <span style={{ fontSize: 9, lineHeight: 1, fontWeight: 700, color: active ? '#FFFFFF' : 'rgba(255,255,255,0.55)', marginLeft: 3 }}>
         {label}
       </span>
       <span
         className="absolute font-bold"
         style={{
-          fontSize: 10,
-          top: -7,
-          right: -4,
-          minWidth: 18,
-          height: 18,
-          borderRadius: 9,
+          fontSize: 9,
+          top: -6,
+          right: -3,
+          minWidth: 16,
+          height: 16,
+          borderRadius: 8,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

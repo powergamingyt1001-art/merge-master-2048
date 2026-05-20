@@ -218,6 +218,8 @@ export default function Home() {
                 onAddNotification={game.addNotification}
                 onMarkNotificationRead={game.markNotificationRead}
                 onMarkAllNotificationsRead={game.markAllNotificationsRead}
+                onDeleteNotification={game.deleteNotification}
+                onDeleteReadNotifications={game.deleteReadNotifications}
                 onUpdatePlayerName={game.updatePlayerName}
                 onUpdatePlayerAvatar={game.updatePlayerAvatar}
                 dailyTasks={game.dailyTasks}

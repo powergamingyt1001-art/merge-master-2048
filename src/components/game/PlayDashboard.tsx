@@ -79,6 +79,8 @@ interface PlayDashboardProps {
   onAddNotification: (title: string, message: string, type: Notification['type'], emoji: string) => void
   onMarkNotificationRead: (id: string) => void
   onMarkAllNotificationsRead: () => void
+  onDeleteNotification?: (id: string) => void
+  onDeleteReadNotifications?: () => void
   onUpdatePlayerName: (name: string) => void
   onUpdatePlayerAvatar: (avatar: string) => void
   dailyTasks?: DailyTask[]
@@ -123,6 +125,7 @@ export function PlayDashboard({
   onUseSpinTicket, onAddSpinTickets, onClaimWelcome, onClaimStreakDay,
   onAddCoins, onDeductCoins, onAddPowerUp, onAddUndos, onClaimCommission, onClaimFirebaseCommission, onToggleAutoClaim,
   onAddNotification, onMarkNotificationRead, onMarkAllNotificationsRead,
+  onDeleteNotification, onDeleteReadNotifications,
   onUpdatePlayerName, onUpdatePlayerAvatar,
   dailyTasks, onClaimDailyTask, onCompleteVisitWebsiteTask, onResetAllData,
   weeklyBonusClaimed = false, onClaimWeeklyBonus,
@@ -298,11 +301,24 @@ export function PlayDashboard({
                   </div>
                 )}
               </button>
-              <div className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg"
-                style={{ backgroundColor: 'rgba(237,194,46,0.12)', border: '1px solid rgba(237,194,46,0.25)' }}>
-                <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
-                <span className="text-[10px] font-extrabold" style={{ color: '#EDC22E' }}>{formatCoinCount(coins)}</span>
-              </div>
+              <button
+                onClick={() => setShowStore(true)}
+                className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg cursor-pointer transition-transform active:scale-95"
+                style={{
+                  backgroundColor: coins === 0 ? 'rgba(246,94,59,0.15)' : 'rgba(237,194,46,0.12)',
+                  border: coins === 0 ? '1px solid rgba(246,94,59,0.35)' : '1px solid rgba(237,194,46,0.25)',
+                  animation: coins === 0 ? 'pulse 2s cubic-bezier(0.4,0,0.6,1) infinite' : 'none',
+                }}
+                title={coins === 0 ? 'Buy coins!' : 'Open Store'}
+              >
+                <Coins className="w-3 h-3" style={{ color: coins === 0 ? '#F65E3B' : '#EDC22E' }} />
+                <span className="text-[10px] font-extrabold" style={{ color: coins === 0 ? '#F65E3B' : '#EDC22E' }}>
+                  {coins === 0 ? 'BUY' : formatCoinCount(coins)}
+                </span>
+                {coins === 0 && (
+                  <span className="text-[7px] font-bold ml-0.5" style={{ color: '#F65E3B' }}>+</span>
+                )}
+              </button>
             </div>
           </div>
 
@@ -310,7 +326,7 @@ export function PlayDashboard({
           <div className="w-full px-1.5 py-1.5 rounded-lg"
             style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1.5px solid rgba(255,255,255,0.2)' }}>
             <div className="grid grid-cols-3 gap-1.5">
-              {/* Left Column: Tools */}
+              {/* Left Column: Tools - 2x2 grid */}
               <div className="flex flex-col gap-1">
                 <div className="grid grid-cols-2 gap-1">
                   <AbilityBtn emoji="🧲" count={magnetCount} color="#00E676" />
@@ -322,22 +338,21 @@ export function PlayDashboard({
                 </div>
               </div>
 
-              {/* Center Column: Coin Display + Coupon Redeem */}
-              <div className="flex flex-col gap-1">
-                {/* Coin Display Box */}
-                <div className="flex items-center justify-center gap-1 py-1.5 rounded-lg"
+              {/* Center Column: Circular Coin Display + Coupon Redeem */}
+              <div className="flex flex-col items-center gap-1">
+                {/* Circular Coin Box */}
+                <div className="flex flex-col items-center justify-center w-16 h-16 rounded-full mx-auto"
                   style={{
                     backgroundColor: 'rgba(237,194,46,0.12)',
-                    border: '1.5px solid rgba(237,194,46,0.35)',
-                    boxShadow: '0 0 8px rgba(237,194,46,0.15)',
-                    minHeight: '28px',
+                    border: '2px solid rgba(237,194,46,0.4)',
+                    boxShadow: '0 0 12px rgba(237,194,46,0.2)',
                   }}>
-                  <span className="text-[12px]">💰</span>
-                  <span className="text-[10px] font-extrabold" style={{ color: '#EDC22E' }}>{formatCoinCount(coins)}</span>
+                  <span className="text-[14px]">💰</span>
+                  <span className="text-[9px] font-extrabold" style={{ color: '#EDC22E' }}>{formatCoinCount(coins)}</span>
                 </div>
                 {/* Coupon Redeem Button */}
                 <button onClick={() => setShowCoupon(true)}
-                  className="flex items-center justify-center gap-0.5 py-1.5 rounded-lg transition-transform active:scale-95"
+                  className="flex items-center justify-center gap-0.5 py-1.5 rounded-lg transition-transform active:scale-95 w-full"
                   style={{
                     backgroundColor: 'rgba(0,230,118,0.10)',
                     border: '1.5px solid rgba(0,230,118,0.35)',
@@ -349,23 +364,15 @@ export function PlayDashboard({
                 </button>
               </div>
 
-              {/* Right Column: Multipliers + Spin/Timer counts */}
+              {/* Right Column: Multipliers + Spin/Timer - 2x2 grid (mirrors left) */}
               <div className="flex flex-col gap-1">
                 <div className="grid grid-cols-2 gap-1">
                   <AbilityBtn emoji="⚡" count={multiplier5xCount} color="#F65E3B" label="5x" />
                   <AbilityBtn emoji="🔥" count={multiplier2_5xCount} color="#FF7A00" label="2.5x" />
                 </div>
-                {/* Spin tickets count below 5x */}
-                <div className="flex items-center justify-center gap-0.5 py-1 rounded-lg"
-                  style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1.5px solid rgba(0,230,118,0.3)', boxShadow: spinTickets > 0 ? '0 0 6px rgba(0,230,118,0.15)' : 'none', minHeight: '28px' }}>
-                  <span className="text-[10px]">🎫</span>
-                  <span className="text-[9px] font-bold" style={{ color: '#00E676' }}>{formatCoinCount(spinTickets)}</span>
-                </div>
-                {/* Extra time count below 2.5x */}
-                <div className="flex items-center justify-center gap-0.5 py-1 rounded-lg"
-                  style={{ backgroundColor: 'rgba(0,255,255,0.08)', border: '1.5px solid rgba(0,255,255,0.3)', boxShadow: extraTimeCount > 0 ? '0 0 6px rgba(0,255,255,0.15)' : 'none', minHeight: '28px' }}>
-                  <span className="text-[10px]">⏱️</span>
-                  <span className="text-[9px] font-bold" style={{ color: '#00FFFF' }}>{formatCoinCount(extraTimeCount)}</span>
+                <div className="grid grid-cols-2 gap-1">
+                  <AbilityBtn emoji="🎫" count={spinTickets} color="#00E676" />
+                  <AbilityBtn emoji="⏱️" count={extraTimeCount} color="#00FFFF" />
                 </div>
               </div>
             </div>
@@ -529,7 +536,7 @@ export function PlayDashboard({
               <span className="text-lg">🤝</span>
               <div className="text-left">
                 <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>Invite</p>
-                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Earn 5%</p>
+                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>30% Win / 2% Loss</p>
               </div>
             </button>
           </div>
@@ -775,7 +782,8 @@ export function PlayDashboard({
         totalBattlesPlayed={totalBattlesPlayed} totalBattlesWon={totalBattlesWon}
         onResetAllData={onResetAllData} />
       <NotificationsPanel isOpen={showNotifications} onClose={() => setShowNotifications(false)}
-        notifications={notifications} onMarkRead={onMarkNotificationRead} onMarkAllRead={onMarkAllNotificationsRead} />
+        notifications={notifications} onMarkRead={onMarkNotificationRead} onMarkAllRead={onMarkAllNotificationsRead}
+        onDeleteNotification={onDeleteNotification} onDeleteReadNotifications={onDeleteReadNotifications} />
       <PrivacyPolicy isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
       <AboutPage isOpen={showAbout} onClose={() => setShowAbout(false)} />
       <ContactPage isOpen={showContact} onClose={() => setShowContact(false)} />

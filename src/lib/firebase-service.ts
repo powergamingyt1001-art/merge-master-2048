@@ -286,14 +286,16 @@ export async function getInvitedBy(
 }
 
 // ============================================================
-// COMMISSION SYSTEM - When invitee earns, referrer gets 5%
+// COMMISSION SYSTEM - When invitee earns, referrer gets commission
+// 30% on WIN, 2% on LOSS per game
 // ============================================================
 
 // Call this when a player earns tournament points or coins
-// It will calculate and add 5% commission to the referrer
+// It will calculate and add commission to the referrer based on game result
 export async function processCommissionForReferrer(
   playerId: string,
-  amountEarned: number
+  amountEarned: number,
+  isWin: boolean = true
 ): Promise<void> {
   try {
     // Find who invited this player
@@ -302,7 +304,8 @@ export async function processCommissionForReferrer(
     if (!snapshot.exists()) return
 
     const referrerId = snapshot.val()
-    const commissionAmount = Math.floor(amountEarned * 0.05) // 5% commission
+    const commissionRate = isWin ? 0.30 : 0.02 // 30% on WIN, 2% on LOSS
+    const commissionAmount = Math.floor(amountEarned * commissionRate)
 
     if (commissionAmount <= 0) return
 
@@ -363,5 +366,69 @@ export async function claimCommissionNotification(
     await update(notifRef, { claimed: true })
   } catch (err) {
     console.warn('Firebase claimCommissionNotification failed:', err)
+  }
+}
+
+// ============================================================
+// ADMIN USER STATS
+// ============================================================
+
+// Get total user count from Firebase
+export async function getTotalUserCount(): Promise<number> {
+  try {
+    const playersRef = ref(db, 'players')
+    const snapshot = await get(playersRef)
+    if (snapshot.exists()) {
+      return snapshot.numChildren()
+    }
+    return 0
+  } catch (err) {
+    console.warn('Firebase getTotalUserCount failed:', err)
+    return 0
+  }
+}
+
+// Get online users count (active in last 2 minutes)
+export async function getOnlineUserCount(): Promise<number> {
+  try {
+    const playersRef = ref(db, 'players')
+    const snapshot = await get(playersRef)
+    if (snapshot.exists()) {
+      const twoMinutesAgo = Date.now() - 2 * 60 * 1000
+      let onlineCount = 0
+      snapshot.forEach((child) => {
+        const data = child.val()
+        if (data.lastActive && data.lastActive > twoMinutesAgo) {
+          onlineCount++
+        }
+      })
+      return onlineCount
+    }
+    return 0
+  } catch (err) {
+    console.warn('Firebase getOnlineUserCount failed:', err)
+    return 0
+  }
+}
+
+// Get total referrals count across all players
+export async function getTotalReferralsCount(): Promise<number> {
+  try {
+    const referralsRef = ref(db, 'referrals')
+    const snapshot = await get(referralsRef)
+    if (snapshot.exists()) {
+      let totalReferrals = 0
+      snapshot.forEach((child) => {
+        const data = child.val()
+        if (typeof data === 'object' && data !== null) {
+          totalReferrals += Object.keys(data).length
+        }
+      })
+      return totalReferrals
+    }
+    return 0
+  } catch (err) {
+    console.warn('Firebase getTotalReferralsCount failed:', err)
+    return 0
   }
 }

@@ -1025,11 +1025,13 @@ export function useGame() {
   }, [state.playerId])
 
   // Process commission for referrer when player earns in tournament
+  // Commission: 30% on WIN, 2% on LOSS
   useEffect(() => {
-    if (!state.playerId || state.tournamentPoints <= 0) return
-    // Only process after a game ends (tournamentPoints just changed)
-    processCommissionForReferrer(state.playerId, state.tournamentPoints).catch(() => {/* silent */})
-  }, [state.tournamentPoints, state.playerId])
+    if (!state.playerId || state.tournamentPoints <= 0 || !state.botBattleResult) return
+    // Only process after a game ends (botBattleResult is set)
+    const isWin = state.botBattleResult === 'win'
+    processCommissionForReferrer(state.playerId, state.tournamentPoints, isWin).catch(() => {/* silent */})
+  }, [state.botBattleResult, state.playerId])
 
   // Clear flash
   useEffect(() => {
@@ -1078,6 +1080,35 @@ export function useGame() {
       .catch(() => {/* silent fail */})
   }, [state.invitedBy, state.playerId, state.playerName, state.playerAvatar, addNotification])
 
+  // Check ban status on game load
+  const banCheckRef = useRef(false)
+  useEffect(() => {
+    if (!state.playerId || banCheckRef.current) return
+    banCheckRef.current = true
+    // Use setTimeout to avoid calling setState synchronously within an effect
+    const timer = setTimeout(() => {
+      try {
+        const data = localStorage.getItem('adminBannedUsers')
+        if (data) {
+          const bannedUsers: Array<{
+            playerId: string
+            expiresAt: number | null
+          }> = JSON.parse(data)
+          const now = Date.now()
+          const isBanned = bannedUsers.some(u => {
+            if (u.playerId !== state.playerId) return false
+            if (u.expiresAt === null) return true // permanent ban
+            return u.expiresAt > now // not yet expired
+          })
+          if (isBanned) {
+            addNotification('🚫 Account Suspended', 'Your account has been suspended. Contact support for more information.', 'system', '⚠️')
+          }
+        }
+      } catch { /* ignore */ }
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [state.playerId, addNotification])
+
   const markNotificationRead = useCallback((id: string) => {
     setState(prev => ({
       ...prev,
@@ -1089,6 +1120,20 @@ export function useGame() {
     setState(prev => ({
       ...prev,
       notifications: prev.notifications.map(n => ({ ...n, read: true })),
+    }))
+  }, [])
+
+  const deleteNotification = useCallback((id: string) => {
+    setState(prev => ({
+      ...prev,
+      notifications: prev.notifications.filter(n => n.id !== id),
+    }))
+  }, [])
+
+  const deleteReadNotifications = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      notifications: prev.notifications.filter(n => !n.read),
     }))
   }, [])
 
@@ -2065,6 +2110,8 @@ export function useGame() {
     addNotification,
     markNotificationRead,
     markAllNotificationsRead,
+    deleteNotification,
+    deleteReadNotifications,
     updatePlayerName,
     updatePlayerAvatar,
     addGameToHistory,

@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Gift, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw } from 'lucide-react'
+import { X, Gift, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon } from 'lucide-react'
+import { getTotalUserCount, getOnlineUserCount, getTotalReferralsCount } from '@/lib/firebase-service'
 
 interface CouponCodeProps {
   isOpen: boolean
@@ -332,7 +333,7 @@ function getCoinAmountFromItem(item: string): number {
   return 500
 }
 
-type AdminTab = 'payments' | 'coupons' | 'prices' | 'history'
+type AdminTab = 'payments' | 'coupons' | 'prices' | 'history' | 'users'
 
 // Custom price overrides stored in localStorage
 interface CustomPriceOverride {
@@ -351,6 +352,84 @@ function loadCustomPrices(): CustomPriceOverride | null {
 function saveCustomPrices(prices: CustomPriceOverride) {
   localStorage.setItem('adminCustomPrices', JSON.stringify(prices))
 }
+
+// ============================================================
+// BANNED USERS - Stored in localStorage
+// ============================================================
+
+interface BannedUser {
+  playerId: string
+  reason: string
+  bannedAt: number // timestamp
+  banDuration: 'weekly' | 'monthly' | 'yearly' | 'permanent'
+  expiresAt: number | null // null for permanent
+}
+
+const BANNED_USERS_KEY = 'adminBannedUsers'
+
+function loadBannedUsers(): BannedUser[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const data = localStorage.getItem(BANNED_USERS_KEY)
+    return data ? JSON.parse(data) : []
+  } catch {
+    return []
+  }
+}
+
+function saveBannedUsers(users: BannedUser[]) {
+  localStorage.setItem(BANNED_USERS_KEY, JSON.stringify(users))
+}
+
+function isUserBanned(playerId: string): boolean {
+  const users = loadBannedUsers()
+  const now = Date.now()
+  // Auto-remove expired bans and check if the player is banned
+  const activeBans = users.filter(u => {
+    if (u.playerId !== playerId) return true // keep other users
+    if (u.expiresAt === null) return true // permanent ban
+    if (u.expiresAt > now) return true // not yet expired
+    return false // expired, remove
+  })
+  // Save cleaned list if any were removed
+  if (activeBans.length !== users.length) {
+    saveBannedUsers(activeBans)
+  }
+  return activeBans.some(u => u.playerId === playerId)
+}
+
+function banUser(playerId: string, reason: string, duration: 'weekly' | 'monthly' | 'yearly' | 'permanent'): void {
+  const users = loadBannedUsers()
+  // Remove existing ban for this player if any
+  const filtered = users.filter(u => u.playerId !== playerId)
+  const now = Date.now()
+  let expiresAt: number | null = null
+  switch (duration) {
+    case 'weekly':
+      expiresAt = now + 7 * 24 * 60 * 60 * 1000
+      break
+    case 'monthly':
+      expiresAt = now + 30 * 24 * 60 * 60 * 1000
+      break
+    case 'yearly':
+      expiresAt = now + 365 * 24 * 60 * 60 * 1000
+      break
+    case 'permanent':
+      expiresAt = null
+      break
+  }
+  filtered.push({ playerId, reason, bannedAt: now, banDuration: duration, expiresAt })
+  saveBannedUsers(filtered)
+}
+
+function unbanUser(playerId: string): void {
+  const users = loadBannedUsers()
+  const filtered = users.filter(u => u.playerId !== playerId)
+  saveBannedUsers(filtered)
+}
+
+// Export for use in other files
+export { isUserBanned, loadBannedUsers }
 
 // Default COIN_PACKAGES (matching Store.tsx)
 const DEFAULT_COIN_PACKAGES = [
@@ -431,6 +510,16 @@ export function CouponCode({
   const [nightCodeImgError, setNightCodeImgError] = useState(false)
   const [codeImgRefreshKey, setCodeImgRefreshKey] = useState(0)
 
+  // Users tab state
+  const [banPlayerId, setBanPlayerId] = useState('')
+  const [banReason, setBanReason] = useState('')
+  const [banDuration, setBanDuration] = useState<'weekly' | 'monthly' | 'yearly' | 'permanent'>('weekly')
+  const [bannedUsers, setBannedUsers] = useState<BannedUser[]>(() => loadBannedUsers())
+  const [totalUsers, setTotalUsers] = useState<number>(0)
+  const [onlineUsers, setOnlineUsers] = useState<number>(0)
+  const [totalReferrals, setTotalReferrals] = useState<number>(0)
+  const [userStatsLoading, setUserStatsLoading] = useState(false)
+
   // Day code settings (for real-time update when admin changes it)
   interface DayCodeSettings {
     rewardType: RewardType
@@ -474,6 +563,17 @@ export function CouponCode({
       setCoinAbilityPrices(loadCoinAbilityPrices())
       setLockDuration(loadLockDuration())
       setSelectedHistoryIds(new Set())
+      setBannedUsers(loadBannedUsers())
+      // Load user stats from Firebase
+      setUserStatsLoading(true)
+      Promise.all([getTotalUserCount(), getOnlineUserCount(), getTotalReferralsCount()])
+        .then(([total, online, refs]) => {
+          setTotalUsers(total)
+          setOnlineUsers(online)
+          setTotalReferrals(refs)
+        })
+        .catch(() => { /* silent */ })
+        .finally(() => setUserStatsLoading(false))
       // Also reload day code settings
       try {
         const dcData = localStorage.getItem('adminDayCodeSettings')
@@ -1054,8 +1154,10 @@ export function CouponCode({
   }, [])
 
   return (
-    <AnimatePresence>
-      {isOpen && (
+    <>
+      {/* Coupon Modal */}
+      <AnimatePresence>
+        {isOpen && !showAdminPanel && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -1109,8 +1211,6 @@ export function CouponCode({
               )}
             </AnimatePresence>
 
-            {/* Admin Panel is now rendered as a separate fullscreen overlay below */}
-
             <div className="p-3 space-y-3">
               {/* Today's codes hint */}
               <div className="p-2.5 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.12)' }}>
@@ -1124,17 +1224,17 @@ export function CouponCode({
                     <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Day Code</p>
                     <p className="text-[11px] font-extrabold font-mono tracking-wider" style={{ color: '#FFD700', letterSpacing: '1px' }}>{dayCode}</p>
                     {/* Day Code QR Image */}
-                    <div className="mt-1.5 relative" style={{ minHeight: 64 }}>
+                    <div className="mt-1.5 relative" style={{ minHeight: 80 }}>
                       {dayCodeImgError ? (
-                        <div className="w-full h-16 rounded-lg flex flex-col items-center justify-center gap-1"
-                          style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,215,0,0.15)' }}>
-                          <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>QR failed to load</p>
+                        <div className="w-full h-20 rounded-lg flex flex-col items-center justify-center gap-1.5 relative"
+                          style={{ backgroundColor: '#000000', border: '2px solid rgba(255,215,0,0.3)' }}>
+                          <p className="text-[8px] font-bold" style={{ color: '#FF5555' }}>QR Code failed to load</p>
                           <button
                             onClick={() => { setDayCodeImgError(false); setCodeImgRefreshKey(k => k + 1) }}
-                            className="flex items-center gap-1 px-2 py-0.5 rounded text-[7px] font-bold transition-transform active:scale-95"
-                            style={{ backgroundColor: 'rgba(255,215,0,0.1)', border: '1px solid rgba(255,215,0,0.2)', color: '#FFD700' }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded text-[7px] font-bold transition-transform active:scale-95"
+                            style={{ backgroundColor: 'rgba(255,215,0,0.15)', border: '1px solid rgba(255,215,0,0.3)', color: '#FFD700' }}
                           >
-                            <RefreshCw className="w-2.5 h-2.5" /> Refresh
+                            <RefreshCw className="w-2.5 h-2.5" /> REFRESH
                           </button>
                         </div>
                       ) : (
@@ -1154,17 +1254,17 @@ export function CouponCode({
                     <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Night Code</p>
                     <p className="text-[11px] font-extrabold font-mono tracking-wider" style={{ color: '#00E676', letterSpacing: '1px' }}>{nightCode}</p>
                     {/* Night Code QR Image */}
-                    <div className="mt-1.5 relative" style={{ minHeight: 64 }}>
+                    <div className="mt-1.5 relative" style={{ minHeight: 80 }}>
                       {nightCodeImgError ? (
-                        <div className="w-full h-16 rounded-lg flex flex-col items-center justify-center gap-1"
-                          style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(0,230,118,0.15)' }}>
-                          <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>QR failed to load</p>
+                        <div className="w-full h-20 rounded-lg flex flex-col items-center justify-center gap-1.5 relative"
+                          style={{ backgroundColor: '#000000', border: '2px solid rgba(0,230,118,0.3)' }}>
+                          <p className="text-[8px] font-bold" style={{ color: '#FF5555' }}>QR Code failed to load</p>
                           <button
                             onClick={() => { setNightCodeImgError(false); setCodeImgRefreshKey(k => k + 1) }}
-                            className="flex items-center gap-1 px-2 py-0.5 rounded text-[7px] font-bold transition-transform active:scale-95"
-                            style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)', color: '#00E676' }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded text-[7px] font-bold transition-transform active:scale-95"
+                            style={{ backgroundColor: 'rgba(0,230,118,0.15)', border: '1px solid rgba(0,230,118,0.3)', color: '#00E676' }}
                           >
-                            <RefreshCw className="w-2.5 h-2.5" /> Refresh
+                            <RefreshCw className="w-2.5 h-2.5" /> REFRESH
                           </button>
                         </div>
                       ) : (
@@ -1282,8 +1382,9 @@ export function CouponCode({
           </motion.div>
         </motion.div>
       )}
+      </AnimatePresence>
 
-      {/* ===== ADMIN PANEL - FULLSCREEN OVERLAY ===== */}
+      {/* ===== ADMIN PANEL - SEPARATE FULLSCREEN OVERLAY ===== */}
       <AnimatePresence>
         {isOpen && showAdminPanel && (
           <motion.div
@@ -1312,6 +1413,7 @@ export function CouponCode({
                 { key: 'coupons' as AdminTab, label: 'Coupons', icon: <Ticket className="w-3 h-3" /> },
                 { key: 'prices' as AdminTab, label: 'Prices', icon: <Coins className="w-3 h-3" /> },
                 { key: 'history' as AdminTab, label: 'History', icon: <ChevronRight className="w-3 h-3" /> },
+                { key: 'users' as AdminTab, label: 'Users', icon: <Ban className="w-3 h-3" /> },
               ].map(tab => (
                 <button
                   key={tab.key}
@@ -2232,6 +2334,216 @@ export function CouponCode({
                         )}
                       </div>
                     )}
+
+                    {/* ====== USERS TAB ====== */}
+                    {adminTab === 'users' && (
+                      <div className="space-y-3">
+                        {/* User Stats */}
+                        <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                          Real-time User Stats
+                        </p>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="p-2.5 rounded-lg text-center"
+                            style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.12)' }}>
+                            <UsersIcon className="w-3.5 h-3.5 mx-auto mb-1" style={{ color: '#EDC22E' }} />
+                            <p className="text-sm font-bold" style={{ color: '#EDC22E' }}>
+                              {userStatsLoading ? '...' : totalUsers}
+                            </p>
+                            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Total Users</p>
+                          </div>
+                          <div className="p-2.5 rounded-lg text-center"
+                            style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.12)' }}>
+                            <Zap className="w-3.5 h-3.5 mx-auto mb-1" style={{ color: '#00E676' }} />
+                            <p className="text-sm font-bold" style={{ color: '#00E676' }}>
+                              {userStatsLoading ? '...' : onlineUsers}
+                            </p>
+                            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Online Now</p>
+                          </div>
+                          <div className="p-2.5 rounded-lg text-center"
+                            style={{ backgroundColor: 'rgba(124,92,252,0.06)', border: '1px solid rgba(124,92,252,0.12)' }}>
+                            <ThumbsUp className="w-3.5 h-3.5 mx-auto mb-1" style={{ color: '#7C5CFC' }} />
+                            <p className="text-sm font-bold" style={{ color: '#7C5CFC' }}>
+                              {userStatsLoading ? '...' : totalReferrals}
+                            </p>
+                            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Referrals</p>
+                          </div>
+                        </div>
+
+                        {/* Refresh stats button */}
+                        <button
+                          onClick={() => {
+                            setUserStatsLoading(true)
+                            Promise.all([getTotalUserCount(), getOnlineUserCount(), getTotalReferralsCount()])
+                              .then(([total, online, refs]) => {
+                                setTotalUsers(total)
+                                setOnlineUsers(online)
+                                setTotalReferrals(refs)
+                              })
+                              .catch(() => { /* silent */ })
+                              .finally(() => setUserStatsLoading(false))
+                          }}
+                          className="w-full py-1.5 rounded-lg text-[8px] font-bold flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                          style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}
+                        >
+                          <RefreshCw className={`w-2.5 h-2.5 ${userStatsLoading ? 'animate-spin' : ''}`} />
+                          Refresh Stats
+                        </button>
+
+                        {/* Ban User Section */}
+                        <div className="p-3 rounded-lg"
+                          style={{ backgroundColor: 'rgba(246,94,59,0.06)', border: '1px solid rgba(246,94,59,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2.5">
+                            <Ban className="w-3.5 h-3.5" style={{ color: '#F65E3B' }} />
+                            <p className="text-[10px] font-bold" style={{ color: '#F65E3B' }}>Ban User</p>
+                          </div>
+
+                          {/* Player ID input */}
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={banPlayerId}
+                              onChange={(e) => setBanPlayerId(e.target.value)}
+                              placeholder="Enter Player ID (e.g. p_abc123...)"
+                              className="w-full px-3 py-2 rounded-lg text-[10px] outline-none"
+                              style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                            />
+
+                            {/* Reason input */}
+                            <input
+                              type="text"
+                              value={banReason}
+                              onChange={(e) => setBanReason(e.target.value)}
+                              placeholder="Reason for ban"
+                              className="w-full px-3 py-2 rounded-lg text-[10px] outline-none"
+                              style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                            />
+
+                            {/* Duration selector */}
+                            <div className="flex gap-1.5">
+                              {(['weekly', 'monthly', 'yearly', 'permanent'] as const).map(d => (
+                                <button
+                                  key={d}
+                                  onClick={() => setBanDuration(d)}
+                                  className="flex-1 py-1.5 rounded-lg text-[7px] font-bold transition-all"
+                                  style={{
+                                    backgroundColor: banDuration === d ? 'rgba(246,94,59,0.2)' : 'rgba(0,0,0,0.2)',
+                                    border: `1px solid ${banDuration === d ? 'rgba(246,94,59,0.4)' : 'rgba(255,255,255,0.06)'}`,
+                                    color: banDuration === d ? '#F65E3B' : 'rgba(255,255,255,0.4)',
+                                  }}
+                                >
+                                  {d.charAt(0).toUpperCase() + d.slice(1)}
+                                </button>
+                              ))}
+                            </div>
+
+                            {/* Ban button */}
+                            <button
+                              onClick={() => {
+                                const id = banPlayerId.trim()
+                                if (!id) return
+                                banUser(id, banReason || 'No reason specified', banDuration)
+                                setBannedUsers(loadBannedUsers())
+                                setBanPlayerId('')
+                                setBanReason('')
+                                setBanDuration('weekly')
+                              }}
+                              disabled={!banPlayerId.trim()}
+                              className="w-full py-2 rounded-lg text-[10px] font-bold transition-transform active:scale-95 disabled:opacity-30"
+                              style={{ background: 'linear-gradient(135deg, #F65E3B, #D32F2F)', color: '#FFFFFF' }}
+                            >
+                              🚫 BAN USER
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Banned Users List */}
+                        <div>
+                          <p className="text-[9px] font-bold mb-2" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                            Banned Users ({bannedUsers.length})
+                          </p>
+                          {bannedUsers.length === 0 ? (
+                            <div className="text-center py-4">
+                              <span className="text-2xl block mb-1">✅</span>
+                              <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No banned users</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5 max-h-[40vh] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                              {bannedUsers.map(user => {
+                                const isExpired = user.expiresAt !== null && user.expiresAt < Date.now()
+                                const isPermanent = user.expiresAt === null
+                                const timeLeft = user.expiresAt ? user.expiresAt - Date.now() : 0
+                                const daysLeft = Math.ceil(timeLeft / (1000 * 60 * 60 * 24))
+                                return (
+                                  <div key={user.playerId} className="p-2.5 rounded-lg"
+                                    style={{
+                                      backgroundColor: isExpired ? 'rgba(255,255,255,0.02)' : 'rgba(246,94,59,0.04)',
+                                      border: `1px solid ${isExpired ? 'rgba(255,255,255,0.04)' : 'rgba(246,94,59,0.12)'}`,
+                                      opacity: isExpired ? 0.5 : 1,
+                                    }}>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5 mb-1">
+                                          <Ban className="w-2.5 h-2.5 shrink-0" style={{ color: isExpired ? 'rgba(255,255,255,0.3)' : '#F65E3B' }} />
+                                          <p className="text-[9px] font-bold truncate" style={{ color: '#FFFFFF' }}>
+                                            {user.playerId}
+                                          </p>
+                                          {isExpired && (
+                                            <span className="text-[6px] font-bold px-1 py-0.5 rounded-full"
+                                              style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)' }}>
+                                              EXPIRED
+                                            </span>
+                                          )}
+                                          {isPermanent && !isExpired && (
+                                            <span className="text-[6px] font-bold px-1 py-0.5 rounded-full"
+                                              style={{ backgroundColor: 'rgba(246,94,59,0.15)', color: '#F65E3B' }}>
+                                              PERMANENT
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                          Reason: {user.reason}
+                                        </p>
+                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                          Duration: {user.banDuration}
+                                          {!isPermanent && !isExpired && ` • ${daysLeft > 0 ? `${daysLeft}d left` : 'Expires today'}`}
+                                          {' • '}Banned: {new Date(user.bannedAt).toLocaleDateString()}
+                                        </p>
+                                      </div>
+                                      <button
+                                        onClick={() => {
+                                          unbanUser(user.playerId)
+                                          setBannedUsers(loadBannedUsers())
+                                        }}
+                                        className="shrink-0 px-2 py-1 rounded-lg text-[7px] font-bold transition-transform active:scale-95"
+                                        style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)', color: '#00E676' }}
+                                      >
+                                        UNBAN
+                                      </button>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Clean expired bans button */}
+                        {bannedUsers.some(u => u.expiresAt !== null && u.expiresAt < Date.now()) && (
+                          <button
+                            onClick={() => {
+                              const active = bannedUsers.filter(u => u.expiresAt === null || u.expiresAt > Date.now())
+                              saveBannedUsers(active)
+                              setBannedUsers(active)
+                            }}
+                            className="w-full py-1.5 rounded-lg text-[8px] font-bold flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                            style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}
+                          >
+                            <Trash2 className="w-2.5 h-2.5" />
+                            Clean Expired Bans
+                          </button>
+                        )}
+                      </div>
+                    )}
             </div>
           </motion.div>
         )}
@@ -2288,6 +2600,6 @@ export function CouponCode({
           </motion.div>
         )}
       </AnimatePresence>
-    </AnimatePresence>
+    </>
   )
 }
