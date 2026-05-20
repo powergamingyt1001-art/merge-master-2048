@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Gift, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon } from 'lucide-react'
+import { X, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon } from 'lucide-react'
 import { getTotalUserCount, getOnlineUserCount, getTotalReferralsCount } from '@/lib/firebase-service'
 
 interface CouponCodeProps {
@@ -506,9 +506,12 @@ export function CouponCode({
   const [nightCodeCustom, setNightCodeCustom] = useState('')
   const [viewingScreenshot, setViewingScreenshot] = useState<string | null>(null)
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
-  const [dayCodeImgError, setDayCodeImgError] = useState(false)
-  const [nightCodeImgError, setNightCodeImgError] = useState(false)
-  const [codeImgRefreshKey, setCodeImgRefreshKey] = useState(0)
+  // Timer for day/night countdown
+  const [now, setNow] = useState(new Date())
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Users tab state
   const [banPlayerId, setBanPlayerId] = useState('')
@@ -542,11 +545,12 @@ export function CouponCode({
     setDayCodeSettings(settings)
   }
 
-  // Refresh store orders and purchase history when CouponCode modal opens
+  // Refresh store orders, purchase history, and custom codes when CouponCode modal opens
   useEffect(() => {
     if (isOpen) {
       setStoreOrders(loadStoreOrders())
       setPurchaseHistory(loadPurchaseHistory())
+      setCustomCodes(loadCustomCouponCodes())
     }
   }, [isOpen])
 
@@ -810,6 +814,12 @@ export function CouponCode({
     const isNightCode = code.startsWith('NIGHT')
 
     if (isDayCode) {
+      // Check if it's day time (midnight to noon)
+      const currentHour = new Date().getHours()
+      if (currentHour >= 12) {
+        setStatusMessage({ text: 'Day code is only available from 12AM to 12PM!', type: 'error' })
+        return
+      }
       const daySettings = dayCodeSettings
       // Auto-generate lower reward if admin forgot to configure
       const rewardToUse: RewardOption = daySettings.rewardAmount > 0
@@ -832,6 +842,12 @@ export function CouponCode({
     }
 
     if (isNightCode) {
+      // Check if it's night time (noon to midnight)
+      const currentHour = new Date().getHours()
+      if (currentHour < 12) {
+        setStatusMessage({ text: 'Night code is only available from 12PM to 12AM!', type: 'error' })
+        return
+      }
       const nightSettings = nightCodeSettings
       const rewardToUse: RewardOption = nightSettings.rewardAmount > 0
         ? { type: nightSettings.rewardType, label: nightSettings.label, emoji: nightSettings.emoji, weight: 100 }
@@ -1078,6 +1094,34 @@ export function CouponCode({
   const nightCode = generateNightCode()
   const rotationDay = getRotationSuffix()
 
+  // Day/Night time logic (12-hour cycle)
+  const currentHour = now.getHours()
+  const isDayTime = currentHour >= 0 && currentHour < 12 // 12:00 AM to 11:59 AM = day
+  const isNightTime = currentHour >= 12 && currentHour < 24 // 12:00 PM to 11:59 PM = night
+
+  const getTimeUntilSwitch = () => {
+    if (isDayTime) {
+      // Countdown to noon (12:00)
+      const noon = new Date(now)
+      noon.setHours(12, 0, 0, 0)
+      const diff = noon.getTime() - now.getTime()
+      const h = Math.floor(diff / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      const s = Math.floor((diff % 60000) / 1000)
+      return `${h}h ${m}m ${s}s`
+    } else {
+      // Countdown to midnight (00:00)
+      const midnight = new Date(now)
+      midnight.setDate(midnight.getDate() + 1)
+      midnight.setHours(0, 0, 0, 0)
+      const diff = midnight.getTime() - now.getTime()
+      const h = Math.floor(diff / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      const s = Math.floor((diff % 60000) / 1000)
+      return `${h}h ${m}m ${s}s`
+    }
+  }
+
   // Merge purchaseHistory and storeOrders for display
   const mergedAllPurchases: PurchaseHistoryEntry[] = [
     ...purchaseHistory,
@@ -1212,72 +1256,58 @@ export function CouponCode({
             </AnimatePresence>
 
             <div className="p-3 space-y-3">
-              {/* Today's codes hint */}
-              <div className="p-2.5 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.12)' }}>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <Gift className="w-3 h-3" style={{ color: '#EDC22E' }} />
-                  <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Today&apos;s Codes ({rotationDay})</p>
+              {/* Today's Codes - No QR, No Code Text, Just Timer */}
+              <div className="w-full p-3 rounded-xl" style={{ backgroundColor: 'var(--game-glass-light, rgba(255,255,255,0.04))', border: '1px solid var(--game-glass-border, rgba(255,255,255,0.08))' }}>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span className="text-[10px]">🎁</span>
+                  <span className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Today&apos;s Codes ({rotationDay})</span>
                 </div>
-                <div className="flex gap-2">
-                  <div className="flex-1 px-2 py-1.5 rounded text-center"
-                    style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(237,194,46,0.2)' }}>
-                    <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Day Code</p>
-                    <p className="text-[11px] font-extrabold font-mono tracking-wider" style={{ color: '#FFD700', letterSpacing: '1px' }}>{dayCode}</p>
-                    {/* Day Code QR Image */}
-                    <div className="mt-1.5 relative" style={{ minHeight: 80 }}>
-                      {dayCodeImgError ? (
-                        <div className="w-full h-20 rounded-lg flex flex-col items-center justify-center gap-1.5 relative"
-                          style={{ backgroundColor: '#000000', border: '2px solid rgba(255,215,0,0.3)' }}>
-                          <p className="text-[8px] font-bold" style={{ color: '#FF5555' }}>QR Code failed to load</p>
-                          <button
-                            onClick={() => { setDayCodeImgError(false); setCodeImgRefreshKey(k => k + 1) }}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded text-[7px] font-bold transition-transform active:scale-95"
-                            style={{ backgroundColor: 'rgba(255,215,0,0.15)', border: '1px solid rgba(255,215,0,0.3)', color: '#FFD700' }}
-                          >
-                            <RefreshCw className="w-2.5 h-2.5" /> REFRESH
-                          </button>
-                        </div>
-                      ) : (
-                        <img
-                          key={`day-${codeImgRefreshKey}`}
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=128x128&data=${encodeURIComponent(dayCode)}&bgcolor=ffffff&color=1a0533`}
-                          alt="Day Code QR"
-                          className="w-16 h-16 mx-auto rounded"
-                          style={{ backgroundColor: '#FFFFFF' }}
-                          onError={() => setDayCodeImgError(true)}
-                        />
-                      )}
+                <div className="flex flex-col gap-2">
+                  {/* Day Code */}
+                  <div className="flex items-center justify-between p-2 rounded-lg"
+                    style={{
+                      backgroundColor: isDayTime ? 'rgba(237,194,46,0.12)' : 'rgba(255,255,255,0.03)',
+                      border: isDayTime ? '1.5px solid rgba(237,194,46,0.4)' : '1px solid rgba(255,255,255,0.06)',
+                    }}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">☀️</span>
+                      <div>
+                        <p className="text-[10px] font-bold" style={{ color: isDayTime ? '#EDC22E' : 'rgba(255,255,255,0.3)' }}>Day Code</p>
+                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{isDayTime ? 'Active Now!' : 'Available 12AM-12PM'}</p>
+                      </div>
                     </div>
+                    {isDayTime ? (
+                      <span className="text-[8px] font-bold px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(237,194,46,0.2)', color: '#EDC22E' }}>ACTIVE</span>
+                    ) : (
+                      <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>🔒</span>
+                    )}
                   </div>
-                  <div className="flex-1 px-2 py-1.5 rounded text-center"
-                    style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(237,194,46,0.2)' }}>
-                    <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Night Code</p>
-                    <p className="text-[11px] font-extrabold font-mono tracking-wider" style={{ color: '#00E676', letterSpacing: '1px' }}>{nightCode}</p>
-                    {/* Night Code QR Image */}
-                    <div className="mt-1.5 relative" style={{ minHeight: 80 }}>
-                      {nightCodeImgError ? (
-                        <div className="w-full h-20 rounded-lg flex flex-col items-center justify-center gap-1.5 relative"
-                          style={{ backgroundColor: '#000000', border: '2px solid rgba(0,230,118,0.3)' }}>
-                          <p className="text-[8px] font-bold" style={{ color: '#FF5555' }}>QR Code failed to load</p>
-                          <button
-                            onClick={() => { setNightCodeImgError(false); setCodeImgRefreshKey(k => k + 1) }}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded text-[7px] font-bold transition-transform active:scale-95"
-                            style={{ backgroundColor: 'rgba(0,230,118,0.15)', border: '1px solid rgba(0,230,118,0.3)', color: '#00E676' }}
-                          >
-                            <RefreshCw className="w-2.5 h-2.5" /> REFRESH
-                          </button>
-                        </div>
-                      ) : (
-                        <img
-                          key={`night-${codeImgRefreshKey}`}
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=128x128&data=${encodeURIComponent(nightCode)}&bgcolor=ffffff&color=0d1b3e`}
-                          alt="Night Code QR"
-                          className="w-16 h-16 mx-auto rounded"
-                          style={{ backgroundColor: '#FFFFFF' }}
-                          onError={() => setNightCodeImgError(true)}
-                        />
-                      )}
+                  {/* Night Code */}
+                  <div className="flex items-center justify-between p-2 rounded-lg"
+                    style={{
+                      backgroundColor: isNightTime ? 'rgba(124,77,255,0.12)' : 'rgba(255,255,255,0.03)',
+                      border: isNightTime ? '1.5px solid rgba(124,77,255,0.4)' : '1px solid rgba(255,255,255,0.06)',
+                    }}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🌙</span>
+                      <div>
+                        <p className="text-[10px] font-bold" style={{ color: isNightTime ? '#7C4DFF' : 'rgba(255,255,255,0.3)' }}>Night Code</p>
+                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{isNightTime ? 'Active Now!' : 'Available 12PM-12AM'}</p>
+                      </div>
                     </div>
+                    {isNightTime ? (
+                      <span className="text-[8px] font-bold px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(124,77,255,0.2)', color: '#7C4DFF' }}>ACTIVE</span>
+                    ) : (
+                      <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>🔒</span>
+                    )}
+                  </div>
+                  {/* Timer to next switch */}
+                  <div className="flex items-center justify-center gap-1.5 p-1.5 rounded-lg"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <Clock className="w-3 h-3" style={{ color: '#F65E3B' }} />
+                    <span className="text-[8px] font-bold" style={{ color: '#F65E3B' }}>
+                      {isDayTime ? '🌙 Night in' : '☀️ Day in'} {getTimeUntilSwitch()}
+                    </span>
                   </div>
                 </div>
               </div>
