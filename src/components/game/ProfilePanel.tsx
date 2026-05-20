@@ -91,10 +91,10 @@ export function ProfilePanel({
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.8 }}
             className="w-full max-w-sm rounded-2xl overflow-hidden max-h-[85vh] overflow-y-auto"
-            style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
+            style={{ background: 'linear-gradient(135deg, var(--game-bg-1), var(--game-bg-2))', border: '1px solid rgba(255,255,255,0.1)' }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 pb-2 sticky top-0 z-10" style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)' }}>
+            <div className="flex items-center justify-between p-4 pb-2 sticky top-0 z-10" style={{ background: 'linear-gradient(135deg, var(--game-bg-1), var(--game-bg-2))' }}>
               <h3 className="text-lg font-bold" style={{ color: '#FFFFFF' }}>👤 Profile</h3>
               <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
                 <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
@@ -420,10 +420,10 @@ export function NotificationsPanel({
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.8 }}
             className="w-full max-w-sm rounded-2xl overflow-hidden max-h-[85vh] overflow-y-auto"
-            style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
+            style={{ background: 'linear-gradient(135deg, var(--game-bg-1), var(--game-bg-2))', border: '1px solid rgba(255,255,255,0.1)' }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 pb-2 sticky top-0 z-10" style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)' }}>
+            <div className="flex items-center justify-between p-4 pb-2 sticky top-0 z-10" style={{ background: 'linear-gradient(135deg, var(--game-bg-1), var(--game-bg-2))' }}>
               <div className="flex items-center gap-2">
                 <Bell className="w-4 h-4" style={{ color: '#EDC22E' }} />
                 <h3 className="text-lg font-bold" style={{ color: '#FFFFFF' }}>Notifications</h3>

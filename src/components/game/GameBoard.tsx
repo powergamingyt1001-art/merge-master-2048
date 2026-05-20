@@ -768,34 +768,25 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
       </div>
 
       {/* ============================================================ */}
-      {/* ABILITY SECTION - Two rows of 4 abilities each               */}
-      {/* Row 1: Hammer, Magnet, Bomb, Undo                            */}
-      {/* Row 2: 5x, 2.5x, Timer, (empty)                             */}
+      {/* ABILITY SECTION - 3+3 grid layout                            */}
+      {/* Row 1: Hammer, Magnet, Bomb                                  */}
+      {/* Row 2: Undo, 5x, 2.5x                                       */}
+      {/* Row 3: +10s                                                  */}
       {/* ============================================================ */}
       <div
-        className="flex flex-col items-center flex-shrink-0 mx-0 my-1 px-2 py-1"
+        className="grid grid-cols-3 gap-1.5 flex-shrink-0 mx-auto my-1 px-3 py-1"
         style={{
           width: '100%',
-          maxWidth: 500,
-          gap: 8,
+          maxWidth: 360,
         }}
       >
-        {/* Row 1: Hammer, Magnet, Bomb, Undo */}
-        <div className="flex items-center justify-center w-full" style={{ gap: 12 }}>
-          <OvalAbilitySlot icon="🔨" count={hammerCount} active={activePowerUp === 'hammer'} onClick={() => handlePowerUp('hammer')} label="Hammer" />
-          <OvalAbilitySlot icon="🧲" count={magnetCount} active={activePowerUp === 'magnet'} onClick={() => handlePowerUp('magnet')} label="Magnet" />
-          <OvalAbilitySlot icon="💣" count={blastCount} active={false} onClick={() => handlePowerUp('blast')} label="Bomb" />
-          <OvalAbilitySlot icon="↩️" count={undoTotal - undoCount} active={false} onClick={undo} label="Undo" disabled={!canUndo || undoCount >= undoTotal} />
-        </div>
-
-        {/* Row 2: 5x, 2.5x, Timer, (empty) */}
-        <div className="flex items-center justify-center w-full" style={{ gap: 12 }}>
-          <OvalAbilitySlot icon="⚡" count={game.multiplier5xCount} active={game.activeMultiplier === 5} onClick={() => handlePowerUp('multiplier5x')} label="5x" accentColor="#FF4D4D" />
-          <OvalAbilitySlot icon="🔥" count={game.multiplier2_5xCount} active={game.activeMultiplier === 2.5} onClick={() => handlePowerUp('multiplier2_5x')} label="2.5x" accentColor="#FF7A00" />
-          <OvalAbilitySlot icon="⏱️" count={game.extraTimeCount} active={false} onClick={() => handlePowerUp('extraTime')} label="+10s" accentColor="#00E676" />
-          {/* Empty slot for alignment */}
-          <div style={{ width: 94, height: 48 }} />
-        </div>
+        <OvalAbilitySlot icon="🔨" count={hammerCount} active={activePowerUp === 'hammer'} onClick={() => handlePowerUp('hammer')} label="Hammer" />
+        <OvalAbilitySlot icon="🧲" count={magnetCount} active={activePowerUp === 'magnet'} onClick={() => handlePowerUp('magnet')} label="Magnet" />
+        <OvalAbilitySlot icon="💣" count={blastCount} active={false} onClick={() => handlePowerUp('blast')} label="Bomb" />
+        <OvalAbilitySlot icon="↩️" count={undoTotal - undoCount} active={false} onClick={undo} label="Undo" disabled={!canUndo || undoCount >= undoTotal} />
+        <OvalAbilitySlot icon="⚡" count={game.multiplier5xCount} active={game.activeMultiplier === 5} onClick={() => handlePowerUp('multiplier5x')} label="5x" accentColor="#FF4D4D" />
+        <OvalAbilitySlot icon="🔥" count={game.multiplier2_5xCount} active={game.activeMultiplier === 2.5} onClick={() => handlePowerUp('multiplier2_5x')} label="2.5x" accentColor="#FF7A00" />
+        <OvalAbilitySlot icon="⏱️" count={game.extraTimeCount} active={false} onClick={() => handlePowerUp('extraTime')} label="+10s" accentColor="#00E676" />
       </div>
 
       {/* Multiplier countdown indicator */}
@@ -997,13 +988,12 @@ function OvalAbilitySlot({ icon, count, active, onClick, label, disabled, accent
     <motion.button
       onClick={onClick}
       disabled={disabled}
-      className="relative flex items-center justify-center rounded-full"
+      className="relative flex items-center justify-center rounded-full w-full"
       style={{
-        width: 94,
-        height: 48,
-        borderRadius: 24,
+        height: 40,
+        borderRadius: 20,
         border: active
-          ? `2.5px solid ${glowColor}90`
+          ? `2px solid ${glowColor}90`
           : '1.5px solid rgba(255,255,255,0.25)',
         backgroundColor: active
           ? `${glowColor}30`
@@ -1034,19 +1024,19 @@ function OvalAbilitySlot({ icon, count, active, onClick, label, disabled, accent
       transition={{ duration: 1.2, repeat: active ? Infinity : 0, ease: 'easeInOut' }}
       title={label}
     >
-      <span style={{ fontSize: 20, lineHeight: 1 }}>{icon}</span>
-      <span style={{ fontSize: 9, lineHeight: 1, fontWeight: 700, color: active ? '#FFFFFF' : 'rgba(255,255,255,0.55)', marginLeft: 3 }}>
+      <span style={{ fontSize: 16, lineHeight: 1 }}>{icon}</span>
+      <span style={{ fontSize: 8, lineHeight: 1, fontWeight: 700, color: active ? '#FFFFFF' : 'rgba(255,255,255,0.55)', marginLeft: 2 }}>
         {label}
       </span>
       <span
         className="absolute font-bold"
         style={{
-          fontSize: 9,
-          top: -6,
-          right: -3,
-          minWidth: 16,
-          height: 16,
-          borderRadius: 8,
+          fontSize: 8,
+          top: -5,
+          right: -2,
+          minWidth: 14,
+          height: 14,
+          borderRadius: 7,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

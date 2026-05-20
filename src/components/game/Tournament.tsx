@@ -74,7 +74,9 @@ function getTimeLeftInWeek(): string {
   const diff = endOfWeek.getTime() - now.getTime()
   const days = Math.floor(diff / (24 * 60 * 60 * 1000))
   const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000))
-  return `${days}d ${hours}h`
+  const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000))
+  const seconds = Math.floor((diff % (60 * 1000)) / 1000)
+  return `${days}d ${hours}h ${minutes}m ${seconds}s`
 }
 
 function getEarlyPoolRemaining(): number {
@@ -92,7 +94,15 @@ export function Tournament({
   const [tab, setTab] = useState<TabType>('play')
   const [firebasePlayers, setFirebasePlayers] = useState<FirebasePlayer[]>([])
   const weekNum = getWeekNumber()
-  const timeLeft = getTimeLeftInWeek()
+  const [timeLeft, setTimeLeft] = useState(getTimeLeftInWeek())
+  
+  // Update timer every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeLeft(getTimeLeftInWeek())
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
   const prizes = WEEK_PRIZES_EARLY
   const totalPool = 7000
   const entryFee = ENTRY_FEE_EARLY
@@ -172,10 +182,10 @@ export function Tournament({
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.8 }}
             className="w-full max-w-sm rounded-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
-            style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
+            style={{ background: 'linear-gradient(135deg, var(--game-bg-1), var(--game-bg-2))', border: '1px solid rgba(255,255,255,0.1)' }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 pb-2 sticky top-0 z-10" style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)' }}>
+            <div className="flex items-center justify-between p-4 pb-2 sticky top-0 z-10" style={{ background: 'linear-gradient(135deg, var(--game-bg-1), var(--game-bg-2))' }}>
               <div className="flex items-center gap-2">
                 <Trophy className="w-5 h-5" style={{ color: '#EDC22E' }} />
                 <div>

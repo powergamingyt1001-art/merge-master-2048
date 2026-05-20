@@ -249,7 +249,7 @@ export function PlayDashboard({
 
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden"
-      style={{ background: 'linear-gradient(135deg, #1a0533 0%, #0d1b3e 50%, #1a0533 100%)' }}>
+      style={{ background: 'linear-gradient(135deg, var(--game-bg-1) 0%, var(--game-bg-2) 50%, var(--game-bg-3) 100%)' }}>
       {/* Background glows */}
       <div className="absolute top-1/4 left-1/3 w-48 h-48 rounded-full opacity-20 pointer-events-none" style={{ background: 'radial-gradient(circle, #EDC22E, transparent)', filter: 'blur(60px)' }} />
       <div className="absolute bottom-1/4 right-1/3 w-56 h-56 rounded-full opacity-15 pointer-events-none" style={{ background: 'radial-gradient(circle, #FF7A00, transparent)', filter: 'blur(70px)' }} />
@@ -267,7 +267,7 @@ export function PlayDashboard({
           <div className="w-full flex items-center justify-between">
             <button onClick={() => setShowProfile(true)}
               className="flex items-center gap-1 px-1.5 py-1 rounded-lg transition-transform active:scale-95"
-              style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              style={{ backgroundColor: 'var(--game-glass)', border: '1px solid var(--game-glass-border)' }}>
               <div className="w-7 h-7 rounded-full flex items-center justify-center"
                 style={{
                   background: playerLevel >= 16 ? `linear-gradient(135deg, ${getLevelInfo(playerLevel).color}, ${getLevelInfo(playerLevel).color}88)` : playerLevel >= 6 ? `linear-gradient(135deg, ${getLevelInfo(playerLevel).color}, ${getLevelInfo(playerLevel).color}44)` : 'rgba(255,255,255,0.1)',
@@ -284,7 +284,7 @@ export function PlayDashboard({
             <div className="text-center">
               <h1 className="text-base font-extrabold tracking-tight leading-none">
                 <span style={{ color: '#FFD700', textShadow: '0 0 15px rgba(255,215,0,0.4)' }}>MERGE</span>{' '}
-                <span style={{ color: '#FFFFFF' }}>MASTER</span>
+                <span style={{ color: 'var(--game-text)' }}>MASTER</span>
               </h1>
               <span className="text-[6px] font-bold tracking-widest" style={{ color: '#EDC22E' }}>2048 CHALLENGE</span>
             </div>
@@ -292,7 +292,7 @@ export function PlayDashboard({
             <div className="flex items-center gap-1">
               <button onClick={() => setShowNotifications(true)}
                 className="relative w-7 h-7 rounded-lg flex items-center justify-center transition-transform active:scale-95"
-                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                style={{ backgroundColor: 'var(--game-glass)', border: '1px solid var(--game-glass-border)' }}>
                 <Bell className="w-3.5 h-3.5" style={{ color: unreadNotifications > 0 ? '#EDC22E' : 'rgba(255,255,255,0.4)' }} />
                 {unreadNotifications > 0 && (
                   <div className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[6px] font-bold"
@@ -338,29 +338,20 @@ export function PlayDashboard({
                 </div>
               </div>
 
-              {/* Center Column: Circular Coin Display + Coupon Redeem */}
-              <div className="flex flex-col items-center gap-1">
-                {/* Circular Coin Box */}
-                <div className="flex flex-col items-center justify-center w-16 h-16 rounded-full mx-auto"
-                  style={{
-                    backgroundColor: 'rgba(237,194,46,0.12)',
-                    border: '2px solid rgba(237,194,46,0.4)',
-                    boxShadow: '0 0 12px rgba(237,194,46,0.2)',
-                  }}>
-                  <span className="text-[14px]">💰</span>
-                  <span className="text-[9px] font-extrabold" style={{ color: '#EDC22E' }}>{formatCoinCount(coins)}</span>
-                </div>
-                {/* Coupon Redeem Button */}
+              {/* Center Column: Capsule/Pill Code Button */}
+              <div className="flex flex-col items-center justify-center">
                 <button onClick={() => setShowCoupon(true)}
-                  className="flex items-center justify-center gap-0.5 py-1.5 rounded-lg transition-transform active:scale-95 w-full"
+                  className="flex items-center justify-center gap-1 px-3 py-3 rounded-full transition-transform active:scale-95"
                   style={{
-                    backgroundColor: 'rgba(0,230,118,0.10)',
-                    border: '1.5px solid rgba(0,230,118,0.35)',
-                    boxShadow: '0 0 6px rgba(0,230,118,0.12)',
-                    minHeight: '28px',
+                    width: '100%',
+                    minWidth: '80px',
+                    backgroundColor: 'rgba(237,194,46,0.15)',
+                    border: '2px solid rgba(237,194,46,0.5)',
+                    boxShadow: '0 0 14px rgba(237,194,46,0.25)',
+                    borderRadius: '9999px',
                   }}>
-                  <span className="text-[11px]">🎟️</span>
-                  <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>Redeem</span>
+                  <span className="text-[12px]">🎟️</span>
+                  <span className="text-[10px] font-extrabold" style={{ color: '#EDC22E' }}>Code</span>
                 </button>
               </div>
 
@@ -646,11 +637,11 @@ export function PlayDashboard({
           {/* Footer links */}
           <div className="w-full flex items-center justify-center gap-2 pt-1 pb-2"
             style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-            <button onClick={() => setShowPrivacy(true)} className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Privacy</button>
-            <span style={{ color: 'rgba(255,255,255,0.1)' }}>·</span>
-            <button onClick={() => setShowAbout(true)} className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>About</button>
-            <span style={{ color: 'rgba(255,255,255,0.1)' }}>·</span>
-            <button onClick={() => setShowContact(true)} className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>Contact</button>
+            <button onClick={() => setShowPrivacy(true)} className="text-[7px] font-medium" style={{ color: 'var(--game-text-secondary)' }}>Privacy</button>
+            <span style={{ color: 'var(--game-text-secondary)' }}>·</span>
+            <button onClick={() => setShowAbout(true)} className="text-[7px] font-medium" style={{ color: 'var(--game-text-secondary)' }}>About</button>
+            <span style={{ color: 'var(--game-text-secondary)' }}>·</span>
+            <button onClick={() => setShowContact(true)} className="text-[7px] font-medium" style={{ color: 'var(--game-text-secondary)' }}>Contact</button>
           </div>
 
         </div>

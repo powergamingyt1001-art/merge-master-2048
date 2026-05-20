@@ -76,6 +76,15 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --game-bg-1: #f8f9fa;
+  --game-bg-2: #e9ecef;
+  --game-bg-3: #dee2e6;
+  --game-text: #1a0533;
+  --game-text-secondary: rgba(26, 5, 51, 0.5);
+  --game-glass: rgba(255, 255, 255, 0.7);
+  --game-glass-border: rgba(26, 5, 51, 0.1);
+  --game-glass-light: rgba(255, 255, 255, 0.85);
+  --game-overlay: rgba(255, 255, 255, 0.9);
 }
 
 .dark {
@@ -110,6 +119,15 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --game-bg-1: #1a0533;
+  --game-bg-2: #0d1b3e;
+  --game-bg-3: #1a0533;
+  --game-text: #FFFFFF;
+  --game-text-secondary: rgba(255, 255, 255, 0.5);
+  --game-glass: rgba(255, 255, 255, 0.06);
+  --game-glass-border: rgba(255, 255, 255, 0.1);
+  --game-glass-light: rgba(255, 255, 255, 0.04);
+  --game-overlay: rgba(0, 0, 0, 0.85);
 }
 
 @layer base {

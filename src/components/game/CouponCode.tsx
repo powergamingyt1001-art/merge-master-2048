@@ -1172,7 +1172,7 @@ export function CouponCode({
             exit={{ scale: 0.85, y: 20 }}
             transition={{ type: 'spring', stiffness: 300, damping: 25 }}
             className="w-full max-w-sm max-h-[85vh] overflow-y-auto rounded-2xl"
-            style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
+            style={{ background: 'linear-gradient(135deg, var(--game-bg-1), var(--game-bg-2))', border: '1px solid rgba(255,255,255,0.1)' }}
           >
             {/* Header */}
             <div className="flex items-center justify-between p-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
@@ -1392,7 +1392,7 @@ export function CouponCode({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[250] flex flex-col"
-            style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)' }}
+            style={{ background: 'linear-gradient(135deg, var(--game-bg-1), var(--game-bg-2))' }}
           >
             {/* Admin Header */}
             <div className="flex items-center justify-between p-3 border-b shrink-0" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
@@ -2565,7 +2565,7 @@ export function CouponCode({
               animate={{ scale: 1 }}
               exit={{ scale: 0.8 }}
               className="relative max-w-2xl w-[95vw] rounded-2xl p-4 text-center"
-              style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
+              style={{ background: 'linear-gradient(135deg, var(--game-bg-1), var(--game-bg-2))', border: '1px solid rgba(255,255,255,0.1)' }}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-3">
