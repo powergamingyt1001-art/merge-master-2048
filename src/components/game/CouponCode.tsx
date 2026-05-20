@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Gift, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus } from 'lucide-react'
+import { X, Gift, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw } from 'lucide-react'
 
 interface CouponCodeProps {
   isOpen: boolean
@@ -427,6 +427,9 @@ export function CouponCode({
   const [nightCodeCustom, setNightCodeCustom] = useState('')
   const [viewingScreenshot, setViewingScreenshot] = useState<string | null>(null)
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
+  const [dayCodeImgError, setDayCodeImgError] = useState(false)
+  const [nightCodeImgError, setNightCodeImgError] = useState(false)
+  const [codeImgRefreshKey, setCodeImgRefreshKey] = useState(0)
 
   // Day code settings (for real-time update when admin changes it)
   interface DayCodeSettings {
@@ -1106,57 +1109,232 @@ export function CouponCode({
               )}
             </AnimatePresence>
 
-            {/* Admin Panel Overlay */}
-            <AnimatePresence>
-              {showAdminPanel && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="absolute inset-0 z-20 rounded-2xl overflow-hidden"
-                  style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)' }}
-                >
-                  {/* Admin Header */}
-                  <div className="flex items-center justify-between p-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                    <div className="flex items-center gap-2">
-                      <Shield className="w-4 h-4" style={{ color: '#FF7A00' }} />
-                      <h3 className="text-sm font-bold" style={{ color: '#FF7A00' }}>Admin Panel</h3>
+            {/* Admin Panel is now rendered as a separate fullscreen overlay below */}
+
+            <div className="p-3 space-y-3">
+              {/* Today's codes hint */}
+              <div className="p-2.5 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.12)' }}>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Gift className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                  <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Today&apos;s Codes ({rotationDay})</p>
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1 px-2 py-1.5 rounded text-center"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(237,194,46,0.2)' }}>
+                    <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Day Code</p>
+                    <p className="text-[11px] font-extrabold font-mono tracking-wider" style={{ color: '#FFD700', letterSpacing: '1px' }}>{dayCode}</p>
+                    {/* Day Code QR Image */}
+                    <div className="mt-1.5 relative" style={{ minHeight: 64 }}>
+                      {dayCodeImgError ? (
+                        <div className="w-full h-16 rounded-lg flex flex-col items-center justify-center gap-1"
+                          style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,215,0,0.15)' }}>
+                          <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>QR failed to load</p>
+                          <button
+                            onClick={() => { setDayCodeImgError(false); setCodeImgRefreshKey(k => k + 1) }}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded text-[7px] font-bold transition-transform active:scale-95"
+                            style={{ backgroundColor: 'rgba(255,215,0,0.1)', border: '1px solid rgba(255,215,0,0.2)', color: '#FFD700' }}
+                          >
+                            <RefreshCw className="w-2.5 h-2.5" /> Refresh
+                          </button>
+                        </div>
+                      ) : (
+                        <img
+                          key={`day-${codeImgRefreshKey}`}
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=128x128&data=${encodeURIComponent(dayCode)}&bgcolor=ffffff&color=1a0533`}
+                          alt="Day Code QR"
+                          className="w-16 h-16 mx-auto rounded"
+                          style={{ backgroundColor: '#FFFFFF' }}
+                          onError={() => setDayCodeImgError(true)}
+                        />
+                      )}
                     </div>
-                    <button onClick={() => setShowAdminPanel(false)} className="w-7 h-7 rounded-full flex items-center justify-center"
-                      style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
-                      <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                  </div>
+                  <div className="flex-1 px-2 py-1.5 rounded text-center"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(237,194,46,0.2)' }}>
+                    <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Night Code</p>
+                    <p className="text-[11px] font-extrabold font-mono tracking-wider" style={{ color: '#00E676', letterSpacing: '1px' }}>{nightCode}</p>
+                    {/* Night Code QR Image */}
+                    <div className="mt-1.5 relative" style={{ minHeight: 64 }}>
+                      {nightCodeImgError ? (
+                        <div className="w-full h-16 rounded-lg flex flex-col items-center justify-center gap-1"
+                          style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(0,230,118,0.15)' }}>
+                          <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>QR failed to load</p>
+                          <button
+                            onClick={() => { setNightCodeImgError(false); setCodeImgRefreshKey(k => k + 1) }}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded text-[7px] font-bold transition-transform active:scale-95"
+                            style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)', color: '#00E676' }}
+                          >
+                            <RefreshCw className="w-2.5 h-2.5" /> Refresh
+                          </button>
+                        </div>
+                      ) : (
+                        <img
+                          key={`night-${codeImgRefreshKey}`}
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=128x128&data=${encodeURIComponent(nightCode)}&bgcolor=ffffff&color=0d1b3e`}
+                          alt="Night Code QR"
+                          className="w-16 h-16 mx-auto rounded"
+                          style={{ backgroundColor: '#FFFFFF' }}
+                          onError={() => setNightCodeImgError(true)}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Input + Claim button */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={codeInput}
+                  onChange={(e) => {
+                    setCodeInput(e.target.value.toUpperCase())
+                    setStatusMessage(null)
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleClaim()}
+                  placeholder="Enter code here..."
+                  className="flex-1 px-4 py-2.5 rounded-full text-sm font-semibold outline-none"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    color: '#FFFFFF',
+                  }}
+                />
+                <button
+                  onClick={handleClaim}
+                  className="px-6 py-2.5 rounded-full text-xs font-bold transition-transform active:scale-95"
+                  style={{
+                    background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
+                    color: '#FFFFFF',
+                    boxShadow: '0 2px 10px rgba(237,194,46,0.3)',
+                  }}
+                >
+                  CLAIM
+                </button>
+              </div>
+
+              {/* Status message */}
+              {statusMessage && (
+                <motion.div
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
+                  style={{
+                    backgroundColor: statusMessage.type === 'success' ? 'rgba(0,230,118,0.08)' :
+                      statusMessage.type === 'error' ? 'rgba(246,94,59,0.08)' : 'rgba(237,194,46,0.08)',
+                    border: `1px solid ${statusMessage.type === 'success' ? 'rgba(0,230,118,0.15)' :
+                      statusMessage.type === 'error' ? 'rgba(246,94,59,0.15)' : 'rgba(237,194,46,0.15)'}`,
+                  }}
+                >
+                  {statusMessage.type === 'success' ? (
+                    <Check className="w-3 h-3" style={{ color: '#00E676' }} />
+                  ) : statusMessage.type === 'error' ? (
+                    <AlertCircle className="w-3 h-3" style={{ color: '#F65E3B' }} />
+                  ) : (
+                    <AlertCircle className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                  )}
+                  <p className="text-[9px] font-semibold" style={{
+                    color: statusMessage.type === 'success' ? '#00E676' :
+                      statusMessage.type === 'error' ? '#F65E3B' : '#EDC22E',
+                  }}>
+                    {statusMessage.text}
+                  </p>
+                </motion.div>
+              )}
+
+              {/* Info */}
+              <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  • One claim per day per code • 7-day rotation of daily codes
+                  <br />• Max {MAX_COINS_PER_COUPON} coins per coupon • Max {MAX_MULTIPLIER_COUNT}x multiplier rewards
+                  <br />• Rewards: 🎫 Spins / 💰 Coins / 🧲 Magnets / 💣 Bombs / ✨ 5x / 🌟 2.5x
+                </p>
+              </div>
+
+              {/* Claim History */}
+              {claimHistory.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Claim History</p>
+                    <button
+                      onClick={() => { setClaimHistory([]); saveClaimedCoupons([]) }}
+                      className="text-[8px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-1 transition-transform active:scale-95"
+                      style={{ backgroundColor: 'rgba(246,94,59,0.1)', color: '#F65E3B' }}
+                    >
+                      🗑️ Delete All
                     </button>
                   </div>
-
-                  {/* Admin Tabs */}
-                  <div className="flex border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                    {[
-                      { key: 'payments' as AdminTab, label: 'Payments', icon: <Clock className="w-3 h-3" /> },
-                      { key: 'coupons' as AdminTab, label: 'Coupons', icon: <Ticket className="w-3 h-3" /> },
-                      { key: 'prices' as AdminTab, label: 'Prices', icon: <Coins className="w-3 h-3" /> },
-                      { key: 'history' as AdminTab, label: 'History', icon: <ChevronRight className="w-3 h-3" /> },
-                    ].map(tab => (
-                      <button
-                        key={tab.key}
-                        onClick={() => setAdminTab(tab.key)}
-                        className="flex-1 flex items-center justify-center gap-1 py-2 transition-all"
-                        style={{
-                          borderBottom: adminTab === tab.key ? '2px solid #FF7A00' : '2px solid transparent',
-                          color: adminTab === tab.key ? '#FF7A00' : 'rgba(255,255,255,0.35)',
-                        }}
-                      >
-                        {tab.icon}
-                        <span className="text-[8px] font-bold">{tab.label}</span>
-                        {tab.key === 'payments' && pendingPurchases.length > 0 && (
-                          <span className="text-[6px] px-1 py-0.5 rounded-full" style={{ backgroundColor: '#F65E3B', color: '#FFFFFF' }}>
-                            {pendingPurchases.length}
-                          </span>
-                        )}
-                      </button>
+                  <div className="max-h-32 overflow-y-auto space-y-1 pr-1" style={{ scrollbarWidth: 'thin' }}>
+                    {claimHistory.slice(0, 20).map((claim, i) => (
+                      <div key={i} className="flex items-center justify-between px-2 py-1.5 rounded-lg"
+                        style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[8px] font-mono" style={{ color: '#EDC22E' }}>{claim.code}</span>
+                          <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{claim.date}</span>
+                        </div>
+                        <span className="text-[8px] font-semibold" style={{ color: '#00E676' }}>{claim.reward}</span>
+                      </div>
                     ))}
                   </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
 
-                  <div className="p-3 overflow-y-auto" style={{ maxHeight: 'calc(85vh - 100px)' }}>
+      {/* ===== ADMIN PANEL - FULLSCREEN OVERLAY ===== */}
+      <AnimatePresence>
+        {isOpen && showAdminPanel && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[250] flex flex-col"
+            style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)' }}
+          >
+            {/* Admin Header */}
+            <div className="flex items-center justify-between p-3 border-b shrink-0" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4" style={{ color: '#FF7A00' }} />
+                <h3 className="text-sm font-bold" style={{ color: '#FF7A00' }}>Admin Panel</h3>
+              </div>
+              <button onClick={() => setShowAdminPanel(false)} className="w-7 h-7 rounded-full flex items-center justify-center"
+                style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
+              </button>
+            </div>
+
+            {/* Admin Tabs */}
+            <div className="flex border-b shrink-0" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+              {[
+                { key: 'payments' as AdminTab, label: 'Payments', icon: <Clock className="w-3 h-3" /> },
+                { key: 'coupons' as AdminTab, label: 'Coupons', icon: <Ticket className="w-3 h-3" /> },
+                { key: 'prices' as AdminTab, label: 'Prices', icon: <Coins className="w-3 h-3" /> },
+                { key: 'history' as AdminTab, label: 'History', icon: <ChevronRight className="w-3 h-3" /> },
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setAdminTab(tab.key)}
+                  className="flex-1 flex items-center justify-center gap-1 py-2 transition-all"
+                  style={{
+                    borderBottom: adminTab === tab.key ? '2px solid #FF7A00' : '2px solid transparent',
+                    color: adminTab === tab.key ? '#FF7A00' : 'rgba(255,255,255,0.35)',
+                  }}
+                >
+                  {tab.icon}
+                  <span className="text-[8px] font-bold">{tab.label}</span>
+                  {tab.key === 'payments' && pendingPurchases.length > 0 && (
+                    <span className="text-[6px] px-1 py-0.5 rounded-full" style={{ backgroundColor: '#F65E3B', color: '#FFFFFF' }}>
+                      {pendingPurchases.length}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Scrollable Content Area - Full Screen */}
+            <div className="flex-1 overflow-y-auto p-3">
                     {/* ====== PAYMENTS TAB ====== */}
                     {adminTab === 'payments' && (
                       <div className="space-y-2">
@@ -1547,7 +1725,6 @@ export function CouponCode({
                           </div>
 
                           <div className="space-y-1.5">
-                            {/* Code name */}
                             <input
                               type="text"
                               value={newCodeInput}
@@ -1561,7 +1738,6 @@ export function CouponCode({
                               }}
                             />
 
-                            {/* Reward type */}
                             <div className="flex items-center gap-1.5">
                               <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Reward:</p>
                               <select
@@ -1584,7 +1760,6 @@ export function CouponCode({
                               </select>
                             </div>
 
-                            {/* Reward amount */}
                             <div className="flex items-center gap-1.5">
                               <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Amount:</p>
                               <input
@@ -1601,7 +1776,6 @@ export function CouponCode({
                               />
                             </div>
 
-                            {/* Max uses */}
                             <div className="flex items-center gap-1.5">
                               <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Max Uses:</p>
                               <input
@@ -1618,7 +1792,6 @@ export function CouponCode({
                               />
                             </div>
 
-                            {/* Day/Night code toggles */}
                             <div className="flex items-center gap-3">
                               <label className="flex items-center gap-1 cursor-pointer">
                                 <input
@@ -1659,38 +1832,38 @@ export function CouponCode({
                         {customCodes.length > 0 && (
                           <div>
                             <p className="text-[9px] font-bold mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                              Custom Codes ({customCodes.length})
+                            Custom Codes ({customCodes.length})
                             </p>
                             <div className="space-y-1 max-h-48 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
-                              {customCodes.map(code => (
-                                <div key={code.code} className="flex items-center justify-between px-2.5 py-2 rounded-lg"
-                                  style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm">{code.emoji}</span>
-                                    <div>
-                                      <div className="flex items-center gap-1">
-                                        <p className="text-[9px] font-bold font-mono" style={{ color: '#EDC22E' }}>{code.code}</p>
-                                        {code.isDayCode && (
-                                          <span className="text-[6px] px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,215,0,0.1)', color: '#FFD700' }}>DAY</span>
-                                        )}
-                                        {code.isNightCode && (
-                                          <span className="text-[6px] px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(0,230,118,0.1)', color: '#00E676' }}>NIGHT</span>
-                                        )}
-                                      </div>
-                                      <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                        {code.label} • Uses: {code.currentUses}/{code.maxUses}
-                                      </p>
+                            {customCodes.map(code => (
+                              <div key={code.code} className="flex items-center justify-between px-2.5 py-2 rounded-lg"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm">{code.emoji}</span>
+                                  <div>
+                                    <div className="flex items-center gap-1">
+                                      <p className="text-[9px] font-bold font-mono" style={{ color: '#EDC22E' }}>{code.code}</p>
+                                      {code.isDayCode && (
+                                        <span className="text-[6px] px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,215,0,0.1)', color: '#FFD700' }}>DAY</span>
+                                      )}
+                                      {code.isNightCode && (
+                                        <span className="text-[6px] px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(0,230,118,0.1)', color: '#00E676' }}>NIGHT</span>
+                                      )}
                                     </div>
+                                    <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                      {code.label} • Uses: {code.currentUses}/{code.maxUses}
+                                    </p>
                                   </div>
-                                  <button
-                                    onClick={() => handleDeleteCoupon(code.code)}
-                                    className="w-6 h-6 rounded-lg flex items-center justify-center transition-transform active:scale-95"
-                                    style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)' }}
-                                  >
-                                    <Trash2 className="w-3 h-3" style={{ color: '#F65E3B' }} />
-                                  </button>
                                 </div>
-                              ))}
+                                <button
+                                  onClick={() => handleDeleteCoupon(code.code)}
+                                  className="w-6 h-6 rounded-lg flex items-center justify-center transition-transform active:scale-95"
+                                  style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)' }}
+                                >
+                                  <Trash2 className="w-3 h-3" style={{ color: '#F65E3B' }} />
+                                </button>
+                              </div>
+                            ))}
                             </div>
                           </div>
                         )}
@@ -1893,7 +2066,7 @@ export function CouponCode({
 
                     {/* ====== HISTORY TAB ====== */}
                     {adminTab === 'history' && (
-                      <div className="space-y-2" style={{ maxHeight: 'calc(85vh - 100px)', overflowY: 'auto' }}>
+                      <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
                             All Payment History ({allPurchases.length})
@@ -1966,7 +2139,6 @@ export function CouponCode({
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            {/* Group by person (buyerName or whatsappNumber) */}
                             {(() => {
                               const personMap = new Map<string, PurchaseHistoryEntry[]>()
                               allPurchases.forEach(entry => {
@@ -2060,132 +2232,10 @@ export function CouponCode({
                         )}
                       </div>
                     )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <div className="p-3 space-y-3">
-              {/* Today's codes hint */}
-              <div className="p-2.5 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.12)' }}>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <Gift className="w-3 h-3" style={{ color: '#EDC22E' }} />
-                  <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Today&apos;s Codes ({rotationDay})</p>
-                </div>
-                <div className="flex gap-2">
-                  <div className="flex-1 px-2 py-1.5 rounded text-center"
-                    style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(237,194,46,0.2)' }}>
-                    <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Day Code</p>
-                    <p className="text-[11px] font-extrabold font-mono tracking-wider" style={{ color: '#FFD700', letterSpacing: '1px' }}>{dayCode}</p>
-                  </div>
-                  <div className="flex-1 px-2 py-1.5 rounded text-center"
-                    style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(237,194,46,0.2)' }}>
-                    <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Night Code</p>
-                    <p className="text-[11px] font-extrabold font-mono tracking-wider" style={{ color: '#00E676', letterSpacing: '1px' }}>{nightCode}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Input + Claim button */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={codeInput}
-                  onChange={(e) => {
-                    setCodeInput(e.target.value.toUpperCase())
-                    setStatusMessage(null)
-                  }}
-                  onKeyDown={(e) => e.key === 'Enter' && handleClaim()}
-                  placeholder="Enter code here..."
-                  className="flex-1 px-4 py-2.5 rounded-full text-sm font-semibold outline-none"
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    color: '#FFFFFF',
-                  }}
-                />
-                <button
-                  onClick={handleClaim}
-                  className="px-6 py-2.5 rounded-full text-xs font-bold transition-transform active:scale-95"
-                  style={{
-                    background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
-                    color: '#FFFFFF',
-                    boxShadow: '0 2px 10px rgba(237,194,46,0.3)',
-                  }}
-                >
-                  CLAIM
-                </button>
-              </div>
-
-              {/* Status message */}
-              {statusMessage && (
-                <motion.div
-                  initial={{ opacity: 0, y: -5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
-                  style={{
-                    backgroundColor: statusMessage.type === 'success' ? 'rgba(0,230,118,0.08)' :
-                      statusMessage.type === 'error' ? 'rgba(246,94,59,0.08)' : 'rgba(237,194,46,0.08)',
-                    border: `1px solid ${statusMessage.type === 'success' ? 'rgba(0,230,118,0.15)' :
-                      statusMessage.type === 'error' ? 'rgba(246,94,59,0.15)' : 'rgba(237,194,46,0.15)'}`,
-                  }}
-                >
-                  {statusMessage.type === 'success' ? (
-                    <Check className="w-3 h-3" style={{ color: '#00E676' }} />
-                  ) : statusMessage.type === 'error' ? (
-                    <AlertCircle className="w-3 h-3" style={{ color: '#F65E3B' }} />
-                  ) : (
-                    <AlertCircle className="w-3 h-3" style={{ color: '#EDC22E' }} />
-                  )}
-                  <p className="text-[9px] font-semibold" style={{
-                    color: statusMessage.type === 'success' ? '#00E676' :
-                      statusMessage.type === 'error' ? '#F65E3B' : '#EDC22E',
-                  }}>
-                    {statusMessage.text}
-                  </p>
-                </motion.div>
-              )}
-
-              {/* Info */}
-              <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
-                <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                  • One claim per day per code • 7-day rotation of daily codes
-                  <br />• Max {MAX_COINS_PER_COUPON} coins per coupon • Max {MAX_MULTIPLIER_COUNT}x multiplier rewards
-                  <br />• Rewards: 🎫 Spins / 💰 Coins / 🧲 Magnets / 💣 Bombs / ✨ 5x / 🌟 2.5x
-                </p>
-              </div>
-
-              {/* Claim History */}
-              {claimHistory.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Claim History</p>
-                    <button
-                      onClick={() => { setClaimHistory([]); saveClaimedCoupons([]) }}
-                      className="text-[8px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-1 transition-transform active:scale-95"
-                      style={{ backgroundColor: 'rgba(246,94,59,0.1)', color: '#F65E3B' }}
-                    >
-                      🗑️ Delete All
-                    </button>
-                  </div>
-                  <div className="max-h-32 overflow-y-auto space-y-1 pr-1" style={{ scrollbarWidth: 'thin' }}>
-                    {claimHistory.slice(0, 20).map((claim, i) => (
-                      <div key={i} className="flex items-center justify-between px-2 py-1.5 rounded-lg"
-                        style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[8px] font-mono" style={{ color: '#EDC22E' }}>{claim.code}</span>
-                          <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{claim.date}</span>
-                        </div>
-                        <span className="text-[8px] font-semibold" style={{ color: '#00E676' }}>{claim.reward}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </motion.div>
-        </motion.div>
-      )}
+        )}
+      </AnimatePresence>
 
       {/* Screenshot Viewer Modal */}
       <AnimatePresence>

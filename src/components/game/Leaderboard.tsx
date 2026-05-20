@@ -205,9 +205,9 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
             {/* Tab Switch - 3 sections */}
             <div className="flex mx-4 mb-3 rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
               {[
-                { key: 'modesScore' as TabType, icon: <Swords className="w-3 h-3" />, label: 'Modes' },
+                { key: 'modesScore' as TabType, icon: <Swords className="w-3 h-3" />, label: 'Weekly' },
                 { key: 'coinsRank' as TabType, icon: <Coins className="w-3 h-3" />, label: 'Coins' },
-                { key: 'offlineRank' as TabType, icon: <WifiOff className="w-3 h-3" />, label: 'Offline' },
+                { key: 'offlineRank' as TabType, icon: <WifiOff className="w-3 h-3" />, label: 'Classic' },
               ].map((t) => (
                 <button key={t.key} onClick={() => setTab(t.key)}
                   className="flex-1 py-2 text-[9px] font-bold flex items-center justify-center gap-1 transition-all"
@@ -231,10 +231,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
                 <div>
                   {/* Reset period indicator */}
                   <div className="flex items-center justify-center gap-1.5 mb-2 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.12)' }}>
-                    <span className="text-[8px]">🔄</span>
-                    <span className="text-[8px] font-bold" style={{ color: '#F65E3B' }}>Tournament: Weekly Reset</span>
-                    <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>• Battle: Monthly</span>
-                    <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>• Classic: Yearly</span>
+                    <span className="text-[8px] font-bold" style={{ color: '#F65E3B' }}>🔄 Resets every Monday — All scores reset to 0</span>
                   </div>
                   {modesEntries.length <= 1 && !modesEntries.some(e => !e.isPlayer) ? (
                     <div className="flex flex-col items-center justify-center py-8">
@@ -267,8 +264,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
                 <div>
                   {/* Reset period indicator */}
                   <div className="flex items-center justify-center gap-1.5 mb-2 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.12)' }}>
-                    <span className="text-[8px]">🔄</span>
-                    <span className="text-[8px] font-bold" style={{ color: '#EDC22E' }}>Coins Leaderboard: Monthly Reset</span>
+                    <span className="text-[8px] font-bold" style={{ color: '#EDC22E' }}>🔄 Resets 1st of every month</span>
                   </div>
                   {coinsEntries.length <= 1 && !coinsEntries.some(e => !e.isPlayer) ? (
                     <div className="flex flex-col items-center justify-center py-8">
@@ -301,8 +297,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
                 <div>
                   {/* Reset period indicator */}
                   <div className="flex items-center justify-center gap-1.5 mb-2 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.12)' }}>
-                    <span className="text-[8px]">🔄</span>
-                    <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>Offline Rank: Yearly Reset</span>
+                    <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>🔄 Resets every January 1st</span>
                   </div>
                   {/* Current Progress */}
                   <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>

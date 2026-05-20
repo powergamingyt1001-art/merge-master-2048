@@ -337,6 +337,65 @@ function loadSavedData() {
   return null
 }
 
+// ============================================================
+// LEADERBOARD RESET LOGIC
+// Tracks last reset timestamps in localStorage
+// Weekly reset: every Monday at midnight → resets bestScore, modBestScore, battleBestScore
+// Monthly reset: 1st of every month → resets coin leaderboard related fields
+// Yearly reset: January 1st → resets classicBestScore related fields
+// ============================================================
+
+const LEADERBOARD_RESET_KEY = 'mergeMaster2048_leaderboardResets'
+
+interface LeaderboardResets {
+  weeklyLastReset: string   // ISO date of last weekly reset (every Monday)
+  monthlyLastReset: string  // ISO date of last monthly reset (1st of month)
+  yearlyLastReset: string   // ISO date of last yearly reset (Jan 1st)
+}
+
+function loadLeaderboardResets(): LeaderboardResets {
+  try {
+    const data = localStorage.getItem(LEADERBOARD_RESET_KEY)
+    if (data) return JSON.parse(data)
+  } catch { /* ignore */ }
+  // Default: set to current time so no immediate reset
+  const now = new Date().toISOString()
+  return { weeklyLastReset: now, monthlyLastReset: now, yearlyLastReset: now }
+}
+
+function saveLeaderboardResets(resets: LeaderboardResets) {
+  localStorage.setItem(LEADERBOARD_RESET_KEY, JSON.stringify(resets))
+}
+
+// Check if weekly reset needed (every Monday at midnight)
+function needsWeeklyReset(lastReset: string): boolean {
+  const last = new Date(lastReset)
+  const now = new Date()
+  // Find the most recent Monday at midnight
+  const day = now.getDay()
+  const mondayOffset = day === 0 ? -6 : 1 - day
+  const lastMonday = new Date(now)
+  lastMonday.setDate(now.getDate() + mondayOffset)
+  lastMonday.setHours(0, 0, 0, 0)
+  return last < lastMonday
+}
+
+// Check if monthly reset needed (1st of every month)
+function needsMonthlyReset(lastReset: string): boolean {
+  const last = new Date(lastReset)
+  const now = new Date()
+  const firstOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  return last < firstOfCurrentMonth
+}
+
+// Check if yearly reset needed (January 1st)
+function needsYearlyReset(lastReset: string): boolean {
+  const last = new Date(lastReset)
+  const now = new Date()
+  const jan1 = new Date(now.getFullYear(), 0, 1)
+  return last < jan1
+}
+
 // Generate bot name/avatar for display (score generated at game end for fairness)
 function generateBotOpponent(): BotOpponent {
   const bot = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]
@@ -771,9 +830,44 @@ export function useGame() {
 
     const gamePoints = saved.gamePoints || 0
 
+    // ============================================================
+    // LEADERBOARD RESET CHECK using dedicated timestamps
+    // Checks weekly/monthly/yearly reset timestamps stored in
+    // a separate localStorage key and resets appropriate scores
+    // ============================================================
+    const leaderboardResets = loadLeaderboardResets()
+    const nowISO = new Date().toISOString()
+    let lbResetWeekly = false
+    let lbResetMonthly = false
+    let lbResetYearly = false
+
+    if (needsWeeklyReset(leaderboardResets.weeklyLastReset)) {
+      lbResetWeekly = true
+      bestScore = 0
+      modBestScore = 0
+    }
+    if (needsMonthlyReset(leaderboardResets.monthlyLastReset)) {
+      lbResetMonthly = true
+      modBestScore = 0
+    }
+    if (needsYearlyReset(leaderboardResets.yearlyLastReset)) {
+      lbResetYearly = true
+      bestScore = 0
+      modBestScore = 0
+    }
+
+    // Save updated reset timestamps if any reset occurred
+    if (lbResetWeekly || lbResetMonthly || lbResetYearly) {
+      saveLeaderboardResets({
+        weeklyLastReset: lbResetWeekly ? nowISO : leaderboardResets.weeklyLastReset,
+        monthlyLastReset: lbResetMonthly ? nowISO : leaderboardResets.monthlyLastReset,
+        yearlyLastReset: lbResetYearly ? nowISO : leaderboardResets.yearlyLastReset,
+      })
+    }
+
     return {
       ...defaults,
-      bestScore: saved.bestScore || 0,
+      bestScore,
       spinTickets: saved.spinTickets ?? 0,
       streakDay,
       lastLoginDate: today,

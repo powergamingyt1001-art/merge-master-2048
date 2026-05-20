@@ -221,3 +221,95 @@ Stage Summary:
 - "Code" label matches the GameBoard's CODE capsule button
 - Sub-label changed to "Redeem" for clarity
 - No other layout changes needed - dashboard structure is clean
+
+---
+Task ID: 3
+Agent: dashboard-leaderboard-profile-fixes
+Task: Dashboard ability borders, Profile coin value, Leaderboard reset indicators
+
+Work Log:
+- Updated AbilityBtn in PlayDashboard.tsx - bigger buttons, more prominent borders
+- Removed ₹ coin value subtitle from ProfilePanel.tsx
+- Updated Leaderboard.tsx tab labels and reset indicators
+
+Stage Summary:
+- Ability buttons now bigger (48x36px min), with 2px borders and hover effects
+- Profile coins stat no longer shows ₹ value
+- Leaderboard tabs renamed: Weekly/Coins/Classic with clearer reset indicators
+---
+Task ID: 2
+Agent: store-layout-fix
+Task: Store Layout Swap - Reorder ability sections + Remove Free Reward Ad
+
+Work Log:
+- Read Store.tsx
+- Reordered AbilityTab: 5x first, 2.5x second, Regular abilities last
+- Removed Free Reward Ad section (entire div with canWatchAd, handleWatchAd, watch ad button, cooldown display)
+- Removed canWatchAd state and handleWatchAd callback (no longer needed)
+- Removed Tv import from lucide-react (only used in Free Ad section)
+- Kept canWatchFreeAd function (might be used elsewhere)
+- Kept Clock import (still used in History tab icon)
+- Verified lint passes with no errors
+
+Stage Summary:
+- Store ability tab now shows 5x multiplier at top, 2.5x second, regular abilities at bottom
+- Free Reward Ad button completely removed
+- All other functionality preserved
+---
+Task ID: 1
+Agent: admin-panel-fix
+Task: Fix Admin Panel Full Screen + Coupon Refresh Button
+
+Work Log:
+- Read CouponCode.tsx (2244 lines) to understand the full structure
+- Identified the admin panel was nested inside the coupon modal with `absolute inset-0 z-20` class, constrained by the parent's `max-h-[85vh]`
+- Moved admin panel from inside the coupon modal to a separate `fixed inset-0 z-[250]` overlay rendered outside the coupon modal container
+- Admin panel now uses `flex flex-col` with a `shrink-0` header/tabs and `flex-1 overflow-y-auto` content area for full-screen scrolling
+- Added `RefreshCw` to lucide-react imports
+- Added state variables: `dayCodeImgError`, `nightCodeImgError`, `codeImgRefreshKey`
+- Added QR code image display in the Today's Codes section using qrserver.com API
+- When QR image fails to load, shows a fallback box with "QR failed to load" message and a REFRESH button
+- Refresh button resets error state and increments refresh key to force img reload
+- All 4 admin tabs (payments, coupons, prices, history) preserved with identical content
+- Screenshot viewer modal preserved as `fixed inset-0 z-[300]` overlay
+- Verified lint passes with no errors
+
+Stage Summary:
+- Admin panel now renders as `fixed inset-0 z-[250]` overlay, no longer constrained by `max-h-[85vh]`
+- Coupon QR code images with refresh button added for failed image loads
+- Z-index hierarchy: coupon modal (z-200) → admin panel (z-250) → screenshot viewer (z-300)
+
+---
+Task ID: 5+6
+Agent: gameboard-leaderboard-fixes
+Task: GameBoard abilities bigger with effects + Leaderboard Reset Logic
+
+Work Log:
+- Read GameBoard.tsx, found OvalAbilitySlot component rendering power-up buttons
+- Made ability buttons bigger: width 86→100, height 44→52, borderRadius 22→26
+- Increased icon size: 18→22, label fontSize: 9→10, count badge fontSize: 9→10
+- Increased count badge dimensions: minWidth 16→18, height 16→18, borderRadius 8→9
+- Added idle glow shadow effect: `0 2px 8px rgba(0,0,0,0.3), 0 0 6px ${glowColor}15`
+- Changed press effect from scale 0.85 to 0.90 (active:scale-90)
+- Enhanced hover shadow: added `0 4px 12px rgba(0,0,0,0.2)` for depth
+- Added box-shadow transition to style transition property
+- Updated empty slot placeholder to match new button size (100x52)
+- Increased row gap from 10→12, section gap from 6→8
+- Increased active border from 2px→2.5px
+- Added leaderboard reset logic constants and interface to useGame.ts
+- Added loadLeaderboardResets, saveLeaderboardResets functions
+- Added needsWeeklyReset, needsMonthlyReset, needsYearlyReset functions
+- Integrated reset check into useState initializer (avoids lint error with setState in effect)
+- Weekly reset: resets bestScore, modBestScore to 0
+- Monthly reset: resets modBestScore to 0
+- Yearly reset: resets bestScore, modBestScore to 0
+- Reset timestamps stored in separate localStorage key with ISO dates
+- Lint check passes with 0 errors
+
+Stage Summary:
+- GameBoard power-up buttons now larger (100x52) with glow effects and press animations
+- Idle state has subtle color-matched glow shadow
+- Press effect uses scale-0.9 with enhanced glow burst
+- Hover effect uses scale-1.05 with deeper shadow
+- Leaderboard reset system implemented with localStorage timestamp tracking
+- Weekly/monthly/yearly resets applied during state initialization

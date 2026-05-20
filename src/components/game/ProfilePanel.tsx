@@ -303,7 +303,7 @@ export function ProfilePanel({
                 <StatBox icon={<Trophy className="w-4 h-4" />} label="Best Score" value={bestScore.toLocaleString()} color="#EDC22E" />
                 <StatBox icon={<Swords className="w-4 h-4" />} label="Mod Best" value={modBestScore > 0 ? modBestScore.toLocaleString() : '-'} color="#F65E3B" />
                 <StatBox icon={<Target className="w-4 h-4" />} label="Level XP" value={`${levelXP.toLocaleString()} / ${nextLevelThreshold.toLocaleString()}`} color="#00E676" />
-                <StatBox icon={<Coins className="w-4 h-4" />} label="Coins" value={formatCoinCount(coins)} subtitle={`≈ ₹${(coins / 1000).toFixed(1).replace(/\.0$/, '')}`} color="#EDC22E" />
+                <StatBox icon={<Coins className="w-4 h-4" />} label="Coins" value={formatCoinCount(coins)} color="#EDC22E" />
                 <StatBox icon={<Calendar className="w-4 h-4" />} label="Games Today" value={`${gamesPlayedToday}/${maxGamesPerDay}`} color="#00FFFF" />
                 <StatBox icon={<Users className="w-4 h-4" />} label="Invited" value={invitedUsers.length.toString()} color="#F59563" />
               </div>

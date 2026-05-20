@@ -789,13 +789,13 @@ function AbilityBtn({ emoji, count, color, label }: { emoji: string; count: numb
   const isActive = count > 0
   return (
     <button
-      className="flex flex-col items-center justify-center gap-0 rounded-lg transition-transform active:scale-95"
+      className="flex flex-col items-center justify-center gap-0 rounded-lg transition-transform active:scale-90 hover:scale-105 hover:shadow-lg"
       style={{
-        minWidth: '40px',
-        minHeight: '28px',
-        padding: '3px 4px',
+        minWidth: '48px',
+        minHeight: '36px',
+        padding: '5px 6px',
         backgroundColor: isActive ? `${color}20` : 'rgba(255,255,255,0.04)',
-        border: `1.5px solid ${isActive ? `${color}55` : 'rgba(255,255,255,0.15)'}`,
+        border: `2px solid ${isActive ? `${color}55` : 'rgba(255,255,255,0.15)'}`,
         boxShadow: isActive ? `0 0 10px ${color}40, inset 0 0 8px ${color}15` : 'none',
       }}
     >

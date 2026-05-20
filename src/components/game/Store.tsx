@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Coins, Zap, Clock, AlertCircle, Tv, Copy, Check, Upload, FileText, ImageIcon, Trash2 } from 'lucide-react'
+import { X, Coins, Zap, Clock, AlertCircle, Copy, Check, Upload, FileText, ImageIcon, Trash2 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -800,33 +800,8 @@ function AbilityCard({
 // ─── Ability Tab ─────────────────────────────────────────────────────────────
 
 function AbilityTab({ onBuy, onCoinBuy, coins }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number }) {
-  const [canWatchAd, setCanWatchAd] = useState(() => canWatchFreeAd())
-
-  const handleWatchAd = useCallback(() => {
-    localStorage.setItem('mergeMaster2048_lastFreeAd', new Date().toISOString())
-    setCanWatchAd(false)
-  }, [])
-
   return (
     <div className="space-y-4">
-      {/* Regular Abilities - Coin Purchases */}
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <Coins className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
-          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#EDC22E' }}>
-            ABILITIES (COINS)
-          </h4>
-          <span className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(237,194,46,0.15)', color: '#EDC22E' }}>
-            15 per 2 weeks
-          </span>
-        </div>
-        <div className="space-y-2">
-          {getEffectiveRegularAbilities().map((item) => (
-            <AbilityCard key={item.id} item={item} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} />
-          ))}
-        </div>
-      </div>
-
       {/* 5x Multiplier - Real Money */}
       <div>
         <div className="flex items-center gap-2 mb-2">
@@ -863,51 +838,22 @@ function AbilityTab({ onBuy, onCoinBuy, coins }: { onBuy: (item: string, price: 
         </div>
       </div>
 
-      {/* Free Ad Section */}
-      <div
-        className="p-4 rounded-xl text-center"
-        style={{
-          backgroundColor: 'rgba(0,230,118,0.06)',
-          border: '1px solid rgba(0,230,118,0.12)',
-        }}
-      >
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <Tv className="w-4 h-4" style={{ color: '#00E676' }} />
-          <h4 className="text-xs font-extrabold" style={{ color: '#00E676' }}>
-            FREE REWARD
+      {/* Regular Abilities - Coin Purchases */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <Coins className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
+          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#EDC22E' }}>
+            ABILITIES (COINS)
           </h4>
+          <span className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(237,194,46,0.15)', color: '#EDC22E' }}>
+            15 per 2 weeks
+          </span>
         </div>
-        <p className="text-[10px] mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>
-          Watch an ad for 1 free spin ticket. Available every 3 days.
-        </p>
-        <p className="text-[9px] mb-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
-          Not available for 5x and 2.5x multipliers
-        </p>
-        {canWatchAd ? (
-          <button
-            onClick={handleWatchAd}
-            className="px-5 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-2 mx-auto transition-transform hover:scale-105 active:scale-95"
-            style={{
-              background: 'linear-gradient(135deg, #00E676, #00C853)',
-              color: '#FFFFFF',
-              boxShadow: '0 2px 12px rgba(0,230,118,0.3)',
-            }}
-          >
-            📺 Watch Ad for 1 Free Spin
-          </button>
-        ) : (
-          <div
-            className="px-5 py-2 rounded-xl font-bold text-[10px] mx-auto inline-flex items-center gap-1.5"
-            style={{
-              backgroundColor: 'rgba(255,255,255,0.06)',
-              color: 'rgba(255,255,255,0.3)',
-              border: '1px solid rgba(255,255,255,0.06)',
-            }}
-          >
-            <Clock className="w-3 h-3" />
-            Cooldown active — come back in 3 days
-          </div>
-        )}
+        <div className="space-y-2">
+          {getEffectiveRegularAbilities().map((item) => (
+            <AbilityCard key={item.id} item={item} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} />
+          ))}
+        </div>
       </div>
     </div>
   )
