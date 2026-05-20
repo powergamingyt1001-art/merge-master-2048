@@ -112,8 +112,8 @@ export function InvitePanel({
                 <p className="text-xs font-bold mb-1" style={{ color: '#00E676' }}>🎁 New User Gets:</p>
                 <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.6)' }}>500 Coins + 2 Spins + 2 Magnets</p>
                 <p className="text-xs font-bold mt-1.5 mb-0.5" style={{ color: '#EDC22E' }}>💰 You Get Commission:</p>
-                <p className="text-[10px]" style={{ color: '#00E676' }}>🏆 30% on WIN &nbsp;•&nbsp; 💸 2% on LOSS</p>
-                <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>From every invitee&apos;s game forever!</p>
+                <p className="text-[10px]" style={{ color: '#00E676' }}>🏆 20% on WIN &nbsp;•&nbsp; 💸 2% on LOSS</p>
+                <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>From every invitee&apos;s game forever! Up to 10 levels deep!</p>
               </div>
 
               {/* QR Code */}

@@ -287,46 +287,81 @@ export async function getInvitedBy(
 
 // ============================================================
 // COMMISSION SYSTEM - When invitee earns, referrer gets commission
-// 30% on WIN, 2% on LOSS per game
+// 20% on WIN, 2% on LOSS per game (Level 1 direct)
+// Multi-level: up to 10 levels deep with decreasing rates
 // ============================================================
 
 // Call this when a player earns tournament points or coins
-// It will calculate and add commission to the referrer based on game result
+// It will calculate and add commission to referrers up the chain (max 10 levels)
 export async function processCommissionForReferrer(
   playerId: string,
   amountEarned: number,
   isWin: boolean = true
 ): Promise<void> {
   try {
-    // Find who invited this player
-    const invitedByRef = ref(db, `invitedBy/${playerId}`)
-    const snapshot = await get(invitedByRef)
-    if (!snapshot.exists()) return
+    // Walk up the referral chain for up to 10 levels
+    let currentId = playerId
+    for (let level = 1; level <= 10; level++) {
+      const invitedByRef = ref(db, `invitedBy/${currentId}`)
+      const snapshot = await get(invitedByRef)
+      if (!snapshot.exists()) break // No more referrers up the chain
 
-    const referrerId = snapshot.val()
-    const commissionRate = isWin ? 0.30 : 0.02 // 30% on WIN, 2% on LOSS
-    const commissionAmount = Math.floor(amountEarned * commissionRate)
+      const referrerId = snapshot.val()
 
-    if (commissionAmount <= 0) return
+      // Don't process self-referral
+      if (referrerId === playerId) break
 
-    // Update the referral record with total commission
-    const referralRef = ref(db, `referrals/${referrerId}/${playerId}`)
-    const referralSnapshot = await get(referralRef)
-    if (referralSnapshot.exists()) {
-      const currentData = referralSnapshot.val()
-      const newTotal = (currentData.commissionEarned || 0) + commissionAmount
-      await update(referralRef, { commissionEarned: newTotal })
+      // Calculate commission rate based on level
+      let commissionRate: number
+      if (level === 1) {
+        commissionRate = isWin ? 0.20 : 0.02
+      } else if (level === 2) {
+        commissionRate = isWin ? 0.10 : 0.01
+      } else if (level === 3) {
+        commissionRate = isWin ? 0.05 : 0.005
+      } else {
+        commissionRate = isWin ? 0.02 : 0.002
+      }
+
+      const commissionAmount = Math.floor(amountEarned * commissionRate)
+      if (commissionAmount <= 0) {
+        currentId = referrerId
+        continue
+      }
+
+      // Update the referral record with total commission
+      const referralRef = ref(db, `referrals/${referrerId}/${playerId}`)
+      const referralSnapshot = await get(referralRef)
+      if (referralSnapshot.exists()) {
+        const currentData = referralSnapshot.val()
+        const newTotal = (currentData.commissionEarned || 0) + commissionAmount
+        await update(referralRef, { commissionEarned: newTotal })
+      } else {
+        // For multi-level, create an entry if it doesn't exist
+        await set(referralRef, {
+          id: playerId,
+          name: 'Multi-level referral',
+          avatar: '🔗',
+          joinedAt: Date.now(),
+          commissionEarned: commissionAmount,
+          level: level,
+        })
+      }
+
+      // Add commission notification for referrer
+      const notificationRef = push(ref(db, `notifications/${referrerId}`))
+      await set(notificationRef, {
+        type: 'commission',
+        amount: commissionAmount,
+        fromPlayerId: playerId,
+        level: level,
+        timestamp: Date.now(),
+        claimed: false,
+      })
+
+      // Move up the chain
+      currentId = referrerId
     }
-
-    // Add commission notification for referrer
-    const notificationRef = push(ref(db, `notifications/${referrerId}`))
-    await set(notificationRef, {
-      type: 'commission',
-      amount: commissionAmount,
-      fromPlayerId: playerId,
-      timestamp: Date.now(),
-      claimed: false,
-    })
   } catch (err) {
     console.warn('Firebase processCommissionForReferrer failed:', err)
   }

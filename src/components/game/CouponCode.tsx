@@ -14,7 +14,7 @@ interface CouponCodeProps {
   blastCount: number
   spinTickets: number
   onAddCoins: (amount: number) => void
-  onAddPowerUp: (pu: 'hammer' | 'magnet' | 'blast', count: number) => void
+  onAddPowerUp: (pu: 'hammer' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x' | 'extraTime', count: number) => void
   onAddSpinTickets: (count: number) => void
   onAddNotification: (title: string, message: string, type: string, emoji: string) => void
 }
@@ -333,7 +333,7 @@ function getCoinAmountFromItem(item: string): number {
   return 500
 }
 
-type AdminTab = 'payments' | 'coupons' | 'prices' | 'history' | 'users'
+type AdminTab = 'payments' | 'coupons' | 'prices' | 'history' | 'users' | 'partner'
 
 // Custom price overrides stored in localStorage
 interface CustomPriceOverride {
@@ -351,6 +351,76 @@ function loadCustomPrices(): CustomPriceOverride | null {
 
 function saveCustomPrices(prices: CustomPriceOverride) {
   localStorage.setItem('adminCustomPrices', JSON.stringify(prices))
+}
+
+// ============================================================
+// PARTNER LINKS - Stored in localStorage
+// ============================================================
+
+interface PartnerLink {
+  id: string
+  role: 'payment' | 'skill' | 'coupon'
+  token: string
+  name: string
+  createdAt: number
+  lastUsedAt: number | null
+  active: boolean
+}
+
+const PARTNER_LINKS_KEY = 'adminPartnerLinks'
+
+function loadPartnerLinks(): PartnerLink[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const data = localStorage.getItem(PARTNER_LINKS_KEY)
+    return data ? JSON.parse(data) : []
+  } catch {
+    return []
+  }
+}
+
+function savePartnerLinks(links: PartnerLink[]) {
+  localStorage.setItem(PARTNER_LINKS_KEY, JSON.stringify(links))
+}
+
+// ============================================================
+// TOURNAMENT PRIZES - Stored in localStorage
+// ============================================================
+
+interface TournamentPrizes {
+  rank1: number
+  rank2: number
+  rank3: number
+  rank4: number
+  rank5: number
+  entryFee: number
+  weeklyBonus: number
+}
+
+const TOURNAMENT_PRIZES_KEY = 'adminTournamentPrizes'
+
+const DEFAULT_TOURNAMENT_PRIZES: TournamentPrizes = {
+  rank1: 700,
+  rank2: 400,
+  rank3: 250,
+  rank4: 150,
+  rank5: 100,
+  entryFee: 50,
+  weeklyBonus: 400,
+}
+
+function loadTournamentPrizes(): TournamentPrizes {
+  if (typeof window === 'undefined') return DEFAULT_TOURNAMENT_PRIZES
+  try {
+    const data = localStorage.getItem(TOURNAMENT_PRIZES_KEY)
+    return data ? JSON.parse(data) : DEFAULT_TOURNAMENT_PRIZES
+  } catch {
+    return DEFAULT_TOURNAMENT_PRIZES
+  }
+}
+
+function saveTournamentPrizes(prizes: TournamentPrizes) {
+  localStorage.setItem(TOURNAMENT_PRIZES_KEY, JSON.stringify(prizes))
 }
 
 // ============================================================
@@ -511,6 +581,44 @@ export function CouponCode({
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(interval)
+  }, [])
+
+  // Partner state
+  const [partnerRole, setPartnerRole] = useState<string | null>(null)
+  const [partnerMode, setPartnerMode] = useState(false)
+  const [partnerLinks, setPartnerLinks] = useState<PartnerLink[]>(() => loadPartnerLinks())
+  const [partnerNewRole, setPartnerNewRole] = useState<'payment' | 'skill' | 'coupon'>('payment')
+  const [partnerNewName, setPartnerNewName] = useState('')
+  const [generatedLink, setGeneratedLink] = useState<string | null>(null)
+  const [tournamentPrizes, setTournamentPrizes] = useState<TournamentPrizes>(() => loadTournamentPrizes())
+
+  // Check for partner access from URL
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const partnerParam = params.get('partner')
+      if (partnerParam) {
+        setPartnerRole(partnerParam)
+        setPartnerMode(true)
+        // Auto-open admin panel with restricted access
+        setShowAdminPanel(true)
+        // Set the correct tab based on role
+        if (partnerParam.startsWith('PAY')) {
+          setAdminTab('payments')
+        } else if (partnerParam.startsWith('SKILL')) {
+          setAdminTab('prices')
+        } else if (partnerParam.startsWith('COUPON')) {
+          setAdminTab('coupons')
+        }
+        // Update lastUsedAt for this partner link
+        const links = loadPartnerLinks()
+        const updatedLinks = links.map(l =>
+          l.token === partnerParam ? { ...l, lastUsedAt: Date.now() } : l
+        )
+        savePartnerLinks(updatedLinks)
+        setPartnerLinks(updatedLinks)
+      }
+    }
   }, [])
 
   // Users tab state
@@ -896,41 +1004,56 @@ export function CouponCode({
     const purchaseDate = new Date(entry.date).getTime()
     const now = Date.now()
     const hoursSincePurchase = (now - purchaseDate) / (1000 * 60 * 60)
-    const isDelayed = hoursSincePurchase > 12
+    const isDelayed = hoursSincePurchase > 24
 
     // Check if it's a store order
     const isStoreOrder = entry.id.startsWith('store_')
     const storeOrderId = isStoreOrder ? entry.id.replace('store_', '') : null
 
     if (isStoreOrder && storeOrderId) {
+      const isInrAbility = entry.item.includes('5x') || entry.item.includes('2.5x')
+
+      if (isInrAbility) {
+        // Add the actual ability instead of coins
+        if (entry.item.includes('5x')) {
+          onAddPowerUp('multiplier5x', entry.abilityCount || entry.coinAmount || 5)
+        } else if (entry.item.includes('2.5x')) {
+          onAddPowerUp('multiplier2_5x', entry.abilityCount || entry.coinAmount || 5)
+        }
+        onAddNotification('Ability Delivered! ✅', `${entry.item} has been delivered to your inventory!`, 'reward', '📦')
+      } else {
+        // Coin pack - add coins
+        let coinAmount = entry.coinAmount || getCoinAmountFromItem(entry.item)
+        if (isDelayed) coinAmount = Math.floor(coinAmount * 2)
+        onAddCoins(coinAmount)
+        const bonusText = isDelayed ? ` (2x bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
+        onAddNotification('Order Approved! ✅', `${entry.item} delivered! ${coinAmount} coins added${bonusText}`, 'reward', '📦')
+      }
+
       // Update store order status
       const updatedOrders = storeOrders.map(o =>
         o.id === storeOrderId ? { ...o, status: 'approved' as const } : o
       )
       setStoreOrders(updatedOrders)
       saveStoreOrders(updatedOrders)
-
-      let coinAmount = entry.coinAmount || getCoinAmountFromItem(entry.item)
-      if (isDelayed) coinAmount = Math.floor(coinAmount * 1.5)
-      onAddCoins(coinAmount)
-
-      const bonusText = isDelayed ? ` (+50% bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
-      onAddNotification('Order Approved! ✅', `${entry.item} delivered! ${coinAmount} coins added${bonusText}`, 'reward', '📦')
     } else if (entry.type === 'inr_ability') {
-      // INR ability purchase (5x/2.5x) - mark as delivered
+      // INR ability purchase (5x/2.5x) - add the actual ability
+      if (entry.item.includes('5x')) {
+        onAddPowerUp('multiplier5x', entry.abilityCount || 5)
+      } else if (entry.item.includes('2.5x')) {
+        onAddPowerUp('multiplier2_5x', entry.abilityCount || 5)
+      }
       const updated = purchaseHistory.map(p =>
         p.id === entry.id ? { ...p, status: 'Delivered' as const } : p
       )
       setPurchaseHistory(updated)
       savePurchaseHistory(updated)
-
-      const bonusText = isDelayed ? ` (+50% bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
-      onAddNotification('Ability Approved! ✅', `${entry.item} delivered!${bonusText}`, 'reward', '📦')
+      onAddNotification('Ability Approved! ✅', `${entry.item} delivered to your inventory!`, 'reward', '📦')
     } else {
       // Coin or coin-price ability purchase
       let coinAmount = entry.coinAmount || getCoinAmountFromItem(entry.item)
       if (isDelayed) {
-        coinAmount = Math.floor(coinAmount * 1.5) // 50% bonus for delayed
+        coinAmount = Math.floor(coinAmount * 2) // 2x bonus for delayed
       }
 
       onAddCoins(coinAmount)
@@ -942,10 +1065,10 @@ export function CouponCode({
       setPurchaseHistory(updated)
       savePurchaseHistory(updated)
 
-      const bonusText = isDelayed ? ` (+50% bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
+      const bonusText = isDelayed ? ` (2x bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
       onAddNotification('Order Approved! ✅', `${entry.item} delivered! ${coinAmount} coins added${bonusText}`, 'reward', '📦')
     }
-  }, [purchaseHistory, storeOrders, onAddCoins, onAddNotification])
+  }, [purchaseHistory, storeOrders, onAddCoins, onAddPowerUp, onAddNotification])
 
   // Deny a purchase (works with both purchaseHistory and storeOrders)
   const handleDenyPurchase = useCallback((entry: PurchaseHistoryEntry) => {
@@ -1436,15 +1559,22 @@ export function CouponCode({
               </button>
             </div>
 
-            {/* Admin Tabs */}
-            <div className="flex border-b shrink-0" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+            {/* Admin Tabs - Hidden on mobile, replaced by footer nav */}
+            <div className="hidden sm:flex border-b shrink-0" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
               {[
                 { key: 'payments' as AdminTab, label: 'Payments', icon: <Clock className="w-3 h-3" /> },
                 { key: 'coupons' as AdminTab, label: 'Coupons', icon: <Ticket className="w-3 h-3" /> },
                 { key: 'prices' as AdminTab, label: 'Prices', icon: <Coins className="w-3 h-3" /> },
                 { key: 'history' as AdminTab, label: 'History', icon: <ChevronRight className="w-3 h-3" /> },
                 { key: 'users' as AdminTab, label: 'Users', icon: <Ban className="w-3 h-3" /> },
-              ].map(tab => (
+                { key: 'partner' as AdminTab, label: 'Partner', icon: <UsersIcon className="w-3 h-3" /> },
+              ].filter(t => {
+                if (!partnerMode) return true
+                if (partnerRole?.startsWith('PAY')) return t.key === 'payments'
+                if (partnerRole?.startsWith('SKILL')) return t.key === 'prices'
+                if (partnerRole?.startsWith('COUPON')) return t.key === 'coupons'
+                return false
+              }).map(tab => (
                 <button
                   key={tab.key}
                   onClick={() => setAdminTab(tab.key)}
@@ -1483,9 +1613,9 @@ export function CouponCode({
                           <div className="space-y-1.5 max-h-[60vh] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
                             {pendingPurchases.map(entry => {
                               const hoursSince = (Date.now() - new Date(entry.date).getTime()) / (1000 * 60 * 60)
-                              const isDelayed = hoursSince > 12
+                              const isDelayed = hoursSince > 24
                               const coinAmount = entry.coinAmount || getCoinAmountFromItem(entry.item)
-                              const bonusAmount = isDelayed ? Math.floor(coinAmount * 0.5) : 0
+                              const bonusAmount = isDelayed ? coinAmount : 0
 
                               return (
                                 <div key={entry.id} className="p-2.5 rounded-lg"
@@ -1499,7 +1629,7 @@ export function CouponCode({
                                       style={{ backgroundColor: 'rgba(246,94,59,0.1)' }}>
                                       <span className="text-[10px]">⚠️</span>
                                       <span className="text-[7px] font-bold" style={{ color: '#F65E3B' }}>
-                                        12hr+ delay - give 50% bonus! (+{bonusAmount} coins)
+                                        24hr+ delay - give 2x bonus! (+{bonusAmount} coins)
                                       </span>
                                     </div>
                                   )}
@@ -2574,6 +2704,311 @@ export function CouponCode({
                         )}
                       </div>
                     )}
+
+                    {/* ====== PARTNER TAB ====== */}
+                    {adminTab === 'partner' && !partnerMode && (
+                      <div className="space-y-3">
+                        {/* Generate Partner Link */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(124,77,255,0.06)', border: '1px solid rgba(124,77,255,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <UsersIcon className="w-3 h-3" style={{ color: '#7C4DFF' }} />
+                            <p className="text-[9px] font-bold" style={{ color: '#7C4DFF' }}>Generate Partner Link</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Name:</p>
+                              <input
+                                type="text"
+                                value={partnerNewName}
+                                onChange={(e) => setPartnerNewName(e.target.value)}
+                                placeholder="Partner name..."
+                                className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              />
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Role:</p>
+                              <select
+                                value={partnerNewRole}
+                                onChange={(e) => setPartnerNewRole(e.target.value as 'payment' | 'skill' | 'coupon')}
+                                className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              >
+                                <option value="payment">💳 Payment Approver</option>
+                                <option value="skill">💰 Skill/Settlement Manager</option>
+                                <option value="coupon">🎟️ Coupon Manager</option>
+                              </select>
+                            </div>
+                            <button
+                              onClick={() => {
+                                const prefix = partnerNewRole === 'payment' ? 'PAY' : partnerNewRole === 'skill' ? 'SKILL' : 'COUPON'
+                                const token = `${prefix}_${Math.random().toString(36).substring(2, 10).toUpperCase()}`
+                                const name = partnerNewName.trim() || `${partnerNewRole} Partner`
+                                const newLink: PartnerLink = {
+                                  id: `pl_${Date.now()}`,
+                                  role: partnerNewRole,
+                                  token,
+                                  name,
+                                  createdAt: Date.now(),
+                                  lastUsedAt: null,
+                                  active: true,
+                                }
+                                const updated = [...partnerLinks, newLink]
+                                setPartnerLinks(updated)
+                                savePartnerLinks(updated)
+                                const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : ''
+                                setGeneratedLink(`${baseUrl}?partner=${token}`)
+                                setPartnerNewName('')
+                              }}
+                              className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                              style={{ background: 'linear-gradient(135deg, #7C4DFF, #536DFE)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(124,77,255,0.3)' }}
+                            >
+                              🤝 Generate Link
+                            </button>
+                            {generatedLink && (
+                              <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.15)' }}>
+                                <p className="text-[7px] font-bold mb-1" style={{ color: '#00E676' }}>Generated Link:</p>
+                                <div className="flex items-center gap-1">
+                                  <p className="text-[7px] font-mono break-all flex-1" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                                    {generatedLink}
+                                  </p>
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(generatedLink)
+                                    }}
+                                    className="shrink-0 text-[7px] font-bold px-2 py-1 rounded transition-transform active:scale-95"
+                                    style={{ backgroundColor: 'rgba(237,194,46,0.1)', color: '#EDC22E' }}
+                                  >
+                                    📋 Copy
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Active Partners List */}
+                        <div>
+                          <p className="text-[9px] font-bold mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                            Partner Links ({partnerLinks.length})
+                          </p>
+                          {partnerLinks.length === 0 ? (
+                            <div className="text-center py-4">
+                              <span className="text-2xl block mb-1">🤝</span>
+                              <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No partner links yet</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5 max-h-40 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                              {partnerLinks.map(link => {
+                                const roleEmoji = link.role === 'payment' ? '💳' : link.role === 'skill' ? '💰' : '🎟️'
+                                const roleLabel = link.role === 'payment' ? 'Payment Approver' : link.role === 'skill' ? 'Skill/Settlement Mgr' : 'Coupon Manager'
+                                return (
+                                  <div key={link.id} className="p-2 rounded-lg flex items-center justify-between"
+                                    style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[10px]">{roleEmoji}</span>
+                                        <p className="text-[9px] font-bold truncate" style={{ color: '#FFFFFF' }}>{link.name}</p>
+                                      </div>
+                                      <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                        {roleLabel} • Token: <span className="font-mono">{link.token}</span>
+                                      </p>
+                                      <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                        Created: {new Date(link.createdAt).toLocaleDateString()}
+                                        {link.lastUsedAt && ` • Last used: ${new Date(link.lastUsedAt).toLocaleDateString()}`}
+                                      </p>
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full"
+                                        style={{
+                                          backgroundColor: link.active ? 'rgba(0,230,118,0.1)' : 'rgba(246,94,59,0.1)',
+                                          color: link.active ? '#00E676' : '#F65E3B',
+                                        }}>
+                                        {link.active ? 'Active' : 'Inactive'}
+                                      </span>
+                                      <button
+                                        onClick={() => {
+                                          const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : ''
+                                          const url = `${baseUrl}?partner=${link.token}`
+                                          navigator.clipboard.writeText(url)
+                                        }}
+                                        className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-95"
+                                        style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '1px solid rgba(237,194,46,0.2)' }}
+                                        title="Copy link"
+                                      >
+                                        <span className="text-[8px]">📋</span>
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          const updated = partnerLinks.map(l =>
+                                            l.id === link.id ? { ...l, active: !l.active } : l
+                                          )
+                                          setPartnerLinks(updated)
+                                          savePartnerLinks(updated)
+                                        }}
+                                        className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-95"
+                                        style={{ backgroundColor: link.active ? 'rgba(246,94,59,0.1)' : 'rgba(0,230,118,0.1)', border: `1px solid ${link.active ? 'rgba(246,94,59,0.2)' : 'rgba(0,230,118,0.2)'}` }}
+                                        title={link.active ? 'Deactivate' : 'Activate'}
+                                      >
+                                        <span className="text-[8px]">{link.active ? '⏸️' : '▶️'}</span>
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          const updated = partnerLinks.filter(l => l.id !== link.id)
+                                          setPartnerLinks(updated)
+                                          savePartnerLinks(updated)
+                                        }}
+                                        className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-95"
+                                        style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)' }}
+                                        title="Revoke link"
+                                      >
+                                        <Trash2 className="w-2.5 h-2.5" style={{ color: '#F65E3B' }} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Tournament Prize Editor */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <span className="text-[10px]">🏆</span>
+                            <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Tournament Prizes</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            {[
+                              { key: 'rank1' as const, label: '1st Place' },
+                              { key: 'rank2' as const, label: '2nd Place' },
+                              { key: 'rank3' as const, label: '3rd Place' },
+                              { key: 'rank4' as const, label: '4th Place' },
+                              { key: 'rank5' as const, label: '5th Place' },
+                            ].map(item => (
+                              <div key={item.key} className="flex items-center gap-1.5">
+                                <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>{item.label}:</p>
+                                <input
+                                  type="number"
+                                  value={tournamentPrizes[item.key]}
+                                  onChange={(e) => setTournamentPrizes(prev => ({ ...prev, [item.key]: parseInt(e.target.value) || 0 }))}
+                                  min={0}
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                                />
+                                <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>coins</span>
+                              </div>
+                            ))}
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Entry Fee:</p>
+                              <input
+                                type="number"
+                                value={tournamentPrizes.entryFee}
+                                onChange={(e) => setTournamentPrizes(prev => ({ ...prev, entryFee: parseInt(e.target.value) || 0 }))}
+                                min={0}
+                                className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              />
+                              <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>coins</span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                saveTournamentPrizes(tournamentPrizes)
+                              }}
+                              className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                              style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(237,194,46,0.3)' }}
+                            >
+                              🏆 SAVE TOURNAMENT PRIZES
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Weekly Prize Editor */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <span className="text-[10px]">🎁</span>
+                            <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>Weekly Bonus</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Amount:</p>
+                              <input
+                                type="number"
+                                value={tournamentPrizes.weeklyBonus}
+                                onChange={(e) => setTournamentPrizes(prev => ({ ...prev, weeklyBonus: parseInt(e.target.value) || 0 }))}
+                                min={0}
+                                className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              />
+                              <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>coins</span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                saveTournamentPrizes(tournamentPrizes)
+                              }}
+                              className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                              style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(0,230,118,0.3)' }}
+                            >
+                              🎁 SAVE WEEKLY BONUS
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Partner mode restricted notice */}
+                    {adminTab === 'partner' && partnerMode && (
+                      <div className="text-center py-4">
+                        <span className="text-2xl block mb-1">🔒</span>
+                        <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Partner management is only available to the owner</p>
+                      </div>
+                    )}
+            </div>
+
+            {/* Admin Footer Navigation */}
+            <div className="flex-shrink-0 sticky bottom-0 z-20 flex items-center justify-around py-2 px-1"
+              style={{ 
+                backgroundColor: 'rgba(0,0,0,0.4)', 
+                borderTop: '1px solid rgba(255,255,255,0.08)',
+                backdropFilter: 'blur(10px)'
+              }}>
+              {[
+                { key: 'payments' as AdminTab, icon: '💳', label: 'Pay' },
+                { key: 'coupons' as AdminTab, icon: '🎟️', label: 'Coupon' },
+                { key: 'prices' as AdminTab, icon: '💰', label: 'Price' },
+                { key: 'history' as AdminTab, icon: '📜', label: 'History' },
+                { key: 'users' as AdminTab, icon: '👥', label: 'Users' },
+                { key: 'partner' as AdminTab, icon: '🤝', label: 'Partner' },
+              ].filter(t => {
+                if (!partnerMode) return true
+                if (partnerRole?.startsWith('PAY')) return t.key === 'payments'
+                if (partnerRole?.startsWith('SKILL')) return t.key === 'prices'
+                if (partnerRole?.startsWith('COUPON')) return t.key === 'coupons'
+                return false
+              }).map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setAdminTab(t.key)}
+                  className="flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-transform active:scale-95"
+                  style={{
+                    backgroundColor: adminTab === t.key ? 'rgba(237,194,46,0.15)' : 'transparent',
+                    border: adminTab === t.key ? '1px solid rgba(237,194,46,0.3)' : '1px solid transparent',
+                  }}
+                >
+                  <span className="text-sm">{t.icon}</span>
+                  <span className="text-[7px] font-bold" style={{ color: adminTab === t.key ? '#EDC22E' : 'rgba(255,255,255,0.4)' }}>
+                    {t.label}
+                  </span>
+                  {t.key === 'payments' && pendingPurchases.length > 0 && (
+                    <span className="text-[6px] px-1 rounded-full absolute -top-1 -right-1" style={{ backgroundColor: '#F65E3B', color: '#FFFFFF' }}>
+                      {pendingPurchases.length}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
           </motion.div>
         )}

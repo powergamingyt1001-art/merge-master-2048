@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Coins, Zap, Clock, AlertCircle, Copy, Check, Upload, FileText, ImageIcon, Trash2 } from 'lucide-react'
 
@@ -1041,6 +1041,13 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
     itemQuantity: 0,
   })
 
+  // Re-read orders when switching to history tab (reflects admin approval changes)
+  const handleTabChange = useCallback((tab: TabId) => {
+    setActiveTab(tab)
+    if (tab === 'history') {
+      setOrders(loadOrders())
+    }
+  }, [])
   // Handle coin-based ability purchase
   const handleCoinBuy = useCallback(
     (item: AbilityItem) => {
@@ -1167,7 +1174,7 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
               {tabs.map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => handleTabChange(tab.id)}
                   className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-bold rounded-t-xl transition-all"
                   style={{
                     backgroundColor:
@@ -1246,7 +1253,7 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
               <div className="flex items-center justify-center gap-1.5">
                 <AlertCircle className="w-3 h-3" style={{ color: '#EDC22E' }} />
                 <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                  Delivery in 1-2 hrs · Delayed beyond 12 hrs ={' '}
+                  Delivery in 1-2 hrs · Delayed beyond 24 hrs ={' '}
                   <span style={{ color: '#EDC22E', fontWeight: 'bold' }}>2x BONUS!</span>
                 </p>
               </div>

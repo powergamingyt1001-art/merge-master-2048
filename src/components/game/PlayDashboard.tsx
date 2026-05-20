@@ -93,14 +93,15 @@ interface PlayDashboardProps {
 
 const COIN_GAME_MODES = [
   { fee: 50, win: 100, color: '#00E676', label: '₹50' },
-  { fee: 100, win: 200, color: '#00FFFF', label: '₹100' },
-  { fee: 200, win: 400, color: '#EDC22E', label: '₹200' },
-  { fee: 500, win: 1000, color: '#FF7A00', label: '₹500' },
-  { fee: 1000, win: 2000, color: '#F65E3B', label: '₹1000' },
-  { fee: 2000, win: 4000, color: '#FF4081', label: '₹2K' },
-  { fee: 3000, win: 6000, color: '#E040FB', label: '₹3K' },
-  { fee: 4000, win: 8000, color: '#7C4DFF', label: '₹4K' },
-  { fee: 5000, win: 10000, color: '#FFD700', label: '₹5K' },
+  { fee: 200, win: 400, color: '#00FFFF', label: '₹200' },
+  { fee: 500, win: 1000, color: '#EDC22E', label: '₹500' },
+  { fee: 1000, win: 2000, color: '#FF7A00', label: '₹1K' },
+  { fee: 3000, win: 6000, color: '#F65E3B', label: '₹3K' },
+  { fee: 5000, win: 10000, color: '#FF4081', label: '₹5K' },
+  { fee: 7000, win: 14000, color: '#E040FB', label: '₹7K' },
+  { fee: 15000, win: 30000, color: '#7C4DFF', label: '₹15K' },
+  { fee: 20000, win: 40000, color: '#FFD700', label: '₹20K' },
+  { fee: 50000, win: 100000, color: '#FF1744', label: '₹50K' },
 ]
 
 /** Format large numbers: 1000 → 1K, 1000000 → 1M */
@@ -370,6 +371,11 @@ export function PlayDashboard({
             </div>
           </div>
 
+          {/* Banner Ad - Between abilities and Play */}
+          <div className="w-full">
+            <AdsterraBanner320x50 />
+          </div>
+
           {/* Central PLAY Button */}
           <div className="flex items-center gap-3 w-full justify-center">
             <button onClick={handlePlayClassic}
@@ -456,8 +462,8 @@ export function PlayDashboard({
                             border: `1px solid ${canPlay ? `${mode.color}25` : 'rgba(255,255,255,0.04)'}`,
                             opacity: canPlay ? 1 : 0.4,
                           }}>
-                          <span className="text-[8px] font-extrabold" style={{ color: mode.color }}>{mode.fee}</span>
-                          <span className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>→{mode.win}</span>
+                          <span className="text-[7px] font-extrabold" style={{ color: mode.color }}>{mode.label}</span>
+                          <span className="text-[5px]" style={{ color: 'rgba(255,255,255,0.4)' }}>→{mode.win >= 1000 ? `${(mode.win/1000).toFixed(mode.win%1000===0?0:1)}K` : mode.win}</span>
                         </button>
                       )
                     })}
@@ -528,7 +534,7 @@ export function PlayDashboard({
               <span className="text-lg">🤝</span>
               <div className="text-left">
                 <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>Invite</p>
-                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>30% Win / 2% Loss</p>
+                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>20% Win / 2% Loss</p>
               </div>
             </button>
           </div>

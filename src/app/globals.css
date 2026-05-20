@@ -76,15 +76,16 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  --game-bg-1: #f8f9fa;
-  --game-bg-2: #e9ecef;
-  --game-bg-3: #dee2e6;
-  --game-text: #1a0533;
-  --game-text-secondary: rgba(26, 5, 51, 0.5);
-  --game-glass: rgba(255, 255, 255, 0.7);
-  --game-glass-border: rgba(26, 5, 51, 0.1);
-  --game-glass-light: rgba(255, 255, 255, 0.85);
-  --game-overlay: rgba(255, 255, 255, 0.9);
+  /* Game theme - Light mode with warm golden/amber tones instead of plain white */
+  --game-bg-1: #FFF8E1;
+  --game-bg-2: #FFF3CD;
+  --game-bg-3: #FFE082;
+  --game-text: #3E2723;
+  --game-text-secondary: rgba(62, 39, 35, 0.5);
+  --game-glass: rgba(255, 248, 225, 0.8);
+  --game-glass-border: rgba(255, 193, 7, 0.2);
+  --game-glass-light: rgba(255, 248, 225, 0.9);
+  --game-overlay: rgba(255, 248, 225, 0.9);
 }
 
 .dark {
