@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, ArrowRight } from 'lucide-react'
 import { getRandomLink } from '@/components/ads/AdOverlay'
@@ -13,19 +13,67 @@ interface LoginStreakProps {
   onClaim: (day: number) => void
   onClaimStreakAdBonus?: () => void
   streakAdBonusClaimed?: boolean
+  streakWeek?: number
 }
 
-const STREAK_REWARDS = [
-  { day: 1, label: 'Magnet + 10🪙', emoji: '🧲', color: '#00E676', items: '1x Magnet + 10 coins', coins: 10, abilities: [] as string[] },
-  { day: 2, label: '2 Undo + 50🪙', emoji: '↩️', color: '#00FFFF', items: '2x Undo + 50 coins', coins: 50, abilities: [] as string[] },
-  { day: 3, label: 'Timer + 20🪙', emoji: '⏱️', color: '#F59563', items: '1x Timer Skill + 20 coins', coins: 20, abilities: [] as string[] },
-  { day: 4, label: '5 Hammer + 100🪙', emoji: '🔨', color: '#FF7A00', items: '5x Hammer + 100 coins', coins: 100, abilities: [] as string[] },
-  { day: 5, label: '5 Bomb + 200🪙', emoji: '💣', color: '#F67C5F', items: '5x Bomb + 200 coins', coins: 200, abilities: [] as string[] },
-  { day: 6, label: '1 Room Card', emoji: '🃏', color: '#E040FB', items: '1x Room Card for private games!', coins: 0, abilities: [] as string[] },
-  { day: 7, label: '5x + 2.5x + 250🪙', emoji: '🎰', color: '#EDC22E', items: 'BIG REWARD! 1x 5x + 1x 2.5x + 250 coins! 🎉', coins: 250, abilities: ['⚡ 5x', '💫 2.5x'] },
+// Base rewards for days 1-5 (rotate forward each week)
+const BASE_DAY_REWARDS = [
+  { day: 1, label: 'Magnet + {coins}🪙', emoji: '🧲', color: '#00E676', items: '1x Magnet + {coins} coins', coins: 10, abilities: [] as string[] },
+  { day: 2, label: '2 Undo + {coins}🪙', emoji: '↩️', color: '#00FFFF', items: '2x Undo + {coins} coins', coins: 50, abilities: [] as string[] },
+  { day: 3, label: 'Timer + {coins}🪙', emoji: '⏱️', color: '#F59563', items: '1x Timer Skill + {coins} coins', coins: 20, abilities: [] as string[] },
+  { day: 4, label: '5 Hammer + {coins}🪙', emoji: '🔨', color: '#FF7A00', items: '5x Hammer + {coins} coins', coins: 100, abilities: [] as string[] },
+  { day: 5, label: '5 Bomb + {coins}🪙', emoji: '💣', color: '#F67C5F', items: '5x Bomb + {coins} coins', coins: 200, abilities: [] as string[] },
 ]
 
-export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim, onClaimStreakAdBonus, streakAdBonusClaimed = false }: LoginStreakProps) {
+// Day 6 and 7 are always the same (with coin bonus per week)
+const DAY6_REWARD = { day: 6, label: '1 Room Card', emoji: '🃏', color: '#E040FB', items: '1x Room Card for private games!', coins: 0, abilities: [] as string[] }
+const DAY7_REWARD = { day: 7, label: '5x + 2.5x + {coins}🪙', emoji: '🎰', color: '#EDC22E', items: 'BIG REWARD! 1x 5x + 1x 2.5x + {coins} coins! 🎉', coins: 250, abilities: ['⚡ 5x', '💫 2.5x'] }
+
+function getRotatedRewards(streakWeek: number) {
+  const coinBonus = (streakWeek - 1) * 100
+
+  // Rotate days 1-5 forward: week 2 = shifted by 1, week 3 = shifted by 2, etc.
+  const shift = (streakWeek - 1) % 5
+  const rotated = [...BASE_DAY_REWARDS]
+  for (let i = 0; i < shift; i++) {
+    const first = rotated.shift()!
+    rotated.push(first)
+  }
+
+  // Build final 7-day rewards with coin bonus
+  const rewards = rotated.map((r, i) => ({
+    ...r,
+    day: i + 1,
+    coins: r.coins + coinBonus,
+    label: r.label.replace('{coins}', (r.coins + coinBonus).toString()),
+    items: r.items.replace('{coins}', (r.coins + coinBonus).toString()),
+  }))
+
+  // Day 6: Room Card (always the same)
+  rewards.push({
+    ...DAY6_REWARD,
+    coins: DAY6_REWARD.coins + coinBonus,
+    label: DAY6_REWARD.coins + coinBonus > 0
+      ? `1 Room Card + ${DAY6_REWARD.coins + coinBonus}🪙`
+      : DAY6_REWARD.label,
+    items: DAY6_REWARD.coins + coinBonus > 0
+      ? `1x Room Card + ${DAY6_REWARD.coins + coinBonus} coins`
+      : DAY6_REWARD.items,
+  })
+
+  // Day 7: 5x + 2.5x + coins (always the same structure)
+  const day7Coins = DAY7_REWARD.coins + coinBonus
+  rewards.push({
+    ...DAY7_REWARD,
+    coins: day7Coins,
+    label: `5x + 2.5x + ${day7Coins}🪙`,
+    items: `BIG REWARD! 1x 5x + 1x 2.5x + ${day7Coins} coins! 🎉`,
+  })
+
+  return rewards
+}
+
+export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim, onClaimStreakAdBonus, streakAdBonusClaimed = false, streakWeek = 1 }: LoginStreakProps) {
   const [adBonusClaimed, setAdBonusClaimed] = useState(streakAdBonusClaimed)
   const [adBonusPending, setAdBonusPending] = useState(false)
   const adOpenedRef = useRef(false)
@@ -64,6 +112,7 @@ export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim
     }
   }, [adBonusClaimed, adBonusPending])
 
+  const STREAK_REWARDS = useMemo(() => getRotatedRewards(streakWeek), [streakWeek])
   const isCurrentDayClaimable = streakDay < 7 && !streakClaimed[streakDay]
 
   return (
@@ -88,7 +137,7 @@ export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim
               <div>
                 <h3 className="text-lg font-bold" style={{ color: '#FFFFFF' }}>📅 Daily Rewards</h3>
                 <p className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                  Day {Math.min(streakDay + 1, 7)} of 7 • Login daily to claim!
+                  Day {Math.min(streakDay + 1, 7)} of 7 • Week {streakWeek}
                 </p>
               </div>
               <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
@@ -97,9 +146,14 @@ export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim
             </div>
 
             <div className="px-4 pb-5">
-              <p className="text-[9px] mb-3 px-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                ⏰ Rewards expire after 7 days. Unclaimed rewards reduce to 30%.
-              </p>
+              {/* Week bonus indicator */}
+              {streakWeek > 1 && (
+                <div className="mb-3 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                  <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>
+                    🎉 Week {streakWeek} Bonus: +{(streakWeek - 1) * 100} extra coins per day!
+                  </p>
+                </div>
+              )}
 
               {/* 7 Day Boxes */}
               <div className="grid grid-cols-4 gap-2 mb-3">
@@ -328,7 +382,7 @@ export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim
                 <div className="p-3 rounded-xl mb-2 text-center"
                   style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
                   <p className="text-xs font-bold" style={{ color: '#EDC22E' }}>🎉 All 7 days claimed!</p>
-                  <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Come back tomorrow for new rewards</p>
+                  <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Week {streakWeek} complete! Rewards rotate next week with higher coins!</p>
                 </div>
               )}
 
@@ -344,13 +398,13 @@ export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim
                   />
                 </div>
                 <p className="text-[9px] mt-1 text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                  {streakClaimed.filter(Boolean).length}/7 claimed
+                  {streakClaimed.filter(Boolean).length}/7 claimed • Week {streakWeek}
                 </p>
               </div>
 
               {/* Rotation note */}
               <p className="text-[8px] mt-2 text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                After 7 days, rewards rotate with higher coins! Come back daily 🎉
+                Days 1-5 rotate each week • Day 6 = Room Card • Day 7 = 5x + 2.5x • Coins +{streakWeek > 1 ? (streakWeek - 1) * 100 : 0} bonus this week!
               </p>
             </div>
           </motion.div>

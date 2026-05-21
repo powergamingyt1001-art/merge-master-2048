@@ -48,11 +48,11 @@ const FAKE_TOURNAMENT_PLAYERS = [
 
 // Week 1-3 prizes (7K budget)
 const WEEK_PRIZES_EARLY = [
-  { rank: 1, coins: 700, spins: 0, label: '1st' },
-  { rank: 2, coins: 400, spins: 0, label: '2nd' },
-  { rank: 3, coins: 250, spins: 0, label: '3rd' },
-  { rank: 4, coins: 150, spins: 0, label: '4th' },
-  { rank: 5, coins: 100, spins: 0, label: '5th' },
+  { rank: 1, coins: 700, spins: 0, roomCards: 2, label: '1st' },
+  { rank: 2, coins: 400, spins: 0, roomCards: 0, label: '2nd' },
+  { rank: 3, coins: 250, spins: 0, roomCards: 0, label: '3rd' },
+  { rank: 4, coins: 150, spins: 0, roomCards: 0, label: '4th' },
+  { rank: 5, coins: 100, spins: 0, roomCards: 0, label: '5th' },
 ]
 
 const ENTRY_FEE_EARLY = 50
@@ -334,9 +334,10 @@ export function Tournament({
                       {[
                         `Entry fee: ${entryFee} coins to join`,
                         'Each game is 90 seconds',
-                        '20 score = 1 tournament point',
-                        '50% points → Level upgrade (permanent)',
-                        '50% points → Tournament leaderboard (weekly)',
+                        '1 tournament point per game (regardless of score)',
+                        '3 points = 1 SP (Skill Point for level)',
+                        'SP goes to Level upgrade (permanent)',
+                        'Tournament points for weekly leaderboard',
                         'Partial scores carry over to next game',
                         'Only tournament points count for ranking',
                         `Prize pool: 7K coins weekly`,
@@ -381,6 +382,7 @@ export function Tournament({
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold" style={{ color: '#EDC22E' }}>{prize.coins} 💰</span>
+                        {prize.roomCards > 0 && <span className="text-[9px] font-bold" style={{ color: '#E040FB' }}>+{prize.roomCards} 🃏</span>}
                         {prize.spins > 0 && <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>+{prize.spins} 🎫</span>}
                       </div>
                     </div>

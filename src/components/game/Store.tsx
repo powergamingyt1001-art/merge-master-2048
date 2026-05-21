@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Coins, Zap, Clock, AlertCircle, Copy, Check, Upload, FileText, ImageIcon, Trash2 } from 'lucide-react'
+import { getRandomLink } from '@/components/ads/AdOverlay'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -15,6 +16,7 @@ interface StoreProps {
   onDeductCoins: (amount: number) => void
   onAddPowerUp: (pu: 'hammer' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x' | 'extraTime', count: number) => void
   onAddUndos: (count: number) => void
+  onAddRoomCards?: (count: number) => void
 }
 
 interface CoinPack {
@@ -256,6 +258,76 @@ function saveOrders(orders: StoreOrder[]) {
 }
 
 // ─── General Helpers ─────────────────────────────────────────────────────────
+
+// ─── Daily Free Room Card Tracker ──────────────────────────────────────────
+
+const STORE_VISIT_KEY = 'mergeMaster2048_storeVisitDays'
+const FREE_ROOM_CARD_CLAIMED_KEY = 'mergeMaster2048_freeRoomCardClaimed'
+
+function getStoreVisitDays(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const data = localStorage.getItem(STORE_VISIT_KEY)
+    if (!data) return []
+    const days: string[] = JSON.parse(data)
+    // Clean up days older than 7 days
+    const now = new Date()
+    const cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    return days.filter(d => d >= cutoff)
+  } catch { return [] }
+}
+
+function saveStoreVisitDays(days: string[]) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(STORE_VISIT_KEY, JSON.stringify(days))
+}
+
+function recordStoreVisit() {
+  const today = new Date().toISOString().split('T')[0]
+  const days = getStoreVisitDays()
+  if (!days.includes(today)) {
+    days.push(today)
+    saveStoreVisitDays(days)
+  }
+}
+
+function getConsecutiveVisitCount(): number {
+  const days = getStoreVisitDays()
+  if (days.length === 0) return 0
+  const sorted = [...days].sort().reverse()
+  const today = new Date().toISOString().split('T')[0]
+  // Check if today is in the list
+  if (sorted[0] !== today) return 0
+  let count = 1
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(sorted[i - 1])
+    const curr = new Date(sorted[i])
+    const diff = Math.floor((prev.getTime() - curr.getTime()) / (24 * 60 * 60 * 1000))
+    if (diff === 1) {
+      count++
+    } else {
+      break
+    }
+  }
+  return count
+}
+
+function canClaimFreeRoomCard(): boolean {
+  if (typeof window === 'undefined') return false
+  // Must have visited store 7 consecutive days
+  if (getConsecutiveVisitCount() < 7) return false
+  // Check if already claimed today
+  const lastClaimed = localStorage.getItem(FREE_ROOM_CARD_CLAIMED_KEY)
+  if (!lastClaimed) return true
+  const today = new Date().toISOString().split('T')[0]
+  return lastClaimed !== today
+}
+
+function markFreeRoomCardClaimed() {
+  if (typeof window === 'undefined') return
+  const today = new Date().toISOString().split('T')[0]
+  localStorage.setItem(FREE_ROOM_CARD_CLAIMED_KEY, today)
+}
 
 function canWatchFreeAd(): boolean {
   if (typeof window === 'undefined') return true
@@ -799,9 +871,86 @@ function AbilityCard({
 
 // ─── Ability Tab ─────────────────────────────────────────────────────────────
 
-function AbilityTab({ onBuy, onCoinBuy, coins }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number }) {
+function AbilityTab({ onBuy, onCoinBuy, coins, onClaimFreeRoomCard, consecutiveVisits, freeRoomCardAvailable }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number; onClaimFreeRoomCard?: () => void; consecutiveVisits: number; freeRoomCardAvailable: boolean }) {
+  const [freeRoomCardPending, setFreeRoomCardPending] = useState(false)
+  const freeRoomCardOpenedRef = useRef(false)
+
+  // Listen for visibility change for free room card ad
+  useEffect(() => {
+    if (!freeRoomCardPending) return
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && freeRoomCardOpenedRef.current) {
+        freeRoomCardOpenedRef.current = false
+        setFreeRoomCardPending(false)
+        onClaimFreeRoomCard?.()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [freeRoomCardPending, onClaimFreeRoomCard])
+
+  const handleClaimFreeRoomCard = useCallback(() => {
+    if (!freeRoomCardAvailable || freeRoomCardPending) return
+    try {
+      window.open(getRandomLink(), '_blank')
+      freeRoomCardOpenedRef.current = true
+      setFreeRoomCardPending(true)
+    } catch {
+      // Popup blocked - skip
+    }
+  }, [freeRoomCardAvailable, freeRoomCardPending])
+
   return (
     <div className="space-y-4">
+      {/* Daily Free Room Card Section */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-sm">🃏</span>
+          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#E040FB' }}>
+            DAILY FREE
+          </h4>
+        </div>
+        <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(224,64,251,0.06)', border: '1px solid rgba(224,64,251,0.15)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ backgroundColor: 'rgba(224,64,251,0.1)', border: '1px solid rgba(224,64,251,0.2)' }}>
+              🃏
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-bold" style={{ color: '#FFFFFF' }}>Free Room Card</p>
+              <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                Visit store 7 days in a row!
+              </p>
+              <div className="flex items-center gap-1 mt-1">
+                {Array.from({ length: 7 }, (_, i) => (
+                  <div key={i} className="w-3.5 h-3.5 rounded-full flex items-center justify-center"
+                    style={{
+                      backgroundColor: i < consecutiveVisits ? 'rgba(224,64,251,0.3)' : 'rgba(255,255,255,0.06)',
+                      border: i < consecutiveVisits ? '1px solid rgba(224,64,251,0.5)' : '1px solid rgba(255,255,255,0.1)',
+                    }}>
+                    {i < consecutiveVisits && <span className="text-[6px]" style={{ color: '#E040FB' }}>✓</span>}
+                  </div>
+                ))}
+                <span className="text-[8px] ml-1" style={{ color: consecutiveVisits >= 7 ? '#E040FB' : 'rgba(255,255,255,0.3)' }}>{consecutiveVisits}/7</span>
+              </div>
+            </div>
+            {freeRoomCardAvailable ? (
+              <button
+                onClick={handleClaimFreeRoomCard}
+                disabled={freeRoomCardPending}
+                className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
+                style={{ background: 'linear-gradient(135deg, #E040FB, #7C4DFF)', color: '#FFFFFF' }}
+              >
+                {freeRoomCardPending ? 'Waiting...' : 'CLAIM 🎬'}
+              </button>
+            ) : (
+              <div className="px-3 py-1.5 rounded-lg text-[9px] font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.3)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                {consecutiveVisits < 7 ? `${7 - consecutiveVisits} more days` : 'Come back tomorrow'}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* 5x Multiplier - Real Money */}
       <div>
         <div className="flex items-center gap-2 mb-2">
@@ -1031,15 +1180,31 @@ function HistoryTab({ orders, onDeleteAll, onDeleteSelected }: { orders: StoreOr
 
 // ─── Main Store Component ────────────────────────────────────────────────────
 
-export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos }: StoreProps) {
+export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos, onAddRoomCards }: StoreProps) {
   const [activeTab, setActiveTab] = useState<TabId>('coins')
   const [orders, setOrders] = useState<StoreOrder[]>(() => loadOrders())
+  const [consecutiveVisits, setConsecutiveVisits] = useState(0)
+  const [freeRoomCardAvailable, setFreeRoomCardAvailable] = useState(false)
   const [paymentModal, setPaymentModal] = useState<{ open: boolean; itemName: string; itemPrice: number; itemQuantity: number }>({
     open: false,
     itemName: '',
     itemPrice: 0,
     itemQuantity: 0,
   })
+
+  // Track store visit for daily free room card
+  useEffect(() => {
+    if (isOpen) {
+      recordStoreVisit()
+      const visits = getConsecutiveVisitCount()
+      const available = canClaimFreeRoomCard()
+      // Use microtask to avoid synchronous setState in effect
+      queueMicrotask(() => {
+        setConsecutiveVisits(visits)
+        setFreeRoomCardAvailable(available)
+      })
+    }
+  }, [isOpen])
 
   // Re-read orders when switching to history tab (reflects admin approval changes)
   const handleTabChange = useCallback((tab: TabId) => {
@@ -1048,7 +1213,15 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
       setOrders(loadOrders())
     }
   }, [])
-  // Handle coin-based ability purchase
+  // Handle free room card claim
+  const handleClaimFreeRoomCard = useCallback(() => {
+    if (!canClaimFreeRoomCard()) return
+    markFreeRoomCardClaimed()
+    onAddRoomCards?.(1)
+    onAddNotification('Room Card Claimed! 🃏', 'You received a free Room Card! Use it for Room Fight battles.', 'reward', '🃏')
+    setFreeRoomCardAvailable(false)
+  }, [onAddRoomCards, onAddNotification])
+
   const handleCoinBuy = useCallback(
     (item: AbilityItem) => {
       if (item.currency !== 'coin') return
@@ -1213,7 +1386,7 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <AbilityTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} />
+                    <AbilityTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onClaimFreeRoomCard={handleClaimFreeRoomCard} consecutiveVisits={consecutiveVisits} freeRoomCardAvailable={freeRoomCardAvailable} />
                   </motion.div>
                 )}
                 {activeTab === 'history' && (

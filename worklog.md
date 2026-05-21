@@ -429,3 +429,72 @@ Stage Summary:
 - Room Fight system with create/join/info tabs
 - Invite Panel with Refer/Game Friends toggle, search, profile cards, like, invite to room
 - Coupon codes show Day (6AM-6PM) and Night (6PM-6AM) with copy buttons and shift indicator
+
+---
+Task ID: 6
+Agent: Main Agent
+Task: Level System Redesign + Daily Rewards Cycling + Tournament/Store Room Cards
+
+Work Log:
+
+- 6A: Level System Redesign in useGame.ts
+  - Updated calculateTournamentPoints: `points = 1` per tournament game (was `Math.floor(score / 20)`)
+  - Updated levelXP calculation: `levelXP += Math.floor(points / 3)` (3 points = 1 SP/level point)
+  - Removed carryOver logic (not needed with fixed 1 point per game)
+  - Updated tickBattleTimer tournament point calculation to match new system
+  - Updated level system comments: "1 point per game, 3 points = 1 SP"
+  - Updated level bonus system description: every 5 levels = guaranteed coins + 2 random items
+  - Bonus coins at every 5 levels = (level/5) * 100 coins
+  - Added `streakWeek: number` to GameState (tracks which week of streak, starts at 1)
+  - Added `addRoomCards(count)` callback function
+  - Added streakWeek to defaults, saved data loading, save effect, and resetAllData
+  - Exported addRoomCards in useGame return object
+
+- 6B: Daily Rewards Cycling in LoginStreak.tsx
+  - Complete rewrite of reward system with `getRotatedRewards(streakWeek)` function
+  - BASE_DAY_REWARDS for days 1-5: Magnet+10🪙, Undo+50🪙, Timer+20🪙, Hammer+100🪙, Bomb+200🪙
+  - Day 6 always: 1 Room Card
+  - Day 7 always: 5x + 2.5x + 250🪙
+  - Days 1-5 rotate forward each week (week 2 shifts by 1, week 3 by 2, etc.)
+  - Coins increase by (streakWeek - 1) * 100 each subsequent week
+  - Added streakWeek prop to LoginStreakProps
+  - Updated header to show "Week {streakWeek}"
+  - Added week bonus indicator when streakWeek > 1
+  - Updated "All 7 days claimed" message to mention rotation
+  - Updated rotation note at bottom
+
+- 6C: Tournament 1st Place: 2 Room Cards in Tournament.tsx
+  - Added `roomCards: 2` to 1st place in WEEK_PRIZES_EARLY
+  - Added roomCards display in prize tab: "+2 🃏" badge next to coins for 1st place
+  - Updated "How Tournament Works" text: "1 tournament point per game (regardless of score)", "3 points = 1 SP (Skill Point for level)"
+
+- 6D: Daily Store: Free Room Card on 7th Day in Store.tsx
+  - Added STORE_VISIT_KEY and FREE_ROOM_CARD_CLAIMED_KEY localStorage tracking
+  - Added helper functions: getStoreVisitDays, saveStoreVisitDays, recordStoreVisit, getConsecutiveVisitCount, canClaimFreeRoomCard, markFreeRoomCardClaimed
+  - Added "Daily Free" section at top of ability tab with 7-day progress dots
+  - "Claim Free Room Card" button requires watching ad (same pattern as other free items)
+  - Awards 1 roomCard via onAddRoomCards callback
+  - Can only be claimed once per day (checked via localStorage)
+  - Added onAddRoomCards prop to StoreProps
+  - Added consecutiveVisits and freeRoomCardAvailable state to Store component
+  - Tracks store visit on open, updates UI with progress indicator
+
+- 6E: ProfilePanel.tsx level bonus text updates
+  - Updated level list overlay bonus text: "Bonus: {bonusCoins}💰 + 2 random abilities!"
+  - Updated footer text: "Every 5 levels: Guaranteed coins + 2 random abilities!"
+  - Updated "How Leveling Works" section with new system: "1 point per tournament game", "3 points = 1 SP (Skill Point)", "SP determines your level", "Every 5 levels: coins + 2 random abilities"
+
+- 6F: Updated PlayDashboard.tsx and page.tsx for new props
+  - Added `streakWeek: number` and `onAddRoomCards: (count: number) => void` to PlayDashboardProps
+  - Passed streakWeek and onAddRoomCards to LoginStreak and Store components
+  - Added streakWeek and onAddRoomCards props in page.tsx from game state
+
+- Ran lint: 0 errors
+
+Stage Summary:
+- Files modified: useGame.ts, LoginStreak.tsx, Tournament.tsx, Store.tsx, ProfilePanel.tsx, PlayDashboard.tsx, page.tsx
+- Level system now: 1 point per tournament game, 3 points = 1 SP (much slower leveling)
+- Daily rewards cycle every 7 days with rotation and increasing coin bonuses
+- Tournament 1st place awards 2 Room Cards
+- Store has daily free Room Card after 7 consecutive store visits (requires ad watch)
+- All props properly typed and passed through component hierarchy

@@ -232,6 +232,8 @@ export default function Home() {
                 totalCoinsEarned={game.totalCoinsEarned}
                 roomCardCount={game.roomCardCount}
                 gameHistory={game.gameHistory}
+                streakWeek={game.streakWeek}
+                onAddRoomCards={game.addRoomCards}
               />
             )}
             {phase === 'game' && <GameBoard key="game" onBackToDashboard={handleBackToDashboard} onPlayAgain={handlePlayAgain} />}

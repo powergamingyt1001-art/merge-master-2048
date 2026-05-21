@@ -145,11 +145,13 @@ export interface GameState {
   tournamentPoints: number
   tournamentCarryOver: number
   tournamentGamesPlayed: number
-  levelXP: number // 50% of tournament points go here for level calculation
+  levelXP: number // Skill Points from tournament games (1 point per game, 3 points = 1 SP/levelXP)
   // Game history
   gameHistory: GameHistoryEntry[]
   // Weekly bonus
   weeklyBonusClaimed: boolean
+  // Streak week tracker (for daily rewards cycling)
+  streakWeek: number
   // Leaderboard reset tracking
   leaderboardMonth: number // Year*12+Month for monthly reset
   leaderboardYear: number // Year for yearly reset
@@ -429,18 +431,14 @@ function generateFairBotScore(playerScore: number): number {
 }
 
 // ============================================================
-// LEVEL SYSTEM - 1000 Levels, based on LEVEL XP
-// Level XP = 50% of tournament points (permanent, never resets)
-// Tournament points: 20 score = 1 point (was 10 score = 1 point)
-// 50% of tournament points → levelXP (for level upgrade)
-// 50% of tournament points → tournamentPoints (for weekly leaderboard)
+// LEVEL SYSTEM - 1000 Levels, based on LEVEL XP (SP)
+// Score in tournament game = 1 point (regardless of score)
+// 3 points = 1 SP (Skill Point / Level Point)
+// So you need 3 tournament games to get 1 SP/level point
 // levelXP never resets on weekly tournament reset
-// Slow progression - levels require meaningful tournament effort
-// Level 1 = 0 xp, Level 2 = 10 xp, Level 3 = 25 xp
-// Level 5 = 80 xp, Level 10 = 200 xp, Level 20 = 600 xp
-// Level 50 = 5,000 xp, Level 100 = 25,000 xp
-// Level 200 = 150,000 xp, Level 500 = 2,000,000 xp
-// Level 1000 = 50,000,000 xp
+// Every 5 levels: guaranteed coins + 2 random items from:
+//   boom, 100 coin, magnet, timer, hammer, undo, 500 coin, 250 coin
+// Bonus coins at every 5 levels = (level/5) * 100 coins
 // ============================================================
 
 export const MAX_LEVEL = 1000
@@ -759,6 +757,7 @@ export function useGame() {
       userCode: '',
       totalCoinsEarned: 0,
       roomCardCount: 0,
+      streakWeek: 1,
     }
 
     if (!saved) {
@@ -945,6 +944,7 @@ export function useGame() {
       userCode: saved.userCode || generateUserCode(),
       totalCoinsEarned: saved.totalCoinsEarned ?? 0,
       roomCardCount: saved.roomCardCount ?? 0,
+      streakWeek: saved.streakWeek ?? 1,
     }
   })
 
@@ -1002,9 +1002,10 @@ export function useGame() {
       userCode: state.userCode,
       totalCoinsEarned: state.totalCoinsEarned,
       roomCardCount: state.roomCardCount,
+      streakWeek: state.streakWeek,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount, state.userCode, state.totalCoinsEarned, state.roomCardCount])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount, state.userCode, state.totalCoinsEarned, state.roomCardCount, state.streakWeek])
 
   // ============================================================
   // FIREBASE SYNC - Sync player data to Firebase RTDB
@@ -1608,23 +1609,19 @@ export function useGame() {
   }, [])
 
   // Calculate and add tournament points after a game
-  // NEW: 20 score = 1 point (was 10 score = 1 point)
-  // 50% of points go to levelXP, 50% to tournamentPoints
+  // NEW: 1 point per tournament game (regardless of score)
+  // 3 points = 1 SP (levelXP), tournament points for leaderboard = points
   const calculateTournamentPoints = useCallback((finalScore: number) => {
     setState(prev => {
       if (prev.gameMode !== 'tournament') return prev
-      const total = finalScore + prev.tournamentCarryOver
-      const newPoints = Math.floor(total / 20) // Changed: was /10, now /20
-      const newCarryOver = total % 20
-      // Split: 50% to level XP, 50% to tournament leaderboard
-      const levelXPAdd = Math.floor(newPoints / 2)      // 50% → level
-      const tournamentPointsAdd = newPoints - levelXPAdd  // remaining 50% → leaderboard
-      const newTournamentPoints = prev.tournamentPoints + tournamentPointsAdd
+      const newPoints = 1 // 1 point per tournament game, regardless of score
+      const levelXPAdd = Math.floor(newPoints / 3) // 3 points = 1 SP/levelXP
       const newLevelXP = prev.levelXP + levelXPAdd
+      const newTournamentPoints = prev.tournamentPoints + newPoints
       return {
         ...prev,
         tournamentPoints: newTournamentPoints,
-        tournamentCarryOver: newCarryOver,
+        tournamentCarryOver: 0, // No carry over with fixed 1 point per game
         tournamentGamesPlayed: prev.tournamentGamesPlayed + 1,
         levelXP: newLevelXP,
         playerLevel: calculateLevel(newLevelXP),
@@ -1664,12 +1661,10 @@ export function useGame() {
         let tournamentGamesPlayed = prev.tournamentGamesPlayed
         let levelXP = prev.levelXP
         if (prev.gameMode === 'tournament') {
-          const total = prev.score + prev.tournamentCarryOver
-          const newPts = Math.floor(total / 20) // Changed: was /10, now /20
-          tournamentCarryOver = total % 20
-          const levelXPAdd = Math.floor(newPts / 2)
-          const tournamentPointsAdd = newPts - levelXPAdd
-          tournamentPoints += tournamentPointsAdd
+          const newPts = 1 // 1 point per tournament game, regardless of score
+          tournamentCarryOver = 0 // No carry over with fixed 1 point per game
+          const levelXPAdd = Math.floor(newPts / 3) // 3 points = 1 SP/levelXP
+          tournamentPoints += newPts
           levelXP += levelXPAdd
           tournamentGamesPlayed++
         }
@@ -1745,8 +1740,8 @@ export function useGame() {
     })
   }, [])
 
-  // Coin rewards for each streak day
-  const STREAK_COIN_REWARDS = [10, 25, 35, 50, 65, 100, 200]
+  // Coin rewards for each streak day (base amounts - will be modified by streakWeek)
+  const STREAK_COIN_REWARDS = [10, 50, 20, 100, 200, 0, 250]
 
   const claimStreakDay = useCallback((day: number) => {
     setState(prev => {
@@ -1754,18 +1749,23 @@ export function useGame() {
       const newClaimed = [...prev.streakClaimed]
       newClaimed[day] = true
 
-      let h = 0, m = 0, b = 0, s = 0
+      let h = 0, m = 0, b = 0, s = 0, et = 0, m5x = 0, m2_5x = 0, u = 0, rc = 0
       switch (day) {
-        case 0: m = 2; break
-        case 1: s = 2; break
-        case 2: m = 1; b = 1; break
-        case 3: b = 2; break
-        case 4: h = 1; m = 2; break
-        case 5: m = 3; h = 2; break
-        case 6: s = 5; break
+        case 0: m = 1; break // Day 1: Magnet + 10 coins
+        case 1: u = 2; break // Day 2: 2 Undo + 50 coins
+        case 2: et = 1; break // Day 3: Timer skill + 20 coins
+        case 3: h = 5; break // Day 4: 5 Hammers + 100 coins
+        case 4: b = 5; break // Day 5: 5 Bombs + 200 coins
+        case 5: rc = 1; break // Day 6: 1 Room Card
+        case 6: m5x = 1; m2_5x = 1; break // Day 7: 5x + 2.5x + 250 coins
       }
 
-      const coinReward = STREAK_COIN_REWARDS[day] || 0
+      const baseCoinReward = STREAK_COIN_REWARDS[day] || 0
+      const coinBonus = (prev.streakWeek - 1) * 100
+      const coinReward = baseCoinReward + coinBonus
+
+      // If day 7 (last day) is claimed, increment streakWeek
+      const newStreakWeek = day === 6 ? prev.streakWeek + 1 : prev.streakWeek
 
       return {
         ...prev,
@@ -1774,7 +1774,14 @@ export function useGame() {
         magnetCount: prev.magnetCount + m,
         blastCount: prev.blastCount + b,
         spinTickets: prev.spinTickets + s,
+        extraTimeCount: prev.extraTimeCount + et,
+        multiplier5xCount: prev.multiplier5xCount + m5x,
+        multiplier2_5xCount: prev.multiplier2_5xCount + m2_5x,
+        undoTotal: prev.undoTotal + u,
+        roomCardCount: prev.roomCardCount + rc,
         coins: prev.coins + coinReward,
+        totalCoinsEarned: prev.totalCoinsEarned + coinReward,
+        streakWeek: newStreakWeek,
       }
     })
   }, [])
@@ -2081,7 +2088,16 @@ export function useGame() {
       userCode: generateUserCode(),
       totalCoinsEarned: 0,
       roomCardCount: 0,
+      streakWeek: 1,
     })
+  }, [])
+
+  // Add room cards
+  const addRoomCards = useCallback((count: number) => {
+    setState(prev => ({
+      ...prev,
+      roomCardCount: prev.roomCardCount + count,
+    }))
   }, [])
 
   const multiplierTick = useCallback(() => {
@@ -2147,6 +2163,7 @@ export function useGame() {
     claimWeeklyBonus,
     claimDailyTask,
     resetAllData,
+    addRoomCards,
     multiplierTick,
     completeVisitWebsiteTask: useCallback(() => {
       setState(prev => {

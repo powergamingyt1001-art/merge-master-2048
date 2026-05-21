@@ -314,7 +314,7 @@ export function ProfilePanel({
                                   </div>
                                   {isBonusLevel && (
                                     <p className="text-[7px]" style={{ color: 'rgba(237,194,46,0.7)' }}>
-                                      Bonus: 5 skills + {bonusCoins}💰{lv >= 15 ? ' + 5x/2.5x' : ''}
+                                      Bonus: {bonusCoins}💰 + 2 random abilities!
                                     </p>
                                   )}
                                 </div>
@@ -327,7 +327,7 @@ export function ProfilePanel({
                         </div>
                         <div className="px-3 py-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                           <p className="text-[7px] text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                            Every 5 levels: 5 random skills + bonus coins{playerLevel >= 10 ? '' : ' • Lv.15+: 5x & 2.5x abilities'}
+                            Every 5 levels: Guaranteed coins + 2 random abilities!
                           </p>
                         </div>
                       </div>
@@ -562,19 +562,16 @@ export function ProfilePanel({
                 <p className="text-[10px] font-bold mb-1" style={{ color: '#00E676' }}>📊 How Leveling Works</p>
                 <ul className="space-y-0.5">
                   <li className="text-[9px] flex items-start gap-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                    <span style={{ color: '#00E676' }}>•</span> 50 score = 1.5 points from merges
+                    <span style={{ color: '#00E676' }}>•</span> 1 point per tournament game
                   </li>
                   <li className="text-[9px] flex items-start gap-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                    <span style={{ color: '#00E676' }}>•</span> 3 points = 1 XP
+                    <span style={{ color: '#00E676' }}>•</span> 3 points = 1 SP (Skill Point)
                   </li>
                   <li className="text-[9px] flex items-start gap-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                    <span style={{ color: '#00E676' }}>•</span> XP determines your level
+                    <span style={{ color: '#00E676' }}>•</span> SP determines your level
                   </li>
                   <li className="text-[9px] flex items-start gap-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                    <span style={{ color: '#00E676' }}>•</span> 100 coins per level completion
-                  </li>
-                  <li className="text-[9px] flex items-start gap-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                    <span style={{ color: '#00E676' }}>•</span> Bonus 400 coins every 5 levels
+                    <span style={{ color: '#00E676' }}>•</span> Every 5 levels: coins + 2 random abilities
                   </li>
                   <li className="text-[9px] flex items-start gap-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
                     <span style={{ color: '#00E676' }}>•</span> Daily limit: {maxGamesPerDay} games
