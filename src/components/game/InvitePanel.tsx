@@ -525,16 +525,16 @@ export function InvitePanel({
                   </div>
                 )}
 
-                {/* Online Friends List */}
+                {/* Game Friends List */}
                 <div className="mt-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
                   <div className="p-3 pb-2">
                     <div className="flex items-center gap-1.5">
                       <Users className="w-3 h-3" style={{ color: '#00E676' }} />
-                      <span className="text-[10px] font-bold" style={{ color: '#00E676' }}>Players Nearby</span>
+                      <span className="text-[10px] font-bold" style={{ color: '#00E676' }}>Game Friends</span>
                     </div>
                   </div>
                   <div className="px-3 pb-3 space-y-1">
-                    {MOCK_FRIENDS.slice(0, 4).map(friend => (
+                    {MOCK_FRIENDS.slice(0, 6).map(friend => (
                       <div key={friend.code} className="flex items-center justify-between py-1.5 px-2 rounded-lg"
                         style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}>
                         <div className="flex items-center gap-2">
@@ -547,13 +547,27 @@ export function InvitePanel({
                             <div className="flex items-center gap-1">
                               <p className="text-[9px] font-semibold" style={{ color: 'rgba(255,255,255,0.7)' }}>{friend.name}</p>
                             </div>
-                            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Lv.{friend.level}</p>
+                            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Lv.{friend.level} • {friend.code}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
                           <span className="text-[7px] font-bold" style={{ color: friend.online ? '#00E676' : 'rgba(255,255,255,0.25)' }}>
                             {friend.online ? '● Online' : '● Offline'}
                           </span>
+                          <button
+                            onClick={() => {
+                              setSearchCode(friend.code)
+                              handleSearchFriend()
+                            }}
+                            className="w-6 h-6 rounded-lg flex items-center justify-center transition-transform active:scale-90"
+                            style={{
+                              backgroundColor: friend.online ? 'rgba(0,230,118,0.15)' : 'rgba(255,255,255,0.06)',
+                              border: friend.online ? '1px solid rgba(0,230,118,0.3)' : '1px solid rgba(255,255,255,0.08)'
+                            }}
+                            title="View Profile & Invite"
+                          >
+                            <UserPlus className="w-3 h-3" style={{ color: friend.online ? '#00E676' : 'rgba(255,255,255,0.3)' }} />
+                          </button>
                         </div>
                       </div>
                     ))}

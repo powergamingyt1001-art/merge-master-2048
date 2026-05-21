@@ -2,10 +2,22 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users, TrendingUp, Percent, Gift, Trash2, Sun, Moon, Copy, DoorOpen, History } from 'lucide-react'
+import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users, TrendingUp, Percent, Gift, Trash2, Sun, Moon, Copy, DoorOpen, History, Search, Lock } from 'lucide-react'
 import { Notification, PLAYER_AVATARS, getLevelInfo, getLevelThreshold, MAX_LEVEL, GameHistoryEntry } from '@/hooks/useGame'
 import { AdsterraBanner320x50 } from '@/components/ads/AdsterraAds'
 import { useTheme } from 'next-themes'
+
+// Extended avatar list with 35+ diverse avatars
+const EXTENDED_AVATARS = [
+  // Animals
+  '🦊', '🐺', '🦅', '🐉', '🦁', '🐧', '🦄', '🐙', '🦈', '🐝',
+  '🦋', '🐢', '🦎', '🦉', '🐊', '🐳', '🦩', '🐱', '🐶', '🐼',
+  // Objects
+  '🔥', '💎', '⚡', '👑', '🌟', '🎯', '🎪', '🚀', '🎭', '⭐',
+  '🍀', '🌈', '🫧', '💫', '🎸', '🎨',
+  // Faces
+  '😎', '🤩', '😈', '👻', '🤖', '👽', '🥷', '💀', '🧙', '🧛', '🦸',
+]
 
 interface ProfilePanelProps {
   isOpen: boolean
@@ -33,6 +45,7 @@ interface ProfilePanelProps {
   battleBestScore: number
   gameHistory: GameHistoryEntry[]
   onOpenRoomFight?: () => void
+  onStartRoomGame?: (settings: any) => void
 }
 
 // Coin count formatter: 1000→1K, 2500→2.5K, 1000000→1M
@@ -79,6 +92,26 @@ function getModeLabel(mode: string): string {
   }
 }
 
+// Calculate win/loss streak from game history
+function calculateStreak(gameHistory: GameHistoryEntry[]): { type: 'win' | 'lose' | null; count: number } {
+  if (gameHistory.length === 0) return { type: null, count: 0 }
+  const sorted = [...gameHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  const firstResult = sorted[0].result
+  if (firstResult === 'classic') return { type: null, count: 0 }
+  let streakType: 'win' | 'lose' = firstResult === 'win' ? 'win' : 'lose'
+  let count = 0
+  for (const entry of sorted) {
+    if (entry.result === 'classic') continue
+    const entryType = entry.result === 'win' ? 'win' : 'lose'
+    if (entryType === streakType) {
+      count++
+    } else {
+      break
+    }
+  }
+  return { type: streakType, count }
+}
+
 export function ProfilePanel({
   isOpen, onClose, playerName, playerAvatar, playerLevel,
   gamePoints, levelXP, bestScore, modBestScore, coins,
@@ -87,7 +120,7 @@ export function ProfilePanel({
   totalBattlesPlayed, totalBattlesWon,
   onResetAllData,
   userCode, totalCoinsEarned, roomCardCount, battleBestScore, gameHistory,
-  onOpenRoomFight,
+  onOpenRoomFight, onStartRoomGame,
 }: ProfilePanelProps) {
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState(playerName)
@@ -95,7 +128,14 @@ export function ProfilePanel({
   const [showLevelList, setShowLevelList] = useState(false)
   const [isDarkTheme, setIsDarkTheme] = useState(true)
   const [copiedCode, setCopiedCode] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
+  const [showGameHistory, setShowGameHistory] = useState(false)
+  const [historyTab, setHistoryTab] = useState<'today' | 'yesterday' | 'week'>('today')
+  const [roomTab, setRoomTab] = useState<'create' | 'join'>('create')
+  const [opponentUid, setOpponentUid] = useState('')
+  const [betCoins, setBetCoins] = useState('')
+  const [betAbility, setBetAbility] = useState('none')
+  const [roomPassword, setRoomPassword] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
   const { theme, setTheme } = useTheme()
 
   // Sync local state with next-themes
@@ -111,9 +151,13 @@ export function ProfilePanel({
     : 100
   const xpNeededForNextLevel = playerLevel < MAX_LEVEL ? nextLevelThreshold - levelXP : 0
 
+  const totalLosses = totalBattlesPlayed - totalBattlesWon
   const winPercentage = totalBattlesPlayed > 0
     ? Math.round((totalBattlesWon / totalBattlesPlayed) * 100)
     : 0
+  const lossPercentage = totalBattlesPlayed > 0 ? 100 - winPercentage : 0
+
+  const streak = calculateStreak(gameHistory)
 
   const handleSaveName = () => {
     if (nameInput.trim()) {
@@ -139,6 +183,28 @@ export function ProfilePanel({
     })
   }
 
+  // Filter game history by tab
+  const getFilteredHistory = () => {
+    const now = new Date()
+    const todayStr = now.toISOString().split('T')[0]
+    const yesterday = new Date(now)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = yesterday.toISOString().split('T')[0]
+    const weekAgo = new Date(now)
+    weekAgo.setDate(weekAgo.getDate() - 7)
+
+    switch (historyTab) {
+      case 'today':
+        return gameHistory.filter(e => e.date.split('T')[0] === todayStr)
+      case 'yesterday':
+        return gameHistory.filter(e => e.date.split('T')[0] === yesterdayStr)
+      case 'week':
+        return gameHistory.filter(e => new Date(e.date) >= weekAgo)
+      default:
+        return gameHistory
+    }
+  }
+
   // Group game history by date
   const groupedHistory = gameHistory.reduce<Record<string, GameHistoryEntry[]>>((acc, entry) => {
     const dateGroup = formatDateGroup(entry.date)
@@ -146,6 +212,26 @@ export function ProfilePanel({
     acc[dateGroup].push(entry)
     return acc
   }, {})
+
+  const handleJoinRandom = () => {
+    setIsSearching(true)
+    setTimeout(() => {
+      setIsSearching(false)
+      // Trigger room game with random matching
+      onStartRoomGame?.({ mode: 'join', type: 'random' })
+    }, 3000)
+  }
+
+  const handleCreateRoom = () => {
+    if (roomCardCount < 1) return
+    onStartRoomGame?.({
+      mode: 'create',
+      opponentUid,
+      betCoins: parseInt(betCoins) || 0,
+      betAbility,
+      password: roomPassword,
+    })
+  }
 
   return (
     <AnimatePresence>
@@ -173,7 +259,7 @@ export function ProfilePanel({
             </div>
 
             <div className="px-4 pb-4">
-              {/* Avatar + Name Section */}
+              {/* 1. Avatar + Level Badge */}
               <div className="flex flex-col items-center mb-4">
                 <button onClick={() => setShowAvatarPicker(!showAvatarPicker)}
                   className="w-20 h-20 rounded-full flex items-center justify-center mb-2 relative"
@@ -190,15 +276,15 @@ export function ProfilePanel({
                   </div>
                 </button>
 
-                {/* Avatar Picker */}
+                {/* 2. Avatar Picker - Extended with 35+ avatars */}
                 <AnimatePresence>
                   {showAvatarPicker && (
                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                       className="w-full mb-2">
-                      <div className="grid grid-cols-5 gap-2 p-2 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                        {PLAYER_AVATARS.map((av) => (
-                          <button key={av} onClick={() => { onUpdateAvatar(av); setShowAvatarPicker(false) }}
-                            className="w-10 h-10 rounded-lg flex items-center justify-center text-xl transition-transform hover:scale-110"
+                      <div className="grid grid-cols-6 gap-1.5 p-2 rounded-xl max-h-52 overflow-y-auto" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        {EXTENDED_AVATARS.map((av, idx) => (
+                          <button key={`${av}-${idx}`} onClick={() => { onUpdateAvatar(av); setShowAvatarPicker(false) }}
+                            className="w-9 h-9 rounded-lg flex items-center justify-center text-lg transition-transform hover:scale-110 active:scale-95"
                             style={{
                               backgroundColor: av === playerAvatar ? `${levelInfo.color}20` : 'rgba(255,255,255,0.04)',
                               border: av === playerAvatar ? `1.5px solid ${levelInfo.color}` : '1px solid rgba(255,255,255,0.06)',
@@ -207,12 +293,15 @@ export function ProfilePanel({
                           </button>
                         ))}
                       </div>
+                      <p className="text-[7px] text-center mt-1" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                        {EXTENDED_AVATARS.length} avatars available • Tap to select
+                      </p>
                     </motion.div>
                   )}
                 </AnimatePresence>
 
-                {/* Name */}
-                <div className="flex items-center gap-2">
+                {/* 3. Name with edit button */}
+                <div className="flex items-center gap-2 mt-1">
                   {editingName ? (
                     <div className="flex items-center gap-1">
                       <input
@@ -224,7 +313,7 @@ export function ProfilePanel({
                         autoFocus
                         onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
                       />
-                      <button onClick={handleSaveName} className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'rgba(0,230,118,0.2)' }}>
+                      <button onClick={handleSaveName} className="w-7 h-7 rounded-lg flex items-center justify-center transition-transform active:scale-95" style={{ backgroundColor: 'rgba(0,230,118,0.2)' }}>
                         <Check className="w-3.5 h-3.5" style={{ color: '#00E676' }} />
                       </button>
                     </div>
@@ -232,23 +321,24 @@ export function ProfilePanel({
                     <div className="flex items-center gap-1.5">
                       <span className="text-base font-bold" style={{ color: '#FFFFFF' }}>{playerName}</span>
                       <button onClick={() => { setEditingName(true); setNameInput(playerName) }}
-                        className="w-5 h-5 rounded flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                        className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-95" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
                         <Edit3 className="w-2.5 h-2.5" style={{ color: 'rgba(255,255,255,0.4)' }} />
                       </button>
                     </div>
                   )}
                 </div>
 
-                {/* Level Title */}
+                {/* 5. Level capsule - ABOVE UID */}
                 <div
-                  className="flex items-center gap-1 mt-1 px-3 py-1 rounded-full"
+                  className="flex items-center gap-1 mt-1.5 px-3 py-0.5 rounded-full cursor-pointer hover:scale-105 transition-transform"
+                  onClick={() => setShowLevelList(true)}
                   style={{ backgroundColor: `${levelInfo.color}15`, border: `1.5px solid ${levelInfo.color}40` }}>
                   <span className="text-sm">{levelInfo.icon}</span>
                   <span className="text-[10px] font-bold" style={{ color: levelInfo.color }}>Lv.{playerLevel} {levelInfo.title}</span>
                 </div>
 
-                {/* User ID with Copy Button */}
-                <div className="flex items-center gap-1.5 mt-2">
+                {/* 4. UID below name - Small capsule style with copy */}
+                <div className="flex items-center gap-1.5 mt-1.5">
                   <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>ID:</span>
                   <div className="flex items-center gap-1 px-2 py-0.5 rounded-md"
                     style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -336,7 +426,361 @@ export function ProfilePanel({
                 </AnimatePresence>
               </div>
 
-              {/* Level Progress */}
+              {/* 6. Win/Loss Rate Box */}
+              <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Percent className="w-4 h-4" style={{ color: '#EDC22E' }} />
+                    <span className="text-xs font-bold" style={{ color: '#EDC22E' }}>Win Rate</span>
+                  </div>
+                  <span className="text-lg font-extrabold" style={{ color: winPercentage >= 50 ? '#00E676' : '#F65E3B' }}>
+                    {totalBattlesPlayed > 0 ? `${winPercentage}%` : '-'}
+                  </span>
+                </div>
+
+                {/* Horizontal bar with red/green */}
+                <div className="h-5 rounded-full overflow-hidden relative flex" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                  {/* Red (loss) portion - LEFT */}
+                  <div
+                    className="h-full transition-all flex items-center justify-center"
+                    style={{
+                      width: totalBattlesPlayed > 0 ? `${lossPercentage}%` : '50%',
+                      background: 'linear-gradient(90deg, #F65E3B, #FF7A00)',
+                      minWidth: totalBattlesPlayed > 0 && totalLosses > 0 ? '20px' : '0',
+                    }}>
+                    {totalLosses > 0 && (
+                      <span className="text-[8px] font-bold text-white drop-shadow-sm px-1">{totalLosses}L</span>
+                    )}
+                  </div>
+
+                  {/* Divider slash */}
+                  {totalBattlesPlayed > 0 && totalBattlesWon > 0 && totalLosses > 0 && (
+                    <div className="flex items-center justify-center px-0.5" style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}>
+                      <span className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.7)' }}>/</span>
+                    </div>
+                  )}
+
+                  {/* Green (win) portion - RIGHT */}
+                  <div
+                    className="h-full transition-all flex items-center justify-center"
+                    style={{
+                      width: totalBattlesPlayed > 0 ? `${winPercentage}%` : '50%',
+                      background: 'linear-gradient(90deg, #00C853, #00E676)',
+                      minWidth: totalBattlesPlayed > 0 && totalBattlesWon > 0 ? '20px' : '0',
+                    }}>
+                    {totalBattlesWon > 0 && (
+                      <span className="text-[8px] font-bold text-white drop-shadow-sm px-1">{totalBattlesWon}W</span>
+                    )}
+                  </div>
+
+                  {/* Empty state */}
+                  {totalBattlesPlayed === 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.3)' }}>No battles yet</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* W/L text format */}
+                <div className="flex items-center justify-center gap-3 mt-1.5">
+                  <span className="text-[10px] font-bold" style={{ color: '#00E676' }}>{totalBattlesWon}W</span>
+                  <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>/</span>
+                  <span className="text-[10px] font-bold" style={{ color: '#F65E3B' }}>{totalLosses}L</span>
+                  <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>({totalBattlesPlayed} battles)</span>
+                </div>
+
+                {/* Win/Loss Streak */}
+                {streak.type && streak.count > 0 && (
+                  <div className="mt-2 flex items-center justify-center gap-1 px-3 py-1 rounded-full"
+                    style={{
+                      backgroundColor: streak.type === 'win' ? 'rgba(0,230,118,0.08)' : 'rgba(246,94,59,0.08)',
+                      border: `1px solid ${streak.type === 'win' ? 'rgba(0,230,118,0.2)' : 'rgba(246,94,59,0.2)'}`,
+                    }}>
+                    {streak.type === 'win' ? (
+                      <>
+                        {Array.from({ length: Math.min(streak.count, 5) }, (_, i) => (
+                          <span key={i} className="text-[10px]">🔥</span>
+                        ))}
+                        <span className="text-[9px] font-bold" style={{ color: '#00E676' }}>
+                          {streak.count} Win Streak
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-[10px]">❄️</span>
+                        <span className="text-[9px] font-bold" style={{ color: '#F65E3B' }}>
+                          {streak.count} Loss Streak
+                        </span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 7. Stats Row (3 boxes) */}
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                <StatBox icon={<Trophy className="w-3.5 h-3.5" />} label="Classic Best" value={bestScore > 0 ? bestScore.toLocaleString() : '-'} color="#EDC22E" />
+                <StatBox icon={<Swords className="w-3.5 h-3.5" />} label="Battle Best" value={battleBestScore > 0 ? battleBestScore.toLocaleString() : '-'} color="#F65E3B" />
+                <StatBox icon={<Coins className="w-3.5 h-3.5" />} label="Coins" value={formatCoinCount(coins)} subtitle={totalBattlesPlayed > 0 ? `${winPercentage}%W` : undefined} color="#EDC22E" />
+              </div>
+
+              {/* 8. Bottom Row (3 boxes) */}
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                {/* Game Today - Compact */}
+                <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(0,255,255,0.06)', border: '1px solid rgba(0,255,255,0.12)' }}>
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <Calendar className="w-3 h-3" style={{ color: '#00FFFF' }} />
+                    <span className="text-[7px] font-bold" style={{ color: '#00FFFF' }}>Today</span>
+                  </div>
+                  <span className="text-sm font-extrabold" style={{ color: gamesPlayedToday >= maxGamesPerDay ? '#F65E3B' : '#00FFFF' }}>
+                    {gamesPlayedToday}/{maxGamesPerDay}
+                  </span>
+                  <div className="h-1.5 rounded-full overflow-hidden mt-1" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                    <div className="h-full rounded-full transition-all" style={{
+                      width: `${Math.min(100, (gamesPlayedToday / maxGamesPerDay) * 100)}%`,
+                      background: gamesPlayedToday >= maxGamesPerDay ? 'linear-gradient(90deg, #F65E3B, #FF7A00)' : 'linear-gradient(90deg, #00FFFF, #00E676)',
+                    }} />
+                  </div>
+                </div>
+
+                {/* Level XP */}
+                <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.12)' }}>
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <Target className="w-3 h-3" style={{ color: '#00E676' }} />
+                    <span className="text-[7px] font-bold" style={{ color: '#00E676' }}>Level XP</span>
+                  </div>
+                  <span className="text-[10px] font-extrabold" style={{ color: '#00E676' }}>
+                    {levelXP.toLocaleString()}
+                  </span>
+                  <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    / {nextLevelThreshold.toLocaleString()}
+                  </p>
+                </div>
+
+                {/* Game History - Clickable to full screen */}
+                <button onClick={() => setShowGameHistory(true)}
+                  className="p-2 rounded-xl text-center transition-transform active:scale-95"
+                  style={{ backgroundColor: 'rgba(255,122,0,0.06)', border: '1px solid rgba(255,122,0,0.12)' }}>
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <History className="w-3 h-3" style={{ color: '#FF7A00' }} />
+                    <span className="text-[7px] font-bold" style={{ color: '#FF7A00' }}>History</span>
+                  </div>
+                  <span className="text-sm font-extrabold" style={{ color: '#FF7A00' }}>📊</span>
+                  <p className="text-[9px] font-bold" style={{ color: '#FF7A00' }}>{gameHistory.length}</p>
+                </button>
+              </div>
+
+              {/* 9. Total Coins Earned */}
+              <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">💰</span>
+                    <div>
+                      <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Total Coins Earned</p>
+                      <p className="text-base font-extrabold" style={{ color: '#EDC22E' }}>{formatCoinCount(totalCoinsEarned)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '1px solid rgba(237,194,46,0.2)' }}>
+                    <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                    <span className="text-[8px] font-bold" style={{ color: '#EDC22E' }}>{coins.toLocaleString()} now</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 10. Room Fight Section - CREATE | JOIN tabs */}
+              <div className="rounded-xl mb-3 overflow-hidden" style={{ backgroundColor: 'rgba(224,64,251,0.05)', border: '1px solid rgba(224,64,251,0.15)' }}>
+                {/* Tab Header */}
+                <div className="flex">
+                  <button
+                    onClick={() => setRoomTab('create')}
+                    className="flex-1 py-2 text-center text-[10px] font-bold transition-all active:scale-95"
+                    style={{
+                      backgroundColor: roomTab === 'create' ? 'rgba(224,64,251,0.15)' : 'transparent',
+                      color: roomTab === 'create' ? '#E040FB' : 'rgba(255,255,255,0.4)',
+                      borderBottom: roomTab === 'create' ? '2px solid #E040FB' : '1px solid rgba(255,255,255,0.06)',
+                    }}>
+                    🚀 CREATE
+                  </button>
+                  <button
+                    onClick={() => setRoomTab('join')}
+                    className="flex-1 py-2 text-center text-[10px] font-bold transition-all active:scale-95"
+                    style={{
+                      backgroundColor: roomTab === 'join' ? 'rgba(224,64,251,0.15)' : 'transparent',
+                      color: roomTab === 'join' ? '#E040FB' : 'rgba(255,255,255,0.4)',
+                      borderBottom: roomTab === 'join' ? '2px solid #E040FB' : '1px solid rgba(255,255,255,0.06)',
+                    }}>
+                    🔗 JOIN
+                  </button>
+                </div>
+
+                <div className="p-3">
+                  {roomTab === 'create' ? (
+                    <div className="space-y-2">
+                      {/* Your UID */}
+                      <div>
+                        <label className="text-[8px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Your UID</label>
+                        <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                          <span className="text-[10px] font-mono font-bold" style={{ color: '#00FFFF' }}>{userCode}</span>
+                          <span className="text-[7px] ml-auto" style={{ color: 'rgba(255,255,255,0.25)' }}>Read-only</span>
+                        </div>
+                      </div>
+
+                      {/* Opponent UID */}
+                      <div>
+                        <label className="text-[8px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Opponent UID</label>
+                        <input
+                          value={opponentUid}
+                          onChange={(e) => setOpponentUid(e.target.value)}
+                          placeholder="Enter opponent's UID"
+                          className="w-full px-2 py-1.5 rounded-lg text-[10px]"
+                          style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.1)', outline: 'none' }}
+                        />
+                      </div>
+
+                      {/* Betting Section */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[8px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>🪙 Coins</label>
+                          <input
+                            type="number"
+                            value={betCoins}
+                            onChange={(e) => setBetCoins(e.target.value)}
+                            placeholder="0"
+                            min="0"
+                            max={coins.toString()}
+                            className="w-full px-2 py-1.5 rounded-lg text-[10px]"
+                            style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#EDC22E', border: '1px solid rgba(255,255,255,0.1)', outline: 'none' }}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[8px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>⚡ Ability</label>
+                          <select
+                            value={betAbility}
+                            onChange={(e) => setBetAbility(e.target.value)}
+                            className="w-full px-2 py-1.5 rounded-lg text-[10px]"
+                            style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#E040FB', border: '1px solid rgba(255,255,255,0.1)', outline: 'none' }}>
+                            <option value="none">None</option>
+                            <option value="hammer">🔨 Hammer</option>
+                            <option value="magnet">🧲 Magnet</option>
+                            <option value="blast">💥 Blast</option>
+                            <option value="multiplier5x">✨ 5x Multi</option>
+                            <option value="extraTime">⏰ Extra Time</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Auto-detect notice */}
+                      <div className="px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(0,255,255,0.04)', border: '1px solid rgba(0,255,255,0.08)' }}>
+                        <p className="text-[7px]" style={{ color: 'rgba(0,255,255,0.7)' }}>
+                          💡 Auto-match: Min of your coins ({coins}) vs opponent's coins
+                        </p>
+                      </div>
+
+                      {/* Password (optional) */}
+                      <div>
+                        <label className="text-[8px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>🔒 Password <span style={{ color: 'rgba(255,255,255,0.25)' }}>(optional)</span></label>
+                        <input
+                          type="password"
+                          value={roomPassword}
+                          onChange={(e) => setRoomPassword(e.target.value)}
+                          placeholder="Optional room password"
+                          className="w-full px-2 py-1.5 rounded-lg text-[10px]"
+                          style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.1)', outline: 'none' }}
+                        />
+                      </div>
+
+                      {/* Tax info */}
+                      <div className="px-2 py-1.5 rounded-lg" style={{ backgroundColor: 'rgba(255,122,0,0.04)', border: '1px solid rgba(255,122,0,0.08)' }}>
+                        <p className="text-[7px] font-bold" style={{ color: '#FF7A00' }}>🏛️ Tax Rules:</p>
+                        <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>2 Players: Winner takes 80% (20% tax), Loser gets 20% refund</p>
+                        <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>3 Players: 1st gets profit, 2nd 65% refund, 3rd 30%</p>
+                      </div>
+
+                      {/* Create button */}
+                      <button
+                        onClick={handleCreateRoom}
+                        disabled={roomCardCount < 1}
+                        className="w-full py-2 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                        style={{
+                          backgroundColor: roomCardCount >= 1 ? 'rgba(224,64,251,0.2)' : 'rgba(255,255,255,0.04)',
+                          border: roomCardCount >= 1 ? '1.5px solid rgba(224,64,251,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                          color: roomCardCount >= 1 ? '#E040FB' : 'rgba(255,255,255,0.2)',
+                          cursor: roomCardCount >= 1 ? 'pointer' : 'not-allowed',
+                        }}>
+                        🚪 Create Room (1 Card)
+                        <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                          • {roomCardCount} cards left
+                        </span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {/* Your UID */}
+                      <div>
+                        <label className="text-[8px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Your UID</label>
+                        <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                          <span className="text-[10px] font-mono font-bold" style={{ color: '#00FFFF' }}>{userCode}</span>
+                        </div>
+                      </div>
+
+                      {/* Random Match */}
+                      <button
+                        onClick={handleJoinRandom}
+                        disabled={isSearching}
+                        className="w-full py-3 rounded-lg text-[11px] font-bold flex items-center justify-center gap-2 transition-transform active:scale-95"
+                        style={{
+                          backgroundColor: isSearching ? 'rgba(0,230,118,0.1)' : 'rgba(0,230,118,0.15)',
+                          border: `1.5px solid ${isSearching ? 'rgba(0,230,118,0.3)' : 'rgba(0,230,118,0.4)'}`,
+                          color: '#00E676',
+                        }}>
+                        {isSearching ? (
+                          <>
+                            <motion.div
+                              animate={{ rotate: 360 }}
+                              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
+                              <Search className="w-4 h-4" />
+                            </motion.div>
+                            <span>Searching for opponent...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Search className="w-4 h-4" />
+                            <span>🎮 Random Match</span>
+                          </>
+                        )}
+                      </button>
+
+                      {isSearching && (
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            {[0, 1, 2].map((i) => (
+                              <motion.div
+                                key={i}
+                                animate={{ scale: [1, 1.3, 1], opacity: [0.4, 1, 0.4] }}
+                                transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.2 }}
+                                className="w-2 h-2 rounded-full"
+                                style={{ backgroundColor: '#00E676' }}
+                              />
+                            ))}
+                          </div>
+                          <p className="text-[7px] mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>No password rooms • Online players only</p>
+                        </motion.div>
+                      )}
+
+                      {!isSearching && (
+                        <p className="text-[7px] text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                          Join open rooms with no password • Matched with online players
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 11. Level Progress */}
               <button onClick={() => setShowLevelList(true)} className="w-full p-3 rounded-xl mb-3 text-left transition-transform active:scale-[0.98]" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
@@ -358,207 +802,8 @@ export function ProfilePanel({
                 )}
               </button>
 
-              {/* Game Today - Prominent Display */}
-              <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(0,255,255,0.06)', border: '1px solid rgba(0,255,255,0.15)' }}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4" style={{ color: '#00FFFF' }} />
-                    <span className="text-xs font-bold" style={{ color: '#00FFFF' }}>🎮 Game Today</span>
-                  </div>
-                  <span className="text-sm font-extrabold" style={{ color: gamesPlayedToday >= maxGamesPerDay ? '#F65E3B' : '#00FFFF' }}>
-                    {gamesPlayedToday}/{maxGamesPerDay}
-                  </span>
-                </div>
-                <div className="h-3 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
-                  <div className="h-full rounded-full transition-all" style={{
-                    width: `${Math.min(100, (gamesPlayedToday / maxGamesPerDay) * 100)}%`,
-                    background: gamesPlayedToday >= maxGamesPerDay
-                      ? 'linear-gradient(90deg, #F65E3B, #FF7A00)'
-                      : 'linear-gradient(90deg, #00FFFF, #00E676)',
-                  }} />
-                </div>
-                <p className="text-[8px] mt-1" style={{ color: gamesPlayedToday >= maxGamesPerDay ? '#F65E3B' : 'rgba(255,255,255,0.4)' }}>
-                  {gamesPlayedToday >= maxGamesPerDay ? 'Daily limit reached! Come back tomorrow' : `${maxGamesPerDay - gamesPlayedToday} games remaining today`}
-                </p>
-              </div>
-
-              {/* Win Rate Box */}
-              <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)' }}>
-                <div className="flex items-center gap-2 mb-2">
-                  <Percent className="w-4 h-4" style={{ color: '#F65E3B' }} />
-                  <span className="text-xs font-bold" style={{ color: '#F65E3B' }}>Win Rate</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-2xl font-extrabold" style={{ color: winPercentage >= 50 ? '#00E676' : '#F65E3B' }}>
-                      {totalBattlesPlayed > 0 ? `${winPercentage}%` : '-'}
-                    </p>
-                    <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                      {totalBattlesWon}W / {totalBattlesPlayed - totalBattlesWon}L ({totalBattlesPlayed} battles)
-                    </p>
-                  </div>
-                  <div className="w-14 h-14 rounded-full flex items-center justify-center relative" style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '3px solid rgba(255,255,255,0.1)' }}>
-                    <svg className="absolute inset-0" viewBox="0 0 36 36">
-                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="2.5" />
-                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none" stroke={winPercentage >= 50 ? '#00E676' : '#F65E3B'} strokeWidth="2.5"
-                        strokeDasharray={`${winPercentage}, 100`} strokeLinecap="round" />
-                    </svg>
-                    <TrendingUp className="w-5 h-5" style={{ color: winPercentage >= 50 ? '#00E676' : '#F65E3B' }} />
-                  </div>
-                </div>
-              </div>
-
-              {/* Stats Grid */}
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <StatBox icon={<Trophy className="w-4 h-4" />} label="Classic Best" value={bestScore > 0 ? bestScore.toLocaleString() : '-'} color="#EDC22E" />
-                <StatBox icon={<Swords className="w-4 h-4" />} label="Battle Best" value={battleBestScore > 0 ? battleBestScore.toLocaleString() : '-'} color="#F65E3B" />
-                <StatBox icon={<Target className="w-4 h-4" />} label="Level XP" value={`${levelXP.toLocaleString()} / ${nextLevelThreshold.toLocaleString()}`} color="#00E676" />
-                <StatBox icon={<Coins className="w-4 h-4" />} label="Total Earned" value={formatCoinCount(totalCoinsEarned)} color="#EDC22E" />
-                <StatBox icon={<Calendar className="w-4 h-4" />} label="Games Today" value={`${gamesPlayedToday}/${maxGamesPerDay}`} color="#00FFFF" />
-                <StatBox icon={<DoorOpen className="w-4 h-4" />} label="Room Cards" value={roomCardCount.toString()} color="#E040FB" />
-              </div>
-
-              {/* User ID Box */}
-              <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(0,255,255,0.05)', border: '1px solid rgba(0,255,255,0.12)' }}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">🆔</span>
-                    <div>
-                      <p className="text-[9px] font-bold" style={{ color: '#00FFFF' }}>User ID</p>
-                      <p className="text-base font-mono font-extrabold tracking-widest" style={{ color: '#FFFFFF' }}>{userCode}</p>
-                    </div>
-                  </div>
-                  <button onClick={handleCopyCode}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg transition-transform active:scale-95"
-                    style={{ backgroundColor: copiedCode ? 'rgba(0,230,118,0.15)' : 'rgba(0,255,255,0.1)', border: `1px solid ${copiedCode ? 'rgba(0,230,118,0.3)' : 'rgba(0,255,255,0.25)'}` }}>
-                    <Copy className="w-3 h-3" style={{ color: copiedCode ? '#00E676' : '#00FFFF' }} />
-                    <span className="text-[9px] font-bold" style={{ color: copiedCode ? '#00E676' : '#00FFFF' }}>{copiedCode ? 'Copied!' : 'Copy'}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Room Fight Section */}
-              <button onClick={() => onOpenRoomFight?.()}
-                className="w-full p-3 rounded-xl mb-3 relative overflow-hidden text-left transition-transform active:scale-[0.98]"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(224,64,251,0.08), rgba(124,77,255,0.08))',
-                  border: '1.5px solid rgba(224,64,251,0.25)',
-                  cursor: onOpenRoomFight ? 'pointer' : 'default',
-                }}>
-                <div className="absolute top-0 right-0 w-20 h-20 rounded-full opacity-10 pointer-events-none"
-                  style={{ background: 'radial-gradient(circle, #E040FB, transparent)', filter: 'blur(20px)', transform: 'translate(30%, -30%)' }} />
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">🃏</span>
-                    <span className="text-xs font-bold" style={{ color: '#E040FB' }}>Room Fight</span>
-                  </div>
-                  {onOpenRoomFight ? (
-                    <span className="text-[7px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(0,230,118,0.15)', color: '#00E676', border: '1px solid rgba(0,230,118,0.3)' }}>
-                      Open ▸
-                    </span>
-                  ) : (
-                    <span className="text-[7px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(224,64,251,0.2)', color: '#E040FB', border: '1px solid rgba(224,64,251,0.3)' }}>
-                      Coming Soon
-                    </span>
-                  )}
-                </div>
-                <p className="text-[9px] mb-2" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  Create or join rooms to battle friends in real-time! Use Room Cards to enter.
-                </p>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(224,64,251,0.1)', border: '1px solid rgba(224,64,251,0.2)' }}>
-                    <span className="text-[10px]">🚪</span>
-                    <span className="text-[9px] font-bold" style={{ color: '#E040FB' }}>{roomCardCount} Cards</span>
-                  </div>
-                  <div className="flex items-center gap-1 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <span className="text-[10px]">👥</span>
-                    <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>2-4 Players</span>
-                  </div>
-                </div>
-              </button>
-
-              {/* Game History Section */}
-              <div className="rounded-xl mb-3" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <button onClick={() => setShowHistory(!showHistory)}
-                  className="w-full p-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <History className="w-4 h-4" style={{ color: '#FF7A00' }} />
-                    <span className="text-xs font-bold" style={{ color: '#FF7A00' }}>📊 Game History</span>
-                    <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,122,0,0.15)', color: '#FF7A00' }}>
-                      {gameHistory.length}
-                    </span>
-                  </div>
-                  <motion.div animate={{ rotate: showHistory ? 180 : 0 }} transition={{ duration: 0.2 }}>
-                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>▼</span>
-                  </motion.div>
-                </button>
-
-                <AnimatePresence>
-                  {showHistory && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                      className="overflow-hidden">
-                      <div className="max-h-48 overflow-y-auto px-3 pb-3 space-y-2">
-                        {gameHistory.length === 0 ? (
-                          <div className="text-center py-4">
-                            <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No games played yet</p>
-                            <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.2)' }}>Your recent games will appear here</p>
-                          </div>
-                        ) : (
-                          Object.entries(groupedHistory).map(([dateGroup, entries]) => (
-                            <div key={dateGroup}>
-                              <p className="text-[8px] font-bold mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>{dateGroup}</p>
-                              <div className="space-y-1">
-                                {entries.map((entry) => (
-                                  <div key={entry.id}
-                                    className="flex items-center justify-between px-2 py-1.5 rounded-lg"
-                                    style={{
-                                      backgroundColor: entry.result === 'win' ? 'rgba(0,230,118,0.04)' : entry.result === 'lose' ? 'rgba(246,94,59,0.04)' : 'rgba(255,255,255,0.02)',
-                                      border: `1px solid ${entry.result === 'win' ? 'rgba(0,230,118,0.1)' : entry.result === 'lose' ? 'rgba(246,94,59,0.1)' : 'rgba(255,255,255,0.04)'}`,
-                                    }}>
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-[10px]">{getModeIcon(entry.mode)}</span>
-                                      <div>
-                                        <div className="flex items-center gap-1">
-                                          <span className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.7)' }}>{getModeLabel(entry.mode)}</span>
-                                          {entry.entryFee > 0 && (
-                                            <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>₹{entry.entryFee}</span>
-                                          )}
-                                        </div>
-                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                                          {new Date(entry.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </p>
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>{entry.score.toLocaleString()}</span>
-                                      <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full"
-                                        style={{
-                                          backgroundColor: entry.result === 'win' ? 'rgba(0,230,118,0.15)' : entry.result === 'lose' ? 'rgba(246,94,59,0.15)' : 'rgba(255,255,255,0.05)',
-                                          color: entry.result === 'win' ? '#00E676' : entry.result === 'lose' ? '#F65E3B' : 'rgba(255,255,255,0.4)',
-                                        }}>
-                                        {entry.result === 'win' ? 'W' : entry.result === 'lose' ? 'L' : '—'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
               {/* Points Info */}
-              <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.1)' }}>
+              <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.1)' }}>
                 <p className="text-[10px] font-bold mb-1" style={{ color: '#00E676' }}>📊 How Leveling Works</p>
                 <ul className="space-y-0.5">
                   <li className="text-[9px] flex items-start gap-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
@@ -579,7 +824,7 @@ export function ProfilePanel({
                 </ul>
               </div>
 
-              {/* Theme Toggle */}
+              {/* 12. Theme Toggle */}
               <div className="flex items-center justify-between p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center gap-2">
                   {isDarkTheme ? <Moon className="w-4 h-4" style={{ color: '#7C4DFF' }} /> : <Sun className="w-4 h-4" style={{ color: '#FFB300' }} />}
@@ -595,7 +840,7 @@ export function ProfilePanel({
                 </button>
               </div>
 
-              {/* Reset Data Button */}
+              {/* 13. Reset Data Button */}
               {onResetAllData && (
                 <button
                   onClick={() => {
@@ -617,6 +862,124 @@ export function ProfilePanel({
               </div>
             </div>
           </motion.div>
+
+          {/* Game History Full Screen Overlay - z-[300] */}
+          <AnimatePresence>
+            {showGameHistory && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[300] flex items-center justify-center"
+                style={{ backgroundColor: 'rgba(0,0,0,0.92)' }}
+              >
+                <motion.div
+                  initial={{ scale: 0.9, y: 20 }}
+                  animate={{ scale: 1, y: 0 }}
+                  exit={{ scale: 0.9 }}
+                  className="w-full max-w-sm h-[90vh] rounded-2xl overflow-hidden flex flex-col"
+                  style={{ background: 'linear-gradient(135deg, var(--game-bg-1), var(--game-bg-2))', border: '1px solid rgba(255,255,255,0.1)' }}
+                >
+                  {/* Header with close */}
+                  <div className="flex items-center justify-between p-4 pb-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div className="flex items-center gap-2">
+                      <History className="w-4 h-4" style={{ color: '#FF7A00' }} />
+                      <h3 className="text-lg font-bold" style={{ color: '#FFFFFF' }}>Game History</h3>
+                      <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,122,0,0.15)', color: '#FF7A00' }}>
+                        {gameHistory.length}
+                      </span>
+                    </div>
+                    <button onClick={() => setShowGameHistory(false)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform active:scale-95" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
+                      <X className="w-4 h-4" style={{ color: 'rgba(255,255,255,0.6)' }} />
+                    </button>
+                  </div>
+
+                  {/* Tab Sliders */}
+                  <div className="flex p-3 gap-1.5">
+                    {(['today', 'yesterday', 'week'] as const).map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setHistoryTab(tab)}
+                        className="flex-1 py-2 rounded-lg text-[10px] font-bold text-center transition-all active:scale-95"
+                        style={{
+                          backgroundColor: historyTab === tab ? 'rgba(255,122,0,0.2)' : 'rgba(255,255,255,0.04)',
+                          border: historyTab === tab ? '1.5px solid rgba(255,122,0,0.4)' : '1px solid rgba(255,255,255,0.06)',
+                          color: historyTab === tab ? '#FF7A00' : 'rgba(255,255,255,0.4)',
+                        }}
+                      >
+                        {tab === 'today' ? '📅 Today' : tab === 'yesterday' ? '📆 Yesterday' : '📊 This Week'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* History Cards */}
+                  <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-2">
+                    {(() => {
+                      const filtered = getFilteredHistory()
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="text-center py-12">
+                            <History className="w-12 h-12 mx-auto mb-3" style={{ color: 'rgba(255,255,255,0.1)' }} />
+                            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>No games found</p>
+                            <p className="text-[10px] mt-1" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                              {historyTab === 'today' ? 'Play some games today!' : historyTab === 'yesterday' ? 'No games yesterday' : 'No games this week'}
+                            </p>
+                          </div>
+                        )
+                      }
+                      return filtered.map((entry) => (
+                        <div key={entry.id}
+                          className="p-3 rounded-xl"
+                          style={{
+                            backgroundColor: entry.result === 'win' ? 'rgba(0,230,118,0.06)' : entry.result === 'lose' ? 'rgba(246,94,59,0.06)' : 'rgba(255,255,255,0.03)',
+                            border: `1px solid ${entry.result === 'win' ? 'rgba(0,230,118,0.15)' : entry.result === 'lose' ? 'rgba(246,94,59,0.15)' : 'rgba(255,255,255,0.06)'}`,
+                          }}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">{getModeIcon(entry.mode)}</span>
+                              <div>
+                                <span className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.8)' }}>{getModeLabel(entry.mode)}</span>
+                                {entry.entryFee > 0 && (
+                                  <span className="text-[8px] ml-1" style={{ color: 'rgba(255,255,255,0.3)' }}>• ₹{entry.entryFee}</span>
+                                )}
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-bold px-2.5 py-1 rounded-full"
+                              style={{
+                                backgroundColor: entry.result === 'win' ? 'rgba(0,230,118,0.15)' : entry.result === 'lose' ? 'rgba(246,94,59,0.15)' : 'rgba(255,255,255,0.05)',
+                                color: entry.result === 'win' ? '#00E676' : entry.result === 'lose' ? '#F65E3B' : 'rgba(255,255,255,0.4)',
+                              }}>
+                              {entry.result === 'win' ? '🏆 WIN' : entry.result === 'lose' ? '💀 LOSS' : '🎮 PLAYED'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div>
+                                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Opponent</p>
+                                <p className="text-[9px] font-mono font-bold" style={{ color: '#00FFFF' }}>{entry.mode === 'classic' ? '—' : 'BOT'}</p>
+                              </div>
+                              <div>
+                                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.35)' }}>You</p>
+                                <p className="text-[9px] font-mono font-bold" style={{ color: '#00FFFF' }}>{userCode}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-lg font-extrabold" style={{ color: entry.result === 'win' ? '#00E676' : entry.result === 'lose' ? '#F65E3B' : '#FFFFFF' }}>
+                                {entry.score.toLocaleString()}
+                              </p>
+                              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                {new Date(entry.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       )}
     </AnimatePresence>
@@ -625,14 +988,14 @@ export function ProfilePanel({
 
 function StatBox({ icon, label, value, subtitle, color }: { icon: React.ReactNode; label: string; value: string; subtitle?: string; color: string }) {
   return (
-    <div className="p-2.5 rounded-xl" style={{ backgroundColor: `${color}08`, border: `1px solid ${color}15` }}>
-      <div className="flex items-center gap-1.5 mb-1">
+    <div className="p-2 rounded-xl text-center" style={{ backgroundColor: `${color}08`, border: `1px solid ${color}15` }}>
+      <div className="flex items-center justify-center gap-1 mb-1">
         <div style={{ color }}>{icon}</div>
-        <span className="text-[8px] font-semibold" style={{ color: 'rgba(255,255,255,0.4)' }}>{label}</span>
+        <span className="text-[7px] font-semibold" style={{ color: 'rgba(255,255,255,0.4)' }}>{label}</span>
       </div>
-      <span className="text-sm font-extrabold" style={{ color }}>{value}</span>
+      <span className="text-sm font-extrabold block" style={{ color }}>{value}</span>
       {subtitle && (
-        <span className="text-[8px] ml-1 font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>{subtitle}</span>
+        <span className="text-[7px] font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>{subtitle}</span>
       )}
     </div>
   )

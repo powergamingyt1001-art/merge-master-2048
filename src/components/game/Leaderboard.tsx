@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Crown, Medal, Star, Trophy, Swords, Coins, Wifi, WifiOff, Target, ChevronRight } from 'lucide-react'
+import { X, Crown, Medal, Star, Trophy, Swords, Coins, Wifi, WifiOff, Target, ChevronRight, Heart } from 'lucide-react'
 import { getLeaderboardPlayers, onLeaderboardUpdate, type FirebasePlayer } from '@/lib/firebase-service'
 
 interface LeaderboardProps {
@@ -163,6 +163,14 @@ function getOfflineRank(playerBestScore: number): { currentRank: number; nextTar
 export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, playerName, playerAvatar, playerId, tournamentPoints }: LeaderboardProps) {
   const [tab, setTab] = useState<TabType>('modesScore')
   const [firebasePlayers, setFirebasePlayers] = useState<FirebasePlayer[]>([])
+  const [selectedPlayer, setSelectedPlayerRaw] = useState<LeaderboardEntry | null>(null)
+  const [liked, setLiked] = useState(false)
+
+  // Wrapper to reset liked when selectedPlayer changes
+  const setSelectedPlayer = (player: LeaderboardEntry | null) => {
+    setSelectedPlayerRaw(player)
+    setLiked(false)
+  }
 
   // Listen to Firebase leaderboard in real-time
   useEffect(() => {
@@ -243,15 +251,15 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
                     <>
                       {/* Top 3 Podium */}
                       <div className="flex items-end justify-center gap-2 mb-3">
-                        {modesEntries[1] && <PodiumSlot entry={modesEntries[1]} place={2} />}
-                        {modesEntries[0] && <PodiumSlot entry={modesEntries[0]} place={1} />}
-                        {modesEntries[2] && <PodiumSlot entry={modesEntries[2]} place={3} />}
+                        {modesEntries[1] && <PodiumSlot entry={modesEntries[1]} place={2} onClick={() => setSelectedPlayer(modesEntries[1])} />}
+                        {modesEntries[0] && <PodiumSlot entry={modesEntries[0]} place={1} onClick={() => setSelectedPlayer(modesEntries[0])} />}
+                        {modesEntries[2] && <PodiumSlot entry={modesEntries[2]} place={3} onClick={() => setSelectedPlayer(modesEntries[2])} />}
                       </div>
 
                       {/* List below */}
                       <div className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
                         {modesEntries.slice(3).map((entry) => (
-                          <RankRow key={entry.rank} entry={entry} color="#F65E3B" />
+                          <RankRow key={entry.rank} entry={entry} color="#F65E3B" onClick={() => setSelectedPlayer(entry)} />
                         ))}
                       </div>
                     </>
@@ -276,15 +284,15 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
                     <>
                       {/* Top 3 Podium */}
                       <div className="flex items-end justify-center gap-2 mb-3">
-                        {coinsEntries[1] && <PodiumSlot entry={coinsEntries[1]} place={2} />}
-                        {coinsEntries[0] && <PodiumSlot entry={coinsEntries[0]} place={1} />}
-                        {coinsEntries[2] && <PodiumSlot entry={coinsEntries[2]} place={3} />}
+                        {coinsEntries[1] && <PodiumSlot entry={coinsEntries[1]} place={2} onClick={() => setSelectedPlayer(coinsEntries[1])} />}
+                        {coinsEntries[0] && <PodiumSlot entry={coinsEntries[0]} place={1} onClick={() => setSelectedPlayer(coinsEntries[0])} />}
+                        {coinsEntries[2] && <PodiumSlot entry={coinsEntries[2]} place={3} onClick={() => setSelectedPlayer(coinsEntries[2])} />}
                       </div>
 
                       {/* List below */}
                       <div className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
                         {coinsEntries.slice(3).map((entry) => (
-                          <RankRow key={entry.rank} entry={entry} color="#EDC22E" />
+                          <RankRow key={entry.rank} entry={entry} color="#EDC22E" onClick={() => setSelectedPlayer(entry)} />
                         ))}
                       </div>
                     </>
@@ -380,6 +388,52 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
                 </div>
               )}
             </div>
+
+            {/* Player Profile Overlay */}
+            <AnimatePresence>
+              {selectedPlayer && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-50 flex items-center justify-center"
+                  style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
+                >
+                  <motion.div
+                    initial={{ scale: 0.8 }}
+                    animate={{ scale: 1 }}
+                    exit={{ scale: 0.8 }}
+                    className="w-64 rounded-2xl p-5 text-center relative"
+                    style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
+                  >
+                    <button onClick={() => setSelectedPlayer(null)} className="absolute top-3 right-3 w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
+                      <X className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                    </button>
+                    <div className="w-16 h-16 rounded-full mx-auto mb-3 flex items-center justify-center text-3xl"
+                      style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', border: '2px solid rgba(255,255,255,0.2)' }}>
+                      {selectedPlayer.avatar}
+                    </div>
+                    <p className="text-base font-bold mb-1" style={{ color: '#FFFFFF' }}>{selectedPlayer.name}</p>
+                    <div className="flex items-center justify-center gap-1.5 mb-2">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: isOnline(selectedPlayer.lastActive) ? '#00E676' : '#666' }} />
+                      <span className="text-[9px] font-bold" style={{ color: isOnline(selectedPlayer.lastActive) ? '#00E676' : '#666' }}>
+                        {isOnline(selectedPlayer.lastActive) ? 'Online' : 'Offline'}
+                      </span>
+                    </div>
+                    <p className="text-xl font-extrabold mb-1" style={{ color: '#EDC22E' }}>{selectedPlayer.value.toLocaleString()}</p>
+                    <p className="text-[9px] mb-3" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                      {tab === 'coinsRank' ? 'Coins' : 'Score'}
+                    </p>
+                    <button onClick={() => { setLiked(!liked) }}
+                      className="w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2"
+                      style={{ backgroundColor: liked ? 'rgba(246,94,59,0.15)' : 'rgba(255,255,255,0.06)', border: liked ? '1px solid rgba(246,94,59,0.4)' : '1px solid rgba(255,255,255,0.08)', color: liked ? '#F65E3B' : 'rgba(255,255,255,0.5)' }}>
+                      <Heart fill={liked ? '#F65E3B' : 'none'} className="w-4 h-4" />
+                      {liked ? 'Liked' : 'Like'}
+                    </button>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         </motion.div>
       )}
@@ -387,7 +441,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
   )
 }
 
-function PodiumSlot({ entry, place }: { entry: LeaderboardEntry; place: 1 | 2 | 3 }) {
+function PodiumSlot({ entry, place, onClick }: { entry: LeaderboardEntry; place: 1 | 2 | 3; onClick?: () => void }) {
   const medalColor = place === 1 ? '#FFD700' : place === 2 ? '#C0C0C0' : '#CD7F32'
   const bgColor = entry.isPlayer ? 'rgba(237,194,46,0.2)' : place === 1 ? 'rgba(255,215,0,0.12)' : place === 2 ? 'rgba(192,192,192,0.12)' : 'rgba(205,127,50,0.12)'
   const borderColor = entry.isPlayer ? 'rgba(237,194,46,0.3)' : `${medalColor}30`
@@ -395,7 +449,7 @@ function PodiumSlot({ entry, place }: { entry: LeaderboardEntry; place: 1 | 2 | 
   const avatarSize = place === 1 ? 'text-3xl' : 'text-2xl'
 
   return (
-    <div className="flex flex-col items-center" style={{ minWidth: place === 1 ? 80 : 68 }}>
+    <div className="flex flex-col items-center cursor-pointer" style={{ minWidth: place === 1 ? 80 : 68 }} onClick={onClick}>
       <span className={`${avatarSize} mb-0.5`}>{entry.avatar}</span>
       <div className={`w-full ${height} rounded-t-lg text-center`} style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}` }}>
         {place === 1 ? (
@@ -417,10 +471,11 @@ function PodiumSlot({ entry, place }: { entry: LeaderboardEntry; place: 1 | 2 | 
   )
 }
 
-function RankRow({ entry, color }: { entry: LeaderboardEntry; color: string }) {
+function RankRow({ entry, color, onClick }: { entry: LeaderboardEntry; color: string; onClick?: () => void }) {
   return (
-    <div className="flex items-center gap-2 py-1.5 px-2 rounded-lg mb-1"
-      style={{ backgroundColor: entry.isPlayer ? 'rgba(237,194,46,0.12)' : 'rgba(255,255,255,0.03)', border: entry.isPlayer ? '1px solid rgba(237,194,46,0.2)' : '1px solid transparent' }}>
+    <div className="flex items-center gap-2 py-1.5 px-2 rounded-lg mb-1 cursor-pointer"
+      style={{ backgroundColor: entry.isPlayer ? 'rgba(237,194,46,0.12)' : 'rgba(255,255,255,0.03)', border: entry.isPlayer ? '1px solid rgba(237,194,46,0.2)' : '1px solid transparent' }}
+      onClick={onClick}>
       <span className="text-[10px] font-bold w-5 text-center" style={{ color: 'rgba(255,255,255,0.4)' }}>#{entry.rank}</span>
       <span className="text-sm">{entry.avatar}</span>
       {/* Online/Offline indicator - only for rank 4+ */}

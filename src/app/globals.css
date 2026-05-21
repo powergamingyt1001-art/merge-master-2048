@@ -76,16 +76,16 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  /* Game theme - Premium vibrant purple/magenta */
-  --game-bg-1: #2D0A4E;
-  --game-bg-2: #4A0E6B;
-  --game-bg-3: #1A0533;
-  --game-text: #F0E6FF;
-  --game-text-secondary: rgba(240, 230, 255, 0.5);
-  --game-glass: rgba(80, 20, 120, 0.5);
-  --game-glass-border: rgba(224, 64, 251, 0.25);
-  --game-glass-light: rgba(80, 20, 120, 0.6);
-  --game-overlay: rgba(45, 10, 78, 0.9);
+  /* Game theme - Warm Teal/Amber Premium */
+  --game-bg-1: #0F2027;
+  --game-bg-2: #203A43;
+  --game-bg-3: #2C5364;
+  --game-text: #E0F7FA;
+  --game-text-secondary: rgba(224, 247, 250, 0.5);
+  --game-glass: rgba(32, 58, 67, 0.6);
+  --game-glass-border: rgba(0, 188, 212, 0.25);
+  --game-glass-light: rgba(32, 58, 67, 0.4);
+  --game-overlay: rgba(15, 32, 39, 0.9);
 }
 
 .dark {

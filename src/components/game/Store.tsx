@@ -88,10 +88,36 @@ const MULTIPLIER_2_5X: AbilityItem[] = [
   { id: '2.5x-80', emoji: '🔥', name: '2.5x Multiplier', quantity: 80, price: 189, section: '2.5x', tag: { label: 'HOT', color: '#F65E3B' }, currency: 'inr' },
 ]
 
+const ROOM_CARD_PACKS: AbilityItem[] = [
+  { id: 'room-1', emoji: '🃏', name: '1 Room Card', quantity: 1, price: 29, section: 'regular', currency: 'inr' },
+  { id: 'room-2', emoji: '🃏', name: '2 Room Cards', quantity: 2, price: 59, section: 'regular', currency: 'inr' },
+  { id: 'room-5', emoji: '🃏', name: '5 Room Cards', quantity: 5, price: 129, section: 'regular', tag: { label: 'HOT', color: '#F65E3B' }, currency: 'inr' },
+  { id: 'room-10', emoji: '🃏', name: '10 Room Cards', quantity: 10, price: 199, section: 'regular', tag: { label: 'POPULAR', color: '#00E676' }, currency: 'inr' },
+]
+
 const UPI_ID = '9897186065@fam'
 const ORDERS_KEY = 'mergeMaster2048_orders'
 const PURCHASE_LIMIT_KEY = 'mergeMaster2048_abilityPurchaseLimits'
 const MAX_ABILITY_PER_2WEEKS = 15
+const PAYMENT_DETAILS_KEY = 'mergeMaster2048_paymentDetails'
+
+interface SavedPaymentDetails {
+  name: string
+  whatsappNumber: string
+}
+
+function loadSavedPaymentDetails(): SavedPaymentDetails | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const data = localStorage.getItem(PAYMENT_DETAILS_KEY)
+    return data ? JSON.parse(data) : null
+  } catch { return null }
+}
+
+function savePaymentDetails(name: string, whatsappNumber: string) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(PAYMENT_DETAILS_KEY, JSON.stringify({ name, whatsappNumber }))
+}
 
 // ─── Custom Price Overrides (from Admin Panel) ────────────────────────────────
 
@@ -343,6 +369,87 @@ function canWatchFreeAd(): boolean {
   }
 }
 
+// ─── Daily Purchase Streak Tracker ──────────────────────────────────────────
+
+const DAILY_STREAK_KEY = 'mergeMaster2048_dailyStreak'
+
+interface DailyStreakData {
+  price: number
+  startDate: string
+  count: number
+}
+
+function loadDailyStreak(): DailyStreakData | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const data = localStorage.getItem(DAILY_STREAK_KEY)
+    if (!data) return null
+    const parsed: DailyStreakData = JSON.parse(data)
+    // Check if the streak is still valid (within 7 consecutive days from startDate)
+    const today = new Date().toISOString().split('T')[0]
+    const start = new Date(parsed.startDate)
+    const now = new Date(today)
+    const diffDays = Math.floor((now.getTime() - start.getTime()) / (24 * 60 * 60 * 1000))
+    if (diffDays >= 7) {
+      // Streak expired, reset
+      localStorage.removeItem(DAILY_STREAK_KEY)
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function saveDailyStreak(data: DailyStreakData) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(DAILY_STREAK_KEY, JSON.stringify(data))
+}
+
+function recordDailyStreakPurchase(price: number): { isStreakComplete: boolean; coinsToRefund: number } {
+  const today = new Date().toISOString().split('T')[0]
+  const existing = loadDailyStreak()
+
+  if (!existing) {
+    // Start new streak
+    saveDailyStreak({ price, startDate: today, count: 1 })
+    return { isStreakComplete: false, coinsToRefund: 0 }
+  }
+
+  // Check if same price
+  if (existing.price !== price) {
+    // Different price, reset streak
+    saveDailyStreak({ price, startDate: today, count: 1 })
+    return { isStreakComplete: false, coinsToRefund: 0 }
+  }
+
+  // Same price - check if we already recorded today
+  const lastCount = existing.count
+  const start = new Date(existing.startDate)
+  const now = new Date(today)
+  const dayIndex = Math.floor((now.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+
+  // Only increment if we haven't already recorded for today
+  if (dayIndex > lastCount) {
+    const newCount = lastCount + 1
+    saveDailyStreak({ price, startDate: existing.startDate, count: newCount })
+
+    if (newCount >= 7) {
+      // Streak complete! Reset after claiming
+      localStorage.removeItem(DAILY_STREAK_KEY)
+      return { isStreakComplete: true, coinsToRefund: price }
+    }
+  }
+
+  return { isStreakComplete: false, coinsToRefund: 0 }
+}
+
+function getDailyStreakInfo(): { price: number; count: number } | null {
+  const data = loadDailyStreak()
+  if (!data) return null
+  return { price: data.price, count: data.count }
+}
+
 function formatNumber(n: number): string {
   return n.toLocaleString('en-IN')
 }
@@ -410,8 +517,16 @@ function UPIPaymentModal({
   playerId,
   onOrderPlaced,
 }: PaymentModalProps) {
-  const [whatsappNumber, setWhatsappNumber] = useState('')
-  const [name, setName] = useState('')
+  const [whatsappNumber, setWhatsappNumber] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    const saved = loadSavedPaymentDetails()
+    return saved?.whatsappNumber ?? ''
+  })
+  const [name, setName] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    const saved = loadSavedPaymentDetails()
+    return saved?.name ?? ''
+  })
   const [transactionId, setTransactionId] = useState('')
   const [utrNumber, setUtrNumber] = useState('')
   const [proofBase64, setProofBase64] = useState<string | undefined>(undefined)
@@ -458,6 +573,9 @@ function UPIPaymentModal({
 
     setSubmitting(true)
 
+    // Save payment details for next time
+    savePaymentDetails(name.trim(), whatsappNumber.trim())
+
     const order: StoreOrder = {
       id: Date.now().toString(),
       date: new Date().toISOString(),
@@ -476,9 +594,7 @@ function UPIPaymentModal({
 
     onOrderPlaced(order)
 
-    // Reset form
-    setWhatsappNumber('')
-    setName('')
+    // Reset transaction-specific fields only (keep name & whatsapp)
     setTransactionId('')
     setUtrNumber('')
     setProofBase64(undefined)
@@ -871,7 +987,7 @@ function AbilityCard({
 
 // ─── Ability Tab ─────────────────────────────────────────────────────────────
 
-function AbilityTab({ onBuy, onCoinBuy, coins, onClaimFreeRoomCard, consecutiveVisits, freeRoomCardAvailable }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number; onClaimFreeRoomCard?: () => void; consecutiveVisits: number; freeRoomCardAvailable: boolean }) {
+function AbilityTab({ onBuy, onCoinBuy, coins, onClaimFreeRoomCard, consecutiveVisits, freeRoomCardAvailable, onAddRoomCards, onAddNotification, onDeductCoins }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number; onClaimFreeRoomCard?: () => void; consecutiveVisits: number; freeRoomCardAvailable: boolean; onAddRoomCards?: (count: number) => void; onAddNotification: (title: string, message: string, type: string, emoji: string) => void; onDeductCoins: (amount: number) => void }) {
   const [freeRoomCardPending, setFreeRoomCardPending] = useState(false)
   const freeRoomCardOpenedRef = useRef(false)
 
@@ -899,6 +1015,19 @@ function AbilityTab({ onBuy, onCoinBuy, coins, onClaimFreeRoomCard, consecutiveV
       // Popup blocked - skip
     }
   }, [freeRoomCardAvailable, freeRoomCardPending])
+
+  const handleBuyRoomCardWithCoins = useCallback(() => {
+    if (coins < 3000) {
+      onAddNotification('Not Enough Coins!', `You need 3,000 coins but have ${formatNumber(coins)}`, 'system', '😔')
+      return
+    }
+    onDeductCoins(3000)
+    onAddRoomCards?.(1)
+    onAddNotification('Room Card Purchased! 🃏', 'You bought 1 Room Card for 3,000 coins!', 'reward', '🃏')
+  }, [coins, onDeductCoins, onAddRoomCards, onAddNotification])
+
+  // Daily Streak info
+  const [dailyStreakInfo, setDailyStreakInfo] = useState<{ price: number; count: number } | null>(() => getDailyStreakInfo())
 
   return (
     <div className="space-y-4">
@@ -947,6 +1076,92 @@ function AbilityTab({ onBuy, onCoinBuy, coins, onClaimFreeRoomCard, consecutiveV
                 {consecutiveVisits < 7 ? `${7 - consecutiveVisits} more days` : 'Come back tomorrow'}
               </div>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Room Cards - INR */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-sm">🃏</span>
+          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#E040FB' }}>
+            ROOM CARDS (₹)
+          </h4>
+        </div>
+        <div className="space-y-2">
+          {ROOM_CARD_PACKS.map(item => (
+            <AbilityCard key={item.id} item={item as any} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} />
+          ))}
+        </div>
+      </div>
+
+      {/* Room Cards - Coins */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <Coins className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
+          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#E040FB' }}>
+            ROOM CARD (COINS)
+          </h4>
+        </div>
+        <div className="relative flex items-center justify-between p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ backgroundColor: 'rgba(224,64,251,0.1)', border: '1px solid rgba(224,64,251,0.2)' }}>
+              🃏
+            </div>
+            <div>
+              <p className="text-xs font-bold" style={{ color: '#FFFFFF' }}>1 Room Card</p>
+              <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>3,000 Coins</p>
+            </div>
+          </div>
+          <button onClick={handleBuyRoomCardWithCoins} disabled={coins < 3000}
+            className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40"
+            style={{ background: 'linear-gradient(135deg, #E040FB, #7C4DFF)', color: '#FFFFFF' }}>
+            BUY 💰
+          </button>
+        </div>
+      </div>
+
+      {/* Daily Purchase Streak */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-sm">🔥</span>
+          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#FF7A00' }}>
+            DAILY STREAK
+          </h4>
+        </div>
+        <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,122,0,0.06)', border: '1px solid rgba(255,122,0,0.15)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ backgroundColor: 'rgba(255,122,0,0.1)', border: '1px solid rgba(255,122,0,0.2)' }}>
+              🔥
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-bold" style={{ color: '#FFFFFF' }}>7-Day Purchase Streak</p>
+              <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                Buy the same ₹ pack 7 days in a row!
+              </p>
+              <p className="text-[8px] mt-0.5" style={{ color: '#FF7A00' }}>
+                🎁 Day 7: FREE coins + 1 Room Card!
+              </p>
+              <div className="flex items-center gap-1 mt-1">
+                {Array.from({ length: 7 }, (_, i) => (
+                  <div key={i} className="w-3.5 h-3.5 rounded-full flex items-center justify-center"
+                    style={{
+                      backgroundColor: dailyStreakInfo && i < dailyStreakInfo.count ? 'rgba(255,122,0,0.3)' : 'rgba(255,255,255,0.06)',
+                      border: dailyStreakInfo && i < dailyStreakInfo.count ? '1px solid rgba(255,122,0,0.5)' : '1px solid rgba(255,255,255,0.1)',
+                    }}>
+                    {dailyStreakInfo && i < dailyStreakInfo.count && <span className="text-[6px]" style={{ color: '#FF7A00' }}>✓</span>}
+                  </div>
+                ))}
+                <span className="text-[8px] ml-1" style={{ color: dailyStreakInfo && dailyStreakInfo.count >= 7 ? '#FF7A00' : 'rgba(255,255,255,0.3)' }}>
+                  {dailyStreakInfo ? `${dailyStreakInfo.count}/7` : '0/7'}
+                </span>
+              </div>
+              {dailyStreakInfo && (
+                <p className="text-[8px] mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  Current: ₹{dailyStreakInfo.price} pack
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1276,14 +1491,29 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
       setOrders(newOrders)
       saveOrders(newOrders)
       setPaymentModal({ open: false, itemName: '', itemPrice: 0, itemQuantity: 0 })
-      onAddNotification(
-        'Order Booked! 🛒',
-        `Your order for ${order.item} (₹${order.price}) has been submitted. We'll verify and deliver soon!`,
-        'system',
-        '📦'
-      )
+
+      // Record daily streak purchase
+      const streakResult = recordDailyStreakPurchase(order.price)
+      if (streakResult.isStreakComplete) {
+        // 7-day streak complete! Refund coins + give free room card
+        // The "coins" here represent the INR amount as game coins equivalent
+        onAddNotification(
+          '🔥 7-Day Streak Complete!',
+          `You completed a 7-day streak for ₹${order.price}! You got ₹${streakResult.coinsToRefund} worth of coins FREE + 1 Room Card! 🎉`,
+          'reward',
+          '🎁'
+        )
+        onAddRoomCards?.(1)
+      } else {
+        onAddNotification(
+          'Order Booked! 🛒',
+          `Your order for ${order.item} (₹${order.price}) has been submitted. We'll verify and deliver soon!`,
+          'system',
+          '📦'
+        )
+      }
     },
-    [orders, onAddNotification]
+    [orders, onAddNotification, onAddRoomCards]
   )
 
   const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
@@ -1386,7 +1616,7 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <AbilityTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onClaimFreeRoomCard={handleClaimFreeRoomCard} consecutiveVisits={consecutiveVisits} freeRoomCardAvailable={freeRoomCardAvailable} />
+                    <AbilityTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onClaimFreeRoomCard={handleClaimFreeRoomCard} consecutiveVisits={consecutiveVisits} freeRoomCardAvailable={freeRoomCardAvailable} onAddRoomCards={onAddRoomCards} onAddNotification={onAddNotification} onDeductCoins={onDeductCoins} />
                   </motion.div>
                 )}
                 {activeTab === 'history' && (

@@ -556,20 +556,13 @@ export function PlayDashboard({
             </div>
           )}
 
-          {/* Play with Friends + Daily Tasks */}
-          <div className="w-full rounded-lg p-2" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <div className="flex items-center gap-1 mb-1.5">
-                <span className="text-[9px]">👥</span>
-                <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>Play with Friends</p>
-              </div>
-              {/* Prominent Play with Friends button */}
-              <button onClick={() => setShowInvite(true)}
-                className="w-full mb-2 py-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
-                style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF', boxShadow: '0 4px 15px rgba(0,230,118,0.3)' }}>
-                <Users className="w-4 h-4" />
-                Invite & Play Together
-              </button>
+          {/* Daily Tasks */}
           {dailyTasks && dailyTasks.length > 0 && (
+            <div className="w-full rounded-lg p-2" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="flex items-center gap-1 mb-1.5">
+                <span className="text-[9px]">📋</span>
+                <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Daily Tasks</p>
+              </div>
               <div className="flex flex-col gap-1">
                 {dailyTasks.map(task => {
                   const isComplete = task.progress >= task.target
@@ -638,8 +631,8 @@ export function PlayDashboard({
                   )
                 })}
               </div>
+            </div>
           )}
-          </div>
 
           {/* Best Score + Commission row */}
           <div className="w-full flex gap-1.5">
@@ -764,7 +757,7 @@ export function PlayDashboard({
 
       {/* Modals */}
       <SpinWheel isOpen={showSpin} onClose={() => setShowSpin(false)} spinTickets={spinTickets}
-        onUseTicket={onUseSpinTicket} onWinPrize={handleSpinPrize} onWatchAdForSpin={() => { onAddSpinTickets(1) }} isOnline={isOnline} />
+        onUseTicket={onUseSpinTicket} onWinPrize={handleSpinPrize} onWatchAdForSpin={() => { onAddSpinTickets(1) }} isOnline={isOnline} coins={coins} onDeductCoins={onDeductCoins} />
       <LoginStreak isOpen={showStreak} onClose={() => setShowStreak(false)} streakDay={streakDay}
         streakClaimed={streakClaimed} onClaim={onClaimStreakDay} streakWeek={streakWeek} />
       <WelcomeGift isOpen={showWelcome} onClose={() => setShowWelcome(false)} onClaim={() => { onClaimWelcome(); setShowWelcome(false) }} />
