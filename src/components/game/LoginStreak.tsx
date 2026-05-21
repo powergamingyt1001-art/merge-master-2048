@@ -16,13 +16,13 @@ interface LoginStreakProps {
 }
 
 const STREAK_REWARDS = [
-  { day: 1, label: '2 Magnets + 10🪙', emoji: '🧲', color: '#00E676', items: '2x Magnet + 10 coins', coins: 10, abilities: [] as string[] },
-  { day: 2, label: '2 Spins + 25🪙', emoji: '🎫', color: '#00FFFF', items: '2 Spin tickets + 25 coins', coins: 25, abilities: [] as string[] },
-  { day: 3, label: 'Magnet + Boom + 35🪙', emoji: '🧲💣', color: '#F59563', items: 'Magnet & Boom + 35 coins + 1x 2.5x Ability!', coins: 35, abilities: ['💫 2.5x'] },
-  { day: 4, label: '2 Booms + 50🪙', emoji: '💣', color: '#FF7A00', items: '2x Boom + 50 coins', coins: 50, abilities: [] as string[] },
-  { day: 5, label: 'Hammer + Magnets + 65🪙', emoji: '🔨🧲', color: '#F67C5F', items: 'Hammer & Magnets + 65 coins + 1x +10s Timer!', coins: 65, abilities: ['⏱️ +10s'] },
-  { day: 6, label: 'Mega Power-ups + 100🪙', emoji: '🧲🔨', color: '#F59563', items: 'Mega power-ups + 100 coins!', coins: 100, abilities: [] as string[] },
-  { day: 7, label: '5 Spins + 200🪙', emoji: '🎰', color: '#EDC22E', items: 'BIG REWARD! 5 spins + 200 coins + ALL Abilities! 🎉', coins: 200, abilities: ['⚡ 5x', '💫 2.5x', '⏱️ +10s'] },
+  { day: 1, label: 'Magnet + 10🪙', emoji: '🧲', color: '#00E676', items: '1x Magnet + 10 coins', coins: 10, abilities: [] as string[] },
+  { day: 2, label: '2 Undo + 50🪙', emoji: '↩️', color: '#00FFFF', items: '2x Undo + 50 coins', coins: 50, abilities: [] as string[] },
+  { day: 3, label: 'Timer + 20🪙', emoji: '⏱️', color: '#F59563', items: '1x Timer Skill + 20 coins', coins: 20, abilities: [] as string[] },
+  { day: 4, label: '5 Hammer + 100🪙', emoji: '🔨', color: '#FF7A00', items: '5x Hammer + 100 coins', coins: 100, abilities: [] as string[] },
+  { day: 5, label: '5 Bomb + 200🪙', emoji: '💣', color: '#F67C5F', items: '5x Bomb + 200 coins', coins: 200, abilities: [] as string[] },
+  { day: 6, label: '1 Room Card', emoji: '🃏', color: '#E040FB', items: '1x Room Card for private games!', coins: 0, abilities: [] as string[] },
+  { day: 7, label: '5x + 2.5x + 250🪙', emoji: '🎰', color: '#EDC22E', items: 'BIG REWARD! 1x 5x + 1x 2.5x + 250 coins! 🎉', coins: 250, abilities: ['⚡ 5x', '💫 2.5x'] },
 ]
 
 export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim, onClaimStreakAdBonus, streakAdBonusClaimed = false }: LoginStreakProps) {
@@ -347,6 +347,11 @@ export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim
                   {streakClaimed.filter(Boolean).length}/7 claimed
                 </p>
               </div>
+
+              {/* Rotation note */}
+              <p className="text-[8px] mt-2 text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                After 7 days, rewards rotate with higher coins! Come back daily 🎉
+              </p>
             </div>
           </motion.div>
         </motion.div>

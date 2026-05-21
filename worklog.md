@@ -152,3 +152,139 @@ Stage Summary:
 - Spin wheel now correctly awards all 10 prize types (was missing 3)
 - BackgroundImpressionTimer memory leak fixed
 - Code pushed to GitHub for Vercel deployment
+
+---
+Task ID: 4
+Agent: full-stack-developer
+Task: Daily rewards rework
+
+Work Log:
+- Read LoginStreak.tsx
+- Updated STREAK_REWARDS array with new 7-day rewards (Magnet, Undo, Timer, Hammer, Bomb, Room Card, 5x+2.5x abilities)
+- Added rotation note text at bottom of streak panel: "After 7 days, rewards rotate with higher coins! Come back daily 🎉"
+
+Stage Summary:
+- New 7-day rewards implemented
+
+---
+Task ID: 1
+Agent: full-stack-developer
+Task: Game UI changes (smaller abilities, remove arrows) + Coin game price updates
+
+Work Log:
+- Read GameBoard.tsx and PlayDashboard.tsx files to understand current structure
+- Made OvalAbilitySlot smaller: width 52→42, height 28→22, borderRadius 14→11, icon fontSize 11→10, count badge minWidth 14→12, height 14→12, borderRadius 7→6
+- Updated empty slot div to match new dimensions (width 42, height 22, borderRadius 11)
+- Removed directional arrow buttons (⬅️⬆️⬇️➡️) from GameBoard - the 4-button row that was shown on mobile (sm:hidden)
+- Removed unused ArrowUp, ArrowDown, ArrowLeft, ArrowRight imports from lucide-react
+- Banner ad (AdsterraBanner300x250) already existed below where arrows were, so it now fills that space
+- Updated COIN_GAME_MODES in PlayDashboard.tsx with new prices (10 tiers instead of 9, removed ₹100/₹2000/₹4000, added ₹7000/₹15000/₹20000/₹50000)
+- Ran lint check - no errors
+
+Stage Summary:
+- Files modified: GameBoard.tsx, PlayDashboard.tsx
+- Key changes: Ability slots reduced in size, arrow buttons removed, coin game prices updated with new tier structure
+
+---
+Task ID: 3+5
+Agent: full-stack-developer
+Task: Profile panel changes + Coupon code display
+
+Work Log:
+- Read ProfilePanel.tsx, CouponCode.tsx, and useGame.ts to understand current structure
+- ProfilePanel.tsx changes:
+  1. Added unique 6-8 char short user ID (e.g. "MMA3F7K") stored in localStorage key `mergeMaster2048_userShortId`, displayed below name with copy button
+  2. Replaced "Coins" stat box with "Total Coins" showing compact format (2K, 15K, 1.5M) using `totalCoinsEarned` prop
+  3. Replaced "Games Today" stat box with prominent "🎮 Game Today" section with progress bar and remaining games text
+  4. Renamed "Best Score" → "Classic Best" and "Mod Best" → "Battle Best"
+  5. Removed "Invited" stat box from the stats grid
+  6. Added "🃏 Room Fight" premium box with gradient border and "Coming Soon" badge
+  7. Added collapsible "📊 Game History" section showing last 5 games with mode icon, score, win/lose indicator, date
+- CouponCode.tsx changes:
+  1. Replaced small "Today's Codes" hint with prominent `TodayCodesSection` component
+  2. Shows ☀️ Day Code and 🌙 Night Code side by side with tap-to-copy buttons
+  3. Active code highlighted with brighter border and "ACTIVE" badge
+  4. Added 12hr countdown timer showing when next code switches (day→night at 12:00, night→day at 00:00)
+  5. "Copied!" feedback on copy
+- Added new imports: Copy, ChevronDown, ChevronUp from lucide-react; GameHistoryEntry from useGame
+- Added `formatCompact()` helper and `getShortUserId()` helper functions
+- Added `totalCoinsEarned` and `gameHistory` optional props to ProfilePanelProps interface
+- Lint passes with 0 errors
+
+Stage Summary:
+- Files modified: ProfilePanel.tsx, CouponCode.tsx
+- ProfilePanel now has short user ID, compact coin format, game today progress bar, mode-specific best scores, room fight box, game history
+- CouponCode now has prominent day/night code display with copy buttons and 12hr timer
+
+---
+Task ID: 6+7
+Agent: full-stack-developer
+Task: Coin spin option + Level system update
+
+Work Log:
+- Read SpinWheel.tsx, PlayDashboard.tsx, ProfilePanel.tsx to understand current structure
+- SpinWheel.tsx changes:
+  1. Added `coins: number` and `onDeductCoins: (amount: number) => void` to SpinWheelProps interface
+  2. Added `spinMode` state ('ticket' | 'coin') for toggling between ticket and coin spin
+  3. Added toggle UI at top of modal with two side-by-side buttons: "🎫 Ticket Spin" and "🪙 Coin Spin (150)"
+  4. When coin mode selected: each spin costs 150 coins, deducts via onDeductCoins, shows coin balance
+  5. Multi-spin costs updated for coin mode: 1x(150), 2x(300), 3x(450), 5x(750), 10x(1500)
+  6. CanAfford logic, multiplier selector labels, and spin button text all adapt to selected mode
+- PlayDashboard.tsx changes:
+  1. Added `coins={coins}` and `onDeductCoins={onDeductCoins}` props to SpinWheel component usage
+- ProfilePanel.tsx changes:
+  1. Replaced "How Points Work" section content with new "How Leveling Works" text
+  2. Updated level list overlay bonus text from "Bonus: 5 skills + {bonusCoins}💰" to "Guaranteed coins + 2 random abilities!"
+  3. Updated footer text from "Every 5 levels: 5 random skills + bonus coins" to "Every 5 levels: Guaranteed coins + 2 random abilities!"
+  4. Removed unused `bonusCoins` variable from level list rendering
+- Lint passes with 0 errors
+
+Stage Summary:
+- Files modified: SpinWheel.tsx, PlayDashboard.tsx, ProfilePanel.tsx
+- Coin spin toggle fully functional with 150 coins per spin, same prizes as ticket spin
+- Level system description updated to reflect new SP/reward system
+- Level bonus text updated for every 5th level
+
+---
+Task ID: 8+9
+Agent: full-stack-developer
+Task: Premium theme + Invite section updates
+
+Work Log:
+- Read ProfilePanel.tsx, InvitePanel.tsx, PlayDashboard.tsx to understand current structure
+- Created new useTheme hook (src/hooks/useTheme.ts):
+  - Reads theme preference from localStorage key `mergeMaster2048_theme`
+  - Supports 'default' (dark purple) and 'premium' (dark teal/cyan) themes
+  - Dispatches 'themeChanged' custom event for instant cross-component updates
+  - Provides colors object with all theme-specific values (bg gradients, card styles, accents, buttons)
+- ProfilePanel.tsx changes:
+  1. Added Palette icon import and useTheme hook import
+  2. Added theme toggle button (🎨 palette icon) next to the X close button in header
+  3. When premium is active: toggle button glows cyan, header gets teal gradient, card borders shift to cyan
+  4. Added "✨ Premium Theme" badge below header when premium is active
+  5. Avatar border and glow effects change with theme
+  6. Level badge border color adapts to theme background
+- NotificationsPanel (in ProfilePanel.tsx) changes:
+  1. Added useTheme hook for theme-aware background gradient and header
+  2. Panel background and border adapt to premium theme
+- PlayDashboard.tsx changes:
+  1. Added useTheme hook import
+  2. Main background gradient changes from purple to dark teal when premium active
+  3. Background glow effects shift from gold/orange to cyan/teal when premium active
+- InvitePanel.tsx changes:
+  1. Complete rewrite with tab support: "🤝 Referral" and "👥 Friends" tabs
+  2. Tab switch styled as two side-by-side buttons with active state highlighting
+  3. Tab colors adapt to premium theme (cyan accents vs green accents)
+  4. Referral tab: All existing functionality preserved exactly as-is
+  5. Friends tab: Search input with placeholder "Enter friend's ID...", "Coming Soon" card with search icon, preview of future features (Add friends, Chat, Battle together)
+  6. Added useTheme hook for theme-aware backgrounds and borders
+  7. Added Search icon import from lucide-react
+- Lint passes with 0 errors
+- Build compiles successfully
+
+Stage Summary:
+- Files modified: src/hooks/useTheme.ts (new), ProfilePanel.tsx, PlayDashboard.tsx, InvitePanel.tsx
+- Premium theme toggle added in ProfilePanel header - switches between dark purple and dark teal/cyan
+- Theme preference stored in localStorage and applies instantly via custom events
+- Invite panel now has Referral/Friends tab switch with Coming Soon friends section
+- All existing functionality preserved
