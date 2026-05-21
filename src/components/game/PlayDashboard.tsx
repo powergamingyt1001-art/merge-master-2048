@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Swords, Clock, Trophy, Coins, Crown, Bell, Lock, Search, Loader2 } from 'lucide-react'
+import { Play, Swords, Clock, Trophy, Coins, Crown, Bell, Lock, Search, Loader2, Users } from 'lucide-react'
 import { SpinWheel, SpinPrize } from './SpinWheel'
 import { LoginStreak } from './LoginStreak'
 import { WelcomeGift } from './WelcomeGift'
@@ -13,6 +13,7 @@ import { ProfilePanel, NotificationsPanel } from './ProfilePanel'
 import { PrivacyPolicy, AboutPage, ContactPage } from './FooterPages'
 import { Store } from './Store'
 import { CouponCode } from './CouponCode'
+import { RoomFight } from './RoomFight'
 import {
   AdsterraNativeBanner,
   AdsterraBanner728x90,
@@ -20,7 +21,7 @@ import {
   AdsterraBanner320x50,
   getDashboardBigBannerSlot,
 } from '@/components/ads/AdsterraAds'
-import { PowerUp, Notification, DailyTask, DailyTaskReward, getLevelInfo } from '@/hooks/useGame'
+import { PowerUp, Notification, DailyTask, DailyTaskReward, GameHistoryEntry, getLevelInfo } from '@/hooks/useGame'
 import { getRandomLink } from '@/components/ads/AdOverlay'
 
 interface PlayDashboardProps {
@@ -89,6 +90,10 @@ interface PlayDashboardProps {
   onResetAllData?: () => void
   weeklyBonusClaimed?: boolean
   onClaimWeeklyBonus?: () => void
+  userCode: string
+  totalCoinsEarned: number
+  roomCardCount: number
+  gameHistory: GameHistoryEntry[]
 }
 
 const COIN_GAME_MODES = [
@@ -130,6 +135,7 @@ export function PlayDashboard({
   onUpdatePlayerName, onUpdatePlayerAvatar,
   dailyTasks, onClaimDailyTask, onCompleteVisitWebsiteTask, onResetAllData,
   weeklyBonusClaimed = false, onClaimWeeklyBonus,
+  userCode, totalCoinsEarned, roomCardCount, gameHistory,
 }: PlayDashboardProps) {
   const [showSpin, setShowSpin] = useState(false)
   const [showStreak, setShowStreak] = useState(false)
@@ -146,6 +152,7 @@ export function PlayDashboard({
   const [showContact, setShowContact] = useState(false)
   const [showStore, setShowStore] = useState(false)
   const [showCoupon, setShowCoupon] = useState(false)
+  const [showRoomFight, setShowRoomFight] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
   // Searching animation for Battle/Coin modes
   const [searching, setSearching] = useState<{ active: boolean; type: 'battle' | 'coins'; timeLimit?: number; coinFee?: number; opponent?: { name: string; avatar: string } } | null>(null)
@@ -546,13 +553,20 @@ export function PlayDashboard({
             </div>
           )}
 
-          {/* Daily Tasks */}
-          {dailyTasks && dailyTasks.length > 0 && (
-            <div className="w-full rounded-lg p-2" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          {/* Play with Friends + Daily Tasks */}
+          <div className="w-full rounded-lg p-2" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
               <div className="flex items-center gap-1 mb-1.5">
-                <span className="text-[9px]">📋</span>
-                <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Daily Tasks</p>
+                <span className="text-[9px]">👥</span>
+                <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>Play with Friends</p>
               </div>
+              {/* Prominent Play with Friends button */}
+              <button onClick={() => setShowInvite(true)}
+                className="w-full mb-2 py-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
+                style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF', boxShadow: '0 4px 15px rgba(0,230,118,0.3)' }}>
+                <Users className="w-4 h-4" />
+                Invite & Play Together
+              </button>
+          {dailyTasks && dailyTasks.length > 0 && (
               <div className="flex flex-col gap-1">
                 {dailyTasks.map(task => {
                   const isComplete = task.progress >= task.target
@@ -621,8 +635,8 @@ export function PlayDashboard({
                   )
                 })}
               </div>
-            </div>
           )}
+          </div>
 
           {/* Best Score + Commission row */}
           <div className="w-full flex gap-1.5">
@@ -765,7 +779,7 @@ export function PlayDashboard({
         playerName={playerName} playerAvatar={playerAvatar} playerId={playerId}
         weeklyBonusClaimed={weeklyBonusClaimed}
         onClaimWeeklyBonus={onClaimWeeklyBonus} />
-      <InvitePanel isOpen={showInvite} onClose={() => setShowInvite(false)}
+      <InvitePanel isOpen={showInvite} onClose={() => setShowInvite(false)} userCode={userCode}
         inviteCode={inviteCode} invitedUsers={invitedUsers}
         commissionBalance={commissionBalance} commissionClaimed={commissionClaimed}
         autoClaimCommission={autoClaimCommission} onClaimCommission={onClaimCommission}
@@ -778,7 +792,11 @@ export function PlayDashboard({
         coins={coins} gamesPlayedToday={gamesPlayedToday} maxGamesPerDay={maxGamesPerDay}
         invitedUsers={invitedUsers} onUpdateName={onUpdatePlayerName} onUpdateAvatar={onUpdatePlayerAvatar}
         totalBattlesPlayed={totalBattlesPlayed} totalBattlesWon={totalBattlesWon}
-        onResetAllData={onResetAllData} />
+        onResetAllData={onResetAllData}
+        userCode={userCode} totalCoinsEarned={totalCoinsEarned} roomCardCount={roomCardCount}
+        battleBestScore={gameHistory.filter(g => g.mode === 'bot' || g.mode === 'coins' || g.mode === 'tournament').reduce((max, g) => Math.max(max, g.score), 0)}
+        gameHistory={gameHistory}
+        onOpenRoomFight={() => { setShowProfile(false); setShowRoomFight(true) }} />
       <NotificationsPanel isOpen={showNotifications} onClose={() => setShowNotifications(false)}
         notifications={notifications} onMarkRead={onMarkNotificationRead} onMarkAllRead={onMarkAllNotificationsRead}
         onDeleteNotification={onDeleteNotification} onDeleteReadNotifications={onDeleteReadNotifications} />
@@ -787,6 +805,24 @@ export function PlayDashboard({
       <ContactPage isOpen={showContact} onClose={() => setShowContact(false)} />
       <Store isOpen={showStore} onClose={() => setShowStore(false)} playerId={playerId} coins={coins} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} onDeductCoins={onDeductCoins} onAddPowerUp={onAddPowerUp} onAddUndos={onAddUndos} />
       <CouponCode isOpen={showCoupon} onClose={() => setShowCoupon(false)} coins={coins} hammerCount={hammerCount} magnetCount={magnetCount} blastCount={blastCount} spinTickets={spinTickets} onAddCoins={onAddCoins} onAddPowerUp={onAddPowerUp} onAddSpinTickets={onAddSpinTickets} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} />
+
+      <RoomFight
+        isOpen={showRoomFight}
+        onClose={() => setShowRoomFight(false)}
+        roomCardCount={roomCardCount}
+        userCode={userCode}
+        coins={coins}
+        hammerCount={hammerCount}
+        magnetCount={magnetCount}
+        blastCount={blastCount}
+        onUseRoomCard={() => onAddNotification('Room Card Used', 'Room card consumed!', 'system', '🃏')}
+        onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)}
+        onDeductCoins={onDeductCoins}
+        onDeductAbility={(type, count) => onAddPowerUp(type === 'hammer' ? 'hammer' : type === 'magnet' ? 'magnet' : 'blast', -count)}
+        onStartRoomGame={(betAmount, abilities) => {
+          onAddNotification('Room Game!', `Starting room game (bet: ${betAmount}). Abilities: ${abilities.join(', ')}`, 'system', '🏠')
+        }}
+      />
     </div>
   )
 }

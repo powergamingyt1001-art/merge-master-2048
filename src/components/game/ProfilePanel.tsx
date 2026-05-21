@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users, TrendingUp, Percent, Gift, Trash2, Sun, Moon } from 'lucide-react'
-import { Notification, PLAYER_AVATARS, getLevelInfo, getLevelThreshold, MAX_LEVEL } from '@/hooks/useGame'
+import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users, TrendingUp, Percent, Gift, Trash2, Sun, Moon, Copy, DoorOpen, History } from 'lucide-react'
+import { Notification, PLAYER_AVATARS, getLevelInfo, getLevelThreshold, MAX_LEVEL, GameHistoryEntry } from '@/hooks/useGame'
 import { AdsterraBanner320x50 } from '@/components/ads/AdsterraAds'
 import { useTheme } from 'next-themes'
 
@@ -26,16 +26,58 @@ interface ProfilePanelProps {
   totalBattlesPlayed: number
   totalBattlesWon: number
   onResetAllData?: () => void
+  // New props
+  userCode: string
+  totalCoinsEarned: number
+  roomCardCount: number
+  battleBestScore: number
+  gameHistory: GameHistoryEntry[]
+  onOpenRoomFight?: () => void
 }
 
-// Coin count formatter: 1000→1K, 1000000→1M
+// Coin count formatter: 1000→1K, 2500→2.5K, 1000000→1M
 function formatCoinCount(count: number): string {
   if (count >= 1000000) return `${(count / 1000000).toFixed(1).replace(/\.0$/, '')}M`
   if (count >= 1000) return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`
   return count.toString()
 }
 
-// Level info is now imported from useGame.ts (1000 levels)
+// Format date for game history grouping
+function formatDateGroup(dateStr: string): string {
+  const date = new Date(dateStr)
+  const today = new Date()
+  const todayStr = today.toISOString().split('T')[0]
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayStr = yesterday.toISOString().split('T')[0]
+
+  const dateOnly = dateStr.split('T')[0]
+  if (dateOnly === todayStr) return 'Today'
+  if (dateOnly === yesterdayStr) return 'Yesterday'
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+// Get mode icon for game history
+function getModeIcon(mode: string): string {
+  switch (mode) {
+    case 'bot': return '⚔️'
+    case 'coins': return '🪙'
+    case 'tournament': return '🏆'
+    case 'classic': return '🎮'
+    default: return '🎮'
+  }
+}
+
+// Get mode label
+function getModeLabel(mode: string): string {
+  switch (mode) {
+    case 'bot': return 'Battle'
+    case 'coins': return 'Coins'
+    case 'tournament': return 'Tour'
+    case 'classic': return 'Classic'
+    default: return mode
+  }
+}
 
 export function ProfilePanel({
   isOpen, onClose, playerName, playerAvatar, playerLevel,
@@ -44,12 +86,16 @@ export function ProfilePanel({
   onUpdateName, onUpdateAvatar,
   totalBattlesPlayed, totalBattlesWon,
   onResetAllData,
+  userCode, totalCoinsEarned, roomCardCount, battleBestScore, gameHistory,
+  onOpenRoomFight,
 }: ProfilePanelProps) {
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState(playerName)
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
   const [showLevelList, setShowLevelList] = useState(false)
   const [isDarkTheme, setIsDarkTheme] = useState(true)
+  const [copiedCode, setCopiedCode] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const { theme, setTheme } = useTheme()
 
   // Sync local state with next-themes
@@ -75,6 +121,31 @@ export function ProfilePanel({
     }
     setEditingName(false)
   }
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(userCode).then(() => {
+      setCopiedCode(true)
+      setTimeout(() => setCopiedCode(false), 2000)
+    }).catch(() => {
+      // Fallback
+      const textArea = document.createElement('textarea')
+      textArea.value = userCode
+      document.body.appendChild(textArea)
+      textArea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textArea)
+      setCopiedCode(true)
+      setTimeout(() => setCopiedCode(false), 2000)
+    })
+  }
+
+  // Group game history by date
+  const groupedHistory = gameHistory.reduce<Record<string, GameHistoryEntry[]>>((acc, entry) => {
+    const dateGroup = formatDateGroup(entry.date)
+    if (!acc[dateGroup]) acc[dateGroup] = []
+    acc[dateGroup].push(entry)
+    return acc
+  }, {})
 
   return (
     <AnimatePresence>
@@ -168,12 +239,29 @@ export function ProfilePanel({
                   )}
                 </div>
 
-                {/* Level Title - Display only, NOT clickable for level list */}
+                {/* Level Title */}
                 <div
                   className="flex items-center gap-1 mt-1 px-3 py-1 rounded-full"
                   style={{ backgroundColor: `${levelInfo.color}15`, border: `1.5px solid ${levelInfo.color}40` }}>
                   <span className="text-sm">{levelInfo.icon}</span>
                   <span className="text-[10px] font-bold" style={{ color: levelInfo.color }}>Lv.{playerLevel} {levelInfo.title}</span>
+                </div>
+
+                {/* User ID with Copy Button */}
+                <div className="flex items-center gap-1.5 mt-2">
+                  <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>ID:</span>
+                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-md"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <span className="text-xs font-mono font-bold tracking-wider" style={{ color: '#00FFFF' }}>{userCode}</span>
+                    <button onClick={handleCopyCode}
+                      className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-90"
+                      style={{ backgroundColor: copiedCode ? 'rgba(0,230,118,0.2)' : 'rgba(255,255,255,0.08)' }}>
+                      <Copy className="w-2.5 h-2.5" style={{ color: copiedCode ? '#00E676' : 'rgba(255,255,255,0.5)' }} />
+                    </button>
+                  </div>
+                  {copiedCode && (
+                    <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>Copied!</span>
+                  )}
                 </div>
 
                 {/* Level List Overlay */}
@@ -248,7 +336,7 @@ export function ProfilePanel({
                 </AnimatePresence>
               </div>
 
-              {/* Level Progress - Click to open level list */}
+              {/* Level Progress */}
               <button onClick={() => setShowLevelList(true)} className="w-full p-3 rounded-xl mb-3 text-left transition-transform active:scale-[0.98]" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
@@ -270,7 +358,31 @@ export function ProfilePanel({
                 )}
               </button>
 
-              {/* Win Rate Box - Prominent */}
+              {/* Game Today - Prominent Display */}
+              <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(0,255,255,0.06)', border: '1px solid rgba(0,255,255,0.15)' }}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4" style={{ color: '#00FFFF' }} />
+                    <span className="text-xs font-bold" style={{ color: '#00FFFF' }}>🎮 Game Today</span>
+                  </div>
+                  <span className="text-sm font-extrabold" style={{ color: gamesPlayedToday >= maxGamesPerDay ? '#F65E3B' : '#00FFFF' }}>
+                    {gamesPlayedToday}/{maxGamesPerDay}
+                  </span>
+                </div>
+                <div className="h-3 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                  <div className="h-full rounded-full transition-all" style={{
+                    width: `${Math.min(100, (gamesPlayedToday / maxGamesPerDay) * 100)}%`,
+                    background: gamesPlayedToday >= maxGamesPerDay
+                      ? 'linear-gradient(90deg, #F65E3B, #FF7A00)'
+                      : 'linear-gradient(90deg, #00FFFF, #00E676)',
+                  }} />
+                </div>
+                <p className="text-[8px] mt-1" style={{ color: gamesPlayedToday >= maxGamesPerDay ? '#F65E3B' : 'rgba(255,255,255,0.4)' }}>
+                  {gamesPlayedToday >= maxGamesPerDay ? 'Daily limit reached! Come back tomorrow' : `${maxGamesPerDay - gamesPlayedToday} games remaining today`}
+                </p>
+              </div>
+
+              {/* Win Rate Box */}
               <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)' }}>
                 <div className="flex items-center gap-2 mb-2">
                   <Percent className="w-4 h-4" style={{ color: '#F65E3B' }} />
@@ -300,17 +412,154 @@ export function ProfilePanel({
 
               {/* Stats Grid */}
               <div className="grid grid-cols-2 gap-2 mb-3">
-                <StatBox icon={<Trophy className="w-4 h-4" />} label="Best Score" value={bestScore.toLocaleString()} color="#EDC22E" />
-                <StatBox icon={<Swords className="w-4 h-4" />} label="Mod Best" value={modBestScore > 0 ? modBestScore.toLocaleString() : '-'} color="#F65E3B" />
+                <StatBox icon={<Trophy className="w-4 h-4" />} label="Classic Best" value={bestScore > 0 ? bestScore.toLocaleString() : '-'} color="#EDC22E" />
+                <StatBox icon={<Swords className="w-4 h-4" />} label="Battle Best" value={battleBestScore > 0 ? battleBestScore.toLocaleString() : '-'} color="#F65E3B" />
                 <StatBox icon={<Target className="w-4 h-4" />} label="Level XP" value={`${levelXP.toLocaleString()} / ${nextLevelThreshold.toLocaleString()}`} color="#00E676" />
-                <StatBox icon={<Coins className="w-4 h-4" />} label="Coins" value={formatCoinCount(coins)} color="#EDC22E" />
+                <StatBox icon={<Coins className="w-4 h-4" />} label="Total Earned" value={formatCoinCount(totalCoinsEarned)} color="#EDC22E" />
                 <StatBox icon={<Calendar className="w-4 h-4" />} label="Games Today" value={`${gamesPlayedToday}/${maxGamesPerDay}`} color="#00FFFF" />
-                <StatBox icon={<Users className="w-4 h-4" />} label="Invited" value={invitedUsers.length.toString()} color="#F59563" />
+                <StatBox icon={<DoorOpen className="w-4 h-4" />} label="Room Cards" value={roomCardCount.toString()} color="#E040FB" />
+              </div>
+
+              {/* User ID Box */}
+              <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(0,255,255,0.05)', border: '1px solid rgba(0,255,255,0.12)' }}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">🆔</span>
+                    <div>
+                      <p className="text-[9px] font-bold" style={{ color: '#00FFFF' }}>User ID</p>
+                      <p className="text-base font-mono font-extrabold tracking-widest" style={{ color: '#FFFFFF' }}>{userCode}</p>
+                    </div>
+                  </div>
+                  <button onClick={handleCopyCode}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg transition-transform active:scale-95"
+                    style={{ backgroundColor: copiedCode ? 'rgba(0,230,118,0.15)' : 'rgba(0,255,255,0.1)', border: `1px solid ${copiedCode ? 'rgba(0,230,118,0.3)' : 'rgba(0,255,255,0.25)'}` }}>
+                    <Copy className="w-3 h-3" style={{ color: copiedCode ? '#00E676' : '#00FFFF' }} />
+                    <span className="text-[9px] font-bold" style={{ color: copiedCode ? '#00E676' : '#00FFFF' }}>{copiedCode ? 'Copied!' : 'Copy'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Room Fight Section */}
+              <button onClick={() => onOpenRoomFight?.()}
+                className="w-full p-3 rounded-xl mb-3 relative overflow-hidden text-left transition-transform active:scale-[0.98]"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(224,64,251,0.08), rgba(124,77,255,0.08))',
+                  border: '1.5px solid rgba(224,64,251,0.25)',
+                  cursor: onOpenRoomFight ? 'pointer' : 'default',
+                }}>
+                <div className="absolute top-0 right-0 w-20 h-20 rounded-full opacity-10 pointer-events-none"
+                  style={{ background: 'radial-gradient(circle, #E040FB, transparent)', filter: 'blur(20px)', transform: 'translate(30%, -30%)' }} />
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🃏</span>
+                    <span className="text-xs font-bold" style={{ color: '#E040FB' }}>Room Fight</span>
+                  </div>
+                  {onOpenRoomFight ? (
+                    <span className="text-[7px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(0,230,118,0.15)', color: '#00E676', border: '1px solid rgba(0,230,118,0.3)' }}>
+                      Open ▸
+                    </span>
+                  ) : (
+                    <span className="text-[7px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(224,64,251,0.2)', color: '#E040FB', border: '1px solid rgba(224,64,251,0.3)' }}>
+                      Coming Soon
+                    </span>
+                  )}
+                </div>
+                <p className="text-[9px] mb-2" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  Create or join rooms to battle friends in real-time! Use Room Cards to enter.
+                </p>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(224,64,251,0.1)', border: '1px solid rgba(224,64,251,0.2)' }}>
+                    <span className="text-[10px]">🚪</span>
+                    <span className="text-[9px] font-bold" style={{ color: '#E040FB' }}>{roomCardCount} Cards</span>
+                  </div>
+                  <div className="flex items-center gap-1 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <span className="text-[10px]">👥</span>
+                    <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>2-4 Players</span>
+                  </div>
+                </div>
+              </button>
+
+              {/* Game History Section */}
+              <div className="rounded-xl mb-3" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <button onClick={() => setShowHistory(!showHistory)}
+                  className="w-full p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <History className="w-4 h-4" style={{ color: '#FF7A00' }} />
+                    <span className="text-xs font-bold" style={{ color: '#FF7A00' }}>📊 Game History</span>
+                    <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,122,0,0.15)', color: '#FF7A00' }}>
+                      {gameHistory.length}
+                    </span>
+                  </div>
+                  <motion.div animate={{ rotate: showHistory ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>▼</span>
+                  </motion.div>
+                </button>
+
+                <AnimatePresence>
+                  {showHistory && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                      className="overflow-hidden">
+                      <div className="max-h-48 overflow-y-auto px-3 pb-3 space-y-2">
+                        {gameHistory.length === 0 ? (
+                          <div className="text-center py-4">
+                            <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No games played yet</p>
+                            <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.2)' }}>Your recent games will appear here</p>
+                          </div>
+                        ) : (
+                          Object.entries(groupedHistory).map(([dateGroup, entries]) => (
+                            <div key={dateGroup}>
+                              <p className="text-[8px] font-bold mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>{dateGroup}</p>
+                              <div className="space-y-1">
+                                {entries.map((entry) => (
+                                  <div key={entry.id}
+                                    className="flex items-center justify-between px-2 py-1.5 rounded-lg"
+                                    style={{
+                                      backgroundColor: entry.result === 'win' ? 'rgba(0,230,118,0.04)' : entry.result === 'lose' ? 'rgba(246,94,59,0.04)' : 'rgba(255,255,255,0.02)',
+                                      border: `1px solid ${entry.result === 'win' ? 'rgba(0,230,118,0.1)' : entry.result === 'lose' ? 'rgba(246,94,59,0.1)' : 'rgba(255,255,255,0.04)'}`,
+                                    }}>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[10px]">{getModeIcon(entry.mode)}</span>
+                                      <div>
+                                        <div className="flex items-center gap-1">
+                                          <span className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.7)' }}>{getModeLabel(entry.mode)}</span>
+                                          {entry.entryFee > 0 && (
+                                            <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>₹{entry.entryFee}</span>
+                                          )}
+                                        </div>
+                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                          {new Date(entry.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>{entry.score.toLocaleString()}</span>
+                                      <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full"
+                                        style={{
+                                          backgroundColor: entry.result === 'win' ? 'rgba(0,230,118,0.15)' : entry.result === 'lose' ? 'rgba(246,94,59,0.15)' : 'rgba(255,255,255,0.05)',
+                                          color: entry.result === 'win' ? '#00E676' : entry.result === 'lose' ? '#F65E3B' : 'rgba(255,255,255,0.4)',
+                                        }}>
+                                        {entry.result === 'win' ? 'W' : entry.result === 'lose' ? 'L' : '—'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Points Info */}
               <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.1)' }}>
-                <p className="text-[10px] font-bold mb-1" style={{ color: '#00E676' }}>📊 How Points Work</p>
+                <p className="text-[10px] font-bold mb-1" style={{ color: '#00E676' }}>📊 How Leveling Works</p>
                 <ul className="space-y-0.5">
                   <li className="text-[9px] flex items-start gap-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
                     <span style={{ color: '#00E676' }}>•</span> 50 score = 1.5 points from merges

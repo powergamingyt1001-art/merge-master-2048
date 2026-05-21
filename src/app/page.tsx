@@ -228,6 +228,10 @@ export default function Home() {
                 onResetAllData={game.resetAllData}
                 weeklyBonusClaimed={game.weeklyBonusClaimed}
                 onClaimWeeklyBonus={game.claimWeeklyBonus}
+                userCode={game.userCode}
+                totalCoinsEarned={game.totalCoinsEarned}
+                roomCardCount={game.roomCardCount}
+                gameHistory={game.gameHistory}
               />
             )}
             {phase === 'game' && <GameBoard key="game" onBackToDashboard={handleBackToDashboard} onPlayAgain={handlePlayAgain} />}

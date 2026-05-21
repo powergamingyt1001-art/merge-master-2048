@@ -14,7 +14,7 @@ import { useGameContext } from '@/context/GameContext'
 import { TileComponent } from './Tile'
 // CouponCode removed - no longer needed
 import {
-  Trophy, RotateCcw, Undo2, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
+  Trophy, RotateCcw, Undo2,
   Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle, Swords, Coins,
 } from 'lucide-react'
 import { AdsterraBanner300x250, AdsterraBanner468x60 } from '@/components/ads/AdsterraAds'
@@ -772,13 +772,12 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
       </div>
 
       {/* ============================================================ */}
-      {/* ABILITY SECTION - 3+3 grid layout                            */}
-      {/* Row 1: Hammer, Magnet, Bomb                                  */}
-      {/* Row 2: Undo, 5x, 2.5x                                       */}
-      {/* Row 3: +10s                                                  */}
+      {/* ABILITY SECTION - 4-column compact grid                      */}
+      {/* Row 1: Hammer, Magnet, Bomb, Undo                            */}
+      {/* Row 2: 5x, 2.5x, +10s                                       */}
       {/* ============================================================ */}
       <div
-        className="grid grid-cols-3 gap-1.5 flex-shrink-0 mx-auto my-1 px-3 py-1"
+        className="grid grid-cols-4 gap-1 flex-shrink-0 mx-auto my-1 px-3 py-1"
         style={{
           width: '100%',
           maxWidth: 360,
@@ -840,15 +839,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
 
       {/* Coupon Code Modal removed - moved to dashboard */}
 
-      {/* Mobile direction buttons */}
-      <div className="flex gap-1 sm:hidden flex-shrink-0">
-        {(['up', 'down', 'left', 'right'] as Direction[]).map(dir => (
-          <button key={dir} onClick={() => onMove(dir)} className="w-10 h-10 rounded-lg flex items-center justify-center transition-transform active:scale-90"
-            style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)', transition: 'background-color 0.15s, transform 0.1s' }}>
-            {dir === 'up' ? <ArrowUp className="w-5 h-5" /> : dir === 'down' ? <ArrowDown className="w-5 h-5" /> : dir === 'left' ? <ArrowLeft className="w-5 h-5" /> : <ArrowRight className="w-5 h-5" />}
-          </button>
-        ))}
-      </div>
+
 
       {/* ====== BOTTOM AD DURING GAMEPLAY - always visible ====== */}
       <div className="flex-shrink-0 w-full" style={{ marginTop: 4 }}>
@@ -996,8 +987,8 @@ function OvalAbilitySlot({ icon, count, active, onClick, label, disabled, accent
       disabled={disabled}
       className="relative flex items-center justify-center rounded-full w-full"
       style={{
-        height: 40,
-        borderRadius: 20,
+        height: 34,
+        borderRadius: 17,
         border: active
           ? `2px solid ${glowColor}90`
           : '1.5px solid rgba(255,255,255,0.25)',
@@ -1033,25 +1024,25 @@ function OvalAbilitySlot({ icon, count, active, onClick, label, disabled, accent
       transition={{ duration: 1.2, repeat: active ? Infinity : 0, ease: 'easeInOut' }}
       title={label}
     >
-      <span style={{ fontSize: 16, lineHeight: 1 }}>{icon}</span>
-      <span style={{ fontSize: 8, lineHeight: 1, fontWeight: 700, color: active ? '#FFFFFF' : 'rgba(255,255,255,0.55)', marginLeft: 2 }}>
+      <span style={{ fontSize: 13, lineHeight: 1 }}>{icon}</span>
+      <span style={{ fontSize: 7, lineHeight: 1, fontWeight: 700, color: active ? '#FFFFFF' : 'rgba(255,255,255,0.55)', marginLeft: 1 }}>
         {label}
       </span>
       <span
         className="absolute font-bold"
         style={{
-          fontSize: 8,
-          top: -5,
+          fontSize: 7,
+          top: -4,
           right: -2,
-          minWidth: 14,
-          height: 14,
-          borderRadius: 7,
+          minWidth: 12,
+          height: 12,
+          borderRadius: 6,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: count > 0 ? (accentColor || ABILITY_GLOW_MAP[label] || 'rgba(255,255,255,0.2)') : 'rgba(255,255,255,0.06)',
           color: '#FFFFFF',
-          padding: '0 4px',
+          padding: '0 3px',
           boxShadow: count > 0 ? `0 0 8px ${(accentColor || ABILITY_GLOW_MAP[label] || 'rgba(255,255,255,0.15)')}60` : 'none',
         }}
       >

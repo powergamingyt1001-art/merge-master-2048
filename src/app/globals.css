@@ -76,16 +76,16 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  /* Game theme - Light mode with warm golden/amber tones instead of plain white */
-  --game-bg-1: #FFF8E1;
-  --game-bg-2: #FFF3CD;
-  --game-bg-3: #FFE082;
-  --game-text: #3E2723;
-  --game-text-secondary: rgba(62, 39, 35, 0.5);
-  --game-glass: rgba(255, 248, 225, 0.8);
-  --game-glass-border: rgba(255, 193, 7, 0.2);
-  --game-glass-light: rgba(255, 248, 225, 0.9);
-  --game-overlay: rgba(255, 248, 225, 0.9);
+  /* Game theme - Premium vibrant purple/magenta */
+  --game-bg-1: #2D0A4E;
+  --game-bg-2: #4A0E6B;
+  --game-bg-3: #1A0533;
+  --game-text: #F0E6FF;
+  --game-text-secondary: rgba(240, 230, 255, 0.5);
+  --game-glass: rgba(80, 20, 120, 0.5);
+  --game-glass-border: rgba(224, 64, 251, 0.25);
+  --game-glass-light: rgba(80, 20, 120, 0.6);
+  --game-overlay: rgba(45, 10, 78, 0.9);
 }
 
 .dark {
@@ -129,6 +129,37 @@
   --game-glass-border: rgba(255, 255, 255, 0.1);
   --game-glass-light: rgba(255, 255, 255, 0.04);
   --game-overlay: rgba(0, 0, 0, 0.85);
+}
+
+/* Premium Theme - Vibrant neon purple/magenta */
+[data-theme="premium"] {
+  --background: oklch(0.12 0.06 300);
+  --foreground: oklch(0.95 0.03 300);
+  --card: oklch(0.18 0.07 300);
+  --card-foreground: oklch(0.95 0.03 300);
+  --popover: oklch(0.18 0.07 300);
+  --popover-foreground: oklch(0.95 0.03 300);
+  --primary: oklch(0.75 0.25 320);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.25 0.08 300);
+  --secondary-foreground: oklch(0.9 0.03 300);
+  --muted: oklch(0.22 0.06 300);
+  --muted-foreground: oklch(0.65 0.08 300);
+  --accent: oklch(0.7 0.28 330);
+  --accent-foreground: oklch(0.98 0 0);
+  --destructive: oklch(0.65 0.25 25);
+  --border: oklch(0.35 0.1 300);
+  --input: oklch(0.3 0.08 300);
+  --ring: oklch(0.75 0.25 320);
+  --game-bg-1: #2D0A4E;
+  --game-bg-2: #4A0E6B;
+  --game-bg-3: #1A0533;
+  --game-text: #F0E6FF;
+  --game-text-secondary: rgba(240, 230, 255, 0.5);
+  --game-glass: rgba(80, 20, 120, 0.5);
+  --game-glass-border: rgba(224, 64, 251, 0.25);
+  --game-glass-light: rgba(80, 20, 120, 0.6);
+  --game-overlay: rgba(45, 10, 78, 0.9);
 }
 
 @layer base {

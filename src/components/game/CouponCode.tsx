@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon } from 'lucide-react'
+import { X, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon, Copy } from 'lucide-react'
 import { getTotalUserCount, getOnlineUserCount, getTotalReferralsCount } from '@/lib/firebase-service'
 
 interface CouponCodeProps {
@@ -522,6 +522,40 @@ const DEFAULT_INR_ABILITY_PACKAGES = [
   { type: '2.5x', uses: 80, price: 189 },
 ]
 
+// Copy button component for coupon codes
+function CodeCopyButton({ code, active, label }: { code: string; active: boolean; label: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = useCallback(() => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }, [code])
+
+  return (
+    <button onClick={handleCopy}
+      className="flex items-center gap-1 px-2 py-1 rounded-lg text-[7px] font-bold transition-transform active:scale-95"
+      style={{
+        backgroundColor: copied ? 'rgba(0,230,118,0.15)' : active ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.04)',
+        border: copied ? '1px solid rgba(0,230,118,0.3)' : '1px solid rgba(255,255,255,0.08)',
+        color: copied ? '#00E676' : active ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)',
+      }}>
+      {copied ? <Check className="w-2.5 h-2.5" /> : <Copy className="w-2.5 h-2.5" />}
+      {copied ? 'Copied!' : 'Copy'}
+    </button>
+  )
+}
+
+function DayCodeCopyButton({ code, active }: { code: string; active: boolean }) {
+  return <CodeCopyButton code={code} active={active} label="Day" />
+}
+
+function NightCodeCopyButton({ code, active }: { code: string; active: boolean }) {
+  return <CodeCopyButton code={code} active={active} label="Night" />
+}
+
 export function CouponCode({
   isOpen,
   onClose,
@@ -922,10 +956,10 @@ export function CouponCode({
     const isNightCode = code.startsWith('NIGHT')
 
     if (isDayCode) {
-      // Check if it's day time (midnight to noon)
+      // Check if it's day time (6AM to 6PM)
       const currentHour = new Date().getHours()
-      if (currentHour >= 12) {
-        setStatusMessage({ text: 'Day code is only available from 12AM to 12PM!', type: 'error' })
+      if (currentHour < 6 || currentHour >= 18) {
+        setStatusMessage({ text: 'Day code is only available from 6AM to 6PM!', type: 'error' })
         return
       }
       const daySettings = dayCodeSettings
@@ -950,10 +984,10 @@ export function CouponCode({
     }
 
     if (isNightCode) {
-      // Check if it's night time (noon to midnight)
+      // Check if it's night time (6PM to 6AM)
       const currentHour = new Date().getHours()
-      if (currentHour < 12) {
-        setStatusMessage({ text: 'Night code is only available from 12PM to 12AM!', type: 'error' })
+      if (currentHour >= 6 && currentHour < 18) {
+        setStatusMessage({ text: 'Night code is only available from 6PM to 6AM!', type: 'error' })
         return
       }
       const nightSettings = nightCodeSettings
@@ -1217,27 +1251,29 @@ export function CouponCode({
   const nightCode = generateNightCode()
   const rotationDay = getRotationSuffix()
 
-  // Day/Night time logic (12-hour cycle)
+  // Day/Night time logic (6AM-6PM day, 6PM-6AM night)
   const currentHour = now.getHours()
-  const isDayTime = currentHour >= 0 && currentHour < 12 // 12:00 AM to 11:59 AM = day
-  const isNightTime = currentHour >= 12 && currentHour < 24 // 12:00 PM to 11:59 PM = night
+  const isDayTime = currentHour >= 6 && currentHour < 18 // 6:00 AM to 5:59 PM = day
+  const isNightTime = currentHour >= 18 || currentHour < 6 // 6:00 PM to 5:59 AM = night
 
   const getTimeUntilSwitch = () => {
     if (isDayTime) {
-      // Countdown to noon (12:00)
-      const noon = new Date(now)
-      noon.setHours(12, 0, 0, 0)
-      const diff = noon.getTime() - now.getTime()
+      // Countdown to 6:00 PM (night start)
+      const switchTime = new Date(now)
+      switchTime.setHours(18, 0, 0, 0)
+      const diff = switchTime.getTime() - now.getTime()
       const h = Math.floor(diff / 3600000)
       const m = Math.floor((diff % 3600000) / 60000)
       const s = Math.floor((diff % 60000) / 1000)
       return `${h}h ${m}m ${s}s`
     } else {
-      // Countdown to midnight (00:00)
-      const midnight = new Date(now)
-      midnight.setDate(midnight.getDate() + 1)
-      midnight.setHours(0, 0, 0, 0)
-      const diff = midnight.getTime() - now.getTime()
+      // Countdown to 6:00 AM (day start)
+      const switchTime = new Date(now)
+      if (currentHour >= 18) {
+        switchTime.setDate(switchTime.getDate() + 1)
+      }
+      switchTime.setHours(6, 0, 0, 0)
+      const diff = switchTime.getTime() - now.getTime()
       const h = Math.floor(diff / 3600000)
       const m = Math.floor((diff % 3600000) / 60000)
       const s = Math.floor((diff % 60000) / 1000)
@@ -1379,52 +1415,80 @@ export function CouponCode({
             </AnimatePresence>
 
             <div className="p-3 space-y-3">
-              {/* Today's Codes - No QR, No Code Text, Just Timer */}
+              {/* Today's Codes - Day/Night with Copy Buttons */}
               <div className="w-full p-3 rounded-xl" style={{ backgroundColor: 'var(--game-glass-light, rgba(255,255,255,0.04))', border: '1px solid var(--game-glass-border, rgba(255,255,255,0.08))' }}>
-                <div className="flex items-center gap-1.5 mb-2">
-                  <span className="text-[10px]">🎁</span>
-                  <span className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Today&apos;s Codes ({rotationDay})</span>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px]">🎁</span>
+                    <span className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Today&apos;s Codes ({rotationDay})</span>
+                  </div>
+                  {/* Current shift indicator */}
+                  <div className="flex items-center gap-1 px-2 py-1 rounded-full"
+                    style={{ backgroundColor: isDayTime ? 'rgba(237,194,46,0.12)' : 'rgba(124,77,255,0.12)', border: `1px solid ${isDayTime ? 'rgba(237,194,46,0.3)' : 'rgba(124,77,255,0.3)'}` }}>
+                    <span className="text-[10px]">{isDayTime ? '☀️' : '🌙'}</span>
+                    <span className="text-[7px] font-bold" style={{ color: isDayTime ? '#EDC22E' : '#7C4DFF' }}>
+                      {isDayTime ? 'DAY SHIFT' : 'NIGHT SHIFT'}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex flex-col gap-2">
                   {/* Day Code */}
-                  <div className="flex items-center justify-between p-2 rounded-lg"
+                  <div className="p-2.5 rounded-lg"
                     style={{
-                      backgroundColor: isDayTime ? 'rgba(237,194,46,0.12)' : 'rgba(255,255,255,0.03)',
+                      backgroundColor: isDayTime ? 'rgba(237,194,46,0.1)' : 'rgba(255,255,255,0.03)',
                       border: isDayTime ? '1.5px solid rgba(237,194,46,0.4)' : '1px solid rgba(255,255,255,0.06)',
                     }}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">☀️</span>
-                      <div>
-                        <p className="text-[10px] font-bold" style={{ color: isDayTime ? '#EDC22E' : 'rgba(255,255,255,0.3)' }}>Day Code</p>
-                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{isDayTime ? 'Active Now!' : 'Available 12AM-12PM'}</p>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">☀️</span>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-[10px] font-bold" style={{ color: isDayTime ? '#EDC22E' : 'rgba(255,255,255,0.3)' }}>Day Code</p>
+                            {isDayTime && (
+                              <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(237,194,46,0.2)', color: '#EDC22E' }}>ACTIVE</span>
+                            )}
+                          </div>
+                          <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>6:00 AM – 6:00 PM</p>
+                        </div>
                       </div>
+                      <DayCodeCopyButton code={dayCode} active={isDayTime} />
                     </div>
-                    {isDayTime ? (
-                      <span className="text-[8px] font-bold px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(237,194,46,0.2)', color: '#EDC22E' }}>ACTIVE</span>
-                    ) : (
-                      <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>🔒</span>
-                    )}
+                    <div className="px-3 py-1.5 rounded-lg font-mono text-center"
+                      style={{ backgroundColor: isDayTime ? 'rgba(237,194,46,0.08)' : 'rgba(255,255,255,0.02)', border: `1px solid ${isDayTime ? 'rgba(237,194,46,0.15)' : 'rgba(255,255,255,0.04)'}` }}>
+                      <span className="text-[11px] font-bold tracking-wider" style={{ color: isDayTime ? '#EDC22E' : 'rgba(255,255,255,0.25)' }}>
+                        {dayCode}
+                      </span>
+                    </div>
                   </div>
                   {/* Night Code */}
-                  <div className="flex items-center justify-between p-2 rounded-lg"
+                  <div className="p-2.5 rounded-lg"
                     style={{
-                      backgroundColor: isNightTime ? 'rgba(124,77,255,0.12)' : 'rgba(255,255,255,0.03)',
+                      backgroundColor: isNightTime ? 'rgba(124,77,255,0.1)' : 'rgba(255,255,255,0.03)',
                       border: isNightTime ? '1.5px solid rgba(124,77,255,0.4)' : '1px solid rgba(255,255,255,0.06)',
                     }}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">🌙</span>
-                      <div>
-                        <p className="text-[10px] font-bold" style={{ color: isNightTime ? '#7C4DFF' : 'rgba(255,255,255,0.3)' }}>Night Code</p>
-                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{isNightTime ? 'Active Now!' : 'Available 12PM-12AM'}</p>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">🌙</span>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-[10px] font-bold" style={{ color: isNightTime ? '#7C4DFF' : 'rgba(255,255,255,0.3)' }}>Night Code</p>
+                            {isNightTime && (
+                              <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(124,77,255,0.2)', color: '#7C4DFF' }}>ACTIVE</span>
+                            )}
+                          </div>
+                          <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>6:00 PM – 6:00 AM</p>
+                        </div>
                       </div>
+                      <NightCodeCopyButton code={nightCode} active={isNightTime} />
                     </div>
-                    {isNightTime ? (
-                      <span className="text-[8px] font-bold px-2 py-1 rounded-full" style={{ backgroundColor: 'rgba(124,77,255,0.2)', color: '#7C4DFF' }}>ACTIVE</span>
-                    ) : (
-                      <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>🔒</span>
-                    )}
+                    <div className="px-3 py-1.5 rounded-lg font-mono text-center"
+                      style={{ backgroundColor: isNightTime ? 'rgba(124,77,255,0.08)' : 'rgba(255,255,255,0.02)', border: `1px solid ${isNightTime ? 'rgba(124,77,255,0.15)' : 'rgba(255,255,255,0.04)'}` }}>
+                      <span className="text-[11px] font-bold tracking-wider" style={{ color: isNightTime ? '#7C4DFF' : 'rgba(255,255,255,0.25)' }}>
+                        {nightCode}
+                      </span>
+                    </div>
                   </div>
-                  {/* Timer to next switch */}
+                  {/* Timer to next shift */}
                   <div className="flex items-center justify-center gap-1.5 p-1.5 rounded-lg"
                     style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
                     <Clock className="w-3 h-3" style={{ color: '#F65E3B' }} />

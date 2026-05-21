@@ -1,4 +1,58 @@
 ---
+Task ID: 2
+Agent: Main Agent
+Task: Profile Page Redesign with User ID, Game History, Room Fight Box
+
+Work Log:
+- 2A: Added userCode, totalCoinsEarned, roomCardCount to GameState in useGame.ts
+  - Added `userCode: string` (6-8 digit numeric code) to GameState interface
+  - Added `totalCoinsEarned: number` to track all coins ever earned (never decreases)
+  - Added `roomCardCount: number` for Room Card resource
+  - Added `generateUserCode()` helper function creating random 6-8 digit numeric codes
+  - Initialized userCode in defaults (empty string) and when loading saved data (generateUserCode if not found)
+  - Save userCode, totalCoinsEarned, roomCardCount in localStorage save effect
+  - Modified `addCoins` callback to also increment totalCoinsEarned by the same amount
+  - Added userCode/totalCoinsEarned/roomCardCount to resetAllData state reset
+
+- 2B: Profile Panel Redesign in ProfilePanel.tsx
+  - Added new props: userCode, totalCoinsEarned, roomCardCount, battleBestScore, gameHistory
+  - Added "User ID" display below name with copy button (clipboard API + fallback)
+  - Replaced "Coins" stat box with "Total Earned" showing totalCoinsEarned in K/M format
+  - Replaced "Invited" stat box with "Room Cards" showing roomCardCount
+  - Renamed "Best Score" → "Classic Best" and "Mod Best" → "Battle Best"
+  - Battle Best score derived from gameHistory (max score from bot/coins/tournament games)
+  - Added prominent "🎮 Game Today" section with progress bar showing gamesPlayedToday/maxGamesPerDay
+  - Added "🆔 User ID" box with large monospace display and copy button
+  - Added "🃏 Room Fight" section with gradient border, "Coming Soon" badge, Room Card count, and player info
+  - Added collapsible "📊 Game History" section with:
+    - Games grouped by date (Today, Yesterday, then month/day format)
+    - Each entry shows mode icon (⚔️🪙🏆🎮), mode label, entry fee, time, score, and W/L badge
+    - Compact scrollable list with max-h-48
+    - Color-coded win/lose backgrounds
+  - Added new imports: Copy, DoorOpen, History from lucide-react; GameHistoryEntry from useGame
+  - Added helper functions: formatDateGroup, getModeIcon, getModeLabel
+
+- 2C: Updated PlayDashboard to pass new props
+  - Added GameHistoryEntry import from useGame
+  - Added userCode, totalCoinsEarned, roomCardCount, gameHistory props to PlayDashboardProps interface
+  - Destructured new props in component function parameters
+  - Passed userCode, totalCoinsEarned, roomCardCount, battleBestScore, gameHistory to ProfilePanel
+  - battleBestScore calculated inline: gameHistory.filter(bot/coins/tournament).reduce(max score)
+
+- 2D: Updated page.tsx to provide new state
+  - Added userCode={game.userCode}, totalCoinsEarned={game.totalCoinsEarned}, roomCardCount={game.roomCardCount}, gameHistory={game.gameHistory} props to PlayDashboard
+
+- Ran lint: 0 errors
+- Dev server running successfully
+
+Stage Summary:
+- Files modified: useGame.ts, ProfilePanel.tsx, PlayDashboard.tsx, page.tsx
+- GameState now has userCode (6-8 digit numeric), totalCoinsEarned (lifetime coins), roomCardCount
+- addCoins now also tracks totalCoinsEarned (never decreases)
+- Profile panel redesigned with User ID + copy, Total Earned stat, Room Cards stat, Battle Best, Game Today progress bar, Room Fight box, collapsible Game History
+- All props properly typed and passed through component hierarchy
+
+---
 Task ID: 3
 Agent: Main Agent
 Task: Fix persistent game crash - comprehensive TypeScript and prop mismatch fixes
@@ -288,3 +342,90 @@ Stage Summary:
 - Theme preference stored in localStorage and applies instantly via custom events
 - Invite panel now has Referral/Friends tab switch with Coming Soon friends section
 - All existing functionality preserved
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Game UI Changes + Premium Theme
+
+Work Log:
+- 1A: Removed mobile direction buttons (arrow up/down/left/right) from GameBoard.tsx (lines 843-851)
+  - Removed the entire `<div className="flex gap-1 sm:hidden flex-shrink-0">` section with direction buttons
+  - Removed unused imports: ArrowUp, ArrowDown, ArrowLeft, ArrowRight from lucide-react
+- 1B: Made ability boxes smaller and more compact
+  - Changed ability grid from `grid-cols-3 gap-1.5` to `grid-cols-4 gap-1` (4-column layout)
+  - Updated comment from "3+3 grid layout" to "4-column compact grid"
+  - OvalAbilitySlot height: 40→34, borderRadius: 20→17
+  - Icon fontSize: 16→13, label fontSize: 8→7, label marginLeft: 2→1
+  - Count badge fontSize: 8→7, top: -5→-4, minWidth: 14→12, height: 14→12, borderRadius: 7→6, padding: 0 4px→0 3px
+- 1C: Replaced light mode with Premium theme
+  - globals.css: Changed :root game theme from warm golden/amber (#FFF8E1, etc.) to vibrant purple/magenta (#2D0A4E, #4A0E6B, etc.)
+  - globals.css: Added [data-theme="premium"] section with vibrant neon purple/magenta CSS variables
+  - ProfilePanel.tsx: Replaced Sun icon with Sparkles icon, changed "Light Mode" to "Premium Theme"
+  - ProfilePanel.tsx: Changed toggle colors from yellow/orange (#FFB300) to vibrant magenta (#E040FB)
+  - ProfilePanel.tsx: Theme toggle now sets 'premium' instead of 'light' via next-themes
+  - ProfilePanel.tsx: Updated isDarkTheme logic to check for 'premium' instead of 'light'
+- 1D: Replaced "Daily Tasks" section with "Play with Friends"
+  - Changed section header icon from 📋 to 👥 and label from "Daily Tasks" to "Play with Friends"
+  - Changed header color from #EDC22E to #00E676
+  - Added prominent "Invite & Play Together" button with green gradient that opens Invite panel
+  - Kept daily tasks content below the button when tasks exist
+  - Added Users icon import from lucide-react to PlayDashboard.tsx
+- Lint check: 0 errors after all changes
+
+Stage Summary:
+- Files modified: GameBoard.tsx, globals.css, ProfilePanel.tsx, PlayDashboard.tsx
+- Arrow buttons removed from game board (swipe-only control)
+- Ability boxes now use compact 4-column grid layout
+- Light mode replaced with vibrant purple/magenta Premium theme
+- Daily Tasks section renamed to "Play with Friends" with invite button
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Room Fight System + Invite Section Redesign + Coupon Day/Night
+
+Work Log:
+- Created `/home/z/my-project/src/components/game/RoomFight.tsx` — new modal component with:
+  - Create Room: Select abilities/coins to bet, optional password, requires 1 Room Card, generates 6-digit room code, shows "Waiting for opponent..." with copyable code
+  - Join Room: Enter 6-digit code, optional password, bet selection, searching animation, mock opponent found, Accept/Cancel buttons
+  - Room Info: 20% tax explanation, step-by-step how it works, ₹55 game example, fair play rules
+  - Three-tab interface: Create / Join / Info with dark purple/magenta gradient theme
+
+- Modified InvitePanel.tsx:
+  - Added toggle switch: "🤝 Refer" / "👥 Game Friends" side-by-side buttons
+  - Refer mode: all existing invite/referral content preserved
+  - Game Friends mode: search bar for player codes, mock profile cards with name/avatar/level/online status
+  - "Like" button with heart icon, "Invite to Room" button for online users, "Offline" indicator for offline
+  - Green/gray dots for online/offline status indicators
+  - Quick-try code buttons and "Players Nearby" section
+  - Added `userCode` optional prop
+
+- Modified CouponCode.tsx:
+  - Changed Day code active time: 6:00 AM to 6:00 PM (was 12AM-12PM)
+  - Changed Night code active time: 6:00 PM to 6:00 AM (was 12PM-12AM)
+  - Added visual "DAY SHIFT" / "NIGHT SHIFT" indicator pill
+  - Shows actual day/night code text in styled mono-font box
+  - Added CodeCopyButton component with copy-to-clipboard functionality
+  - "Copy" button next to each code with "Copied!" feedback
+  - Updated all time-check logic (handleClaim, getTimeUntilSwitch) for 6AM/6PM boundaries
+
+- Integrated RoomFight into PlayDashboard.tsx:
+  - Added import and `showRoomFight` state
+  - Rendered RoomFight component with all required props
+  - Passed `userCode` to InvitePanel
+
+- Modified ProfilePanel.tsx:
+  - Added `onOpenRoomFight?: () => void` prop
+  - Room Fight section changed from div to button (clickable)
+  - Shows "Open ▸" badge when onOpenRoomFight provided (instead of "Coming Soon")
+  - Clicking closes profile panel and opens RoomFight modal
+
+- Lint check: 0 errors
+
+Stage Summary:
+- Files created: RoomFight.tsx
+- Files modified: InvitePanel.tsx, CouponCode.tsx, PlayDashboard.tsx, ProfilePanel.tsx
+- Room Fight system with create/join/info tabs
+- Invite Panel with Refer/Game Friends toggle, search, profile cards, like, invite to room
+- Coupon codes show Day (6AM-6PM) and Night (6PM-6AM) with copy buttons and shift indicator

@@ -161,6 +161,12 @@ export interface GameState {
   extraTimeCount: number
   activeMultiplier: number // 1 = none, 5 = 5x active, 2.5 = 2.5x active
   multiplierTimeLeft: number // seconds remaining for multiplier
+  // User ID (6-8 digit numeric code, unique per user)
+  userCode: string
+  // Total coins ever earned (never decreases)
+  totalCoinsEarned: number
+  // Room Card resource for Room Fight feature
+  roomCardCount: number
 }
 
 const BOT_NAMES = [
@@ -215,6 +221,16 @@ function generatePlayerId(): string {
     id += chars[Math.floor(Math.random() * chars.length)]
   }
   return id
+}
+
+function generateUserCode(): string {
+  // Generate a random 6-8 digit numeric code
+  const length = 6 + Math.floor(Math.random() * 3) // 6, 7, or 8 digits
+  let code = ''
+  for (let i = 0; i < length; i++) {
+    code += Math.floor(Math.random() * 10).toString()
+  }
+  return code
 }
 
 function getEmptyCells(tiles: Tile[]): [number, number][] {
@@ -740,10 +756,13 @@ export function useGame() {
       extraTimeCount: 0,
       activeMultiplier: 1,
       multiplierTimeLeft: 0,
+      userCode: '',
+      totalCoinsEarned: 0,
+      roomCardCount: 0,
     }
 
     if (!saved) {
-      return { ...defaults, inviteCode: generateInviteCode() }
+      return { ...defaults, inviteCode: generateInviteCode(), userCode: generateUserCode() }
     }
 
     let streakDay = saved.streakDay || 0
@@ -923,6 +942,9 @@ export function useGame() {
       extraTimeCount: saved.extraTimeCount ?? 0,
       activeMultiplier: 1,
       multiplierTimeLeft: 0,
+      userCode: saved.userCode || generateUserCode(),
+      totalCoinsEarned: saved.totalCoinsEarned ?? 0,
+      roomCardCount: saved.roomCardCount ?? 0,
     }
   })
 
@@ -977,9 +999,12 @@ export function useGame() {
       multiplier5xCount: state.multiplier5xCount,
       multiplier2_5xCount: state.multiplier2_5xCount,
       extraTimeCount: state.extraTimeCount,
+      userCode: state.userCode,
+      totalCoinsEarned: state.totalCoinsEarned,
+      roomCardCount: state.roomCardCount,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount, state.userCode, state.totalCoinsEarned, state.roomCardCount])
 
   // ============================================================
   // FIREBASE SYNC - Sync player data to Firebase RTDB
@@ -1757,13 +1782,14 @@ export function useGame() {
   const addCoins = useCallback((amount: number) => {
     setState(prev => {
       const newCoins = prev.coins + amount
+      const newTotalCoinsEarned = prev.totalCoinsEarned + amount
       let newCommissionBalance = prev.commissionBalance
       let newCommissionClaimed = prev.commissionClaimed
       if (prev.autoClaimCommission && prev.commissionBalance > 0) {
         newCommissionClaimed += prev.commissionBalance
         newCommissionBalance = 0
       }
-      return { ...prev, coins: newCoins, commissionBalance: newCommissionBalance, commissionClaimed: newCommissionClaimed }
+      return { ...prev, coins: newCoins, totalCoinsEarned: newTotalCoinsEarned, commissionBalance: newCommissionBalance, commissionClaimed: newCommissionClaimed }
     })
   }, [])
 
@@ -2052,6 +2078,9 @@ export function useGame() {
       extraTimeCount: 0,
       activeMultiplier: 1,
       multiplierTimeLeft: 0,
+      userCode: generateUserCode(),
+      totalCoinsEarned: 0,
+      roomCardCount: 0,
     })
   }, [])
 
