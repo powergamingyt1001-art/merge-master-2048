@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://merge-master-2048-oaou.vercel.app/sitemap.xml
