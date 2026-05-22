@@ -262,6 +262,38 @@ function saveLockDuration(weeks: number) {
   localStorage.setItem('adminLockDuration', String(weeks))
 }
 
+// ============================================================
+// ADMIN DAILY TASKS - Stored in localStorage
+// ============================================================
+
+export interface AdminDailyTask {
+  id: string
+  name: string
+  description: string
+  action: 'play_battle' | 'play_classic' | 'watch_ad' | 'visit_store' | 'spin_wheel' | 'win_battle'
+  requiredCount: number
+  rewardType: 'coins' | 'spins' | 'hammer' | 'magnet' | 'blast' | 'timer'
+  rewardAmount: number
+  active: boolean
+  createdAt: number
+}
+
+const ADMIN_DAILY_TASKS_KEY = 'adminDailyTasks'
+
+export function loadAdminDailyTasks(): AdminDailyTask[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const data = localStorage.getItem(ADMIN_DAILY_TASKS_KEY)
+    return data ? JSON.parse(data) : []
+  } catch {
+    return []
+  }
+}
+
+export function saveAdminDailyTasks(tasks: AdminDailyTask[]): void {
+  localStorage.setItem(ADMIN_DAILY_TASKS_KEY, JSON.stringify(tasks))
+}
+
 // Custom admin-created coupon codes
 interface CustomCouponCode {
   code: string
@@ -333,7 +365,7 @@ function getCoinAmountFromItem(item: string): number {
   return 500
 }
 
-type AdminTab = 'dashboard' | 'payments' | 'coupons' | 'prices' | 'history' | 'users' | 'partner' | 'security'
+type AdminTab = 'dashboard' | 'payments' | 'coupons' | 'prices' | 'history' | 'users' | 'partner' | 'security' | 'tasks'
 
 // Custom price overrides stored in localStorage
 interface CustomPriceOverride {
@@ -717,6 +749,16 @@ export function CouponCode({
   const [newDiscountTargetUsers, setNewDiscountTargetUsers] = useState('')
   const [newDiscountDescription, setNewDiscountDescription] = useState('')
 
+  // Admin daily tasks state
+  const [adminDailyTasks, setAdminDailyTasks] = useState<AdminDailyTask[]>(() => loadAdminDailyTasks())
+  const [newTaskName, setNewTaskName] = useState('')
+  const [newTaskDesc, setNewTaskDesc] = useState('')
+  const [newTaskAction, setNewTaskAction] = useState<AdminDailyTask['action']>('play_battle')
+  const [newTaskCount, setNewTaskCount] = useState(1)
+  const [newTaskRewardType, setNewTaskRewardType] = useState<AdminDailyTask['rewardType']>('coins')
+  const [newTaskRewardAmount, setNewTaskRewardAmount] = useState(50)
+  const [newTaskActive, setNewTaskActive] = useState(true)
+
   // Total revenue tracker
   const [totalRevenue, setTotalRevenue] = useState<number>(0)
   const [pendingOrderCount, setPendingOrderCount] = useState<number>(0)
@@ -806,6 +848,7 @@ export function CouponCode({
       setSelectedHistoryIds(new Set())
       setBannedUsers(loadBannedUsers())
       setDiscountCoupons(loadDiscountCoupons())
+      setAdminDailyTasks(loadAdminDailyTasks())
       // Load partners from Firebase
       firebaseGetPartners().then(p => setPartnerList(p)).catch(() => {})
       // Load user stats from Firebase
@@ -842,6 +885,9 @@ export function CouponCode({
     }
   }, [adminTab, showAdminPanel])
 
+  // Force refresh key for Firebase orders listener
+  const [ordersRefreshKey, setOrdersRefreshKey] = useState(0)
+
   // Listen for Firebase orders in real-time when admin panel is open
   useEffect(() => {
     if (!showAdminPanel) return
@@ -853,7 +899,7 @@ export function CouponCode({
       setPendingOrderCount(orders.filter(o => o.status === 'pending').length)
     })
     return unsubscribe
-  }, [showAdminPanel])
+  }, [showAdminPanel, ordersRefreshKey])
 
   // Pick a random reward based on weights
   const pickRandomReward = useCallback((): RewardOption => {
@@ -1049,8 +1095,9 @@ export function CouponCode({
       }
     }
 
-    // Check custom coupon codes
-    const customCode = customCodes.find(c => c.code.toUpperCase() === code)
+    // Check custom coupon codes - reload from localStorage to catch recently created codes
+    const freshCustomCodes = loadCustomCouponCodes()
+    const customCode = freshCustomCodes.find(c => c.code.toUpperCase() === code)
     if (customCode) {
       if (customCode.currentUses >= customCode.maxUses) {
         setStatusMessage({ text: 'This code has reached its max uses!', type: 'error' })
@@ -1058,8 +1105,8 @@ export function CouponCode({
       }
       // Apply the custom reward
       applyCustomReward(customCode)
-      // Update usage count
-      const updatedCodes = customCodes.map(c =>
+      // Update usage count (use fresh data)
+      const updatedCodes = freshCustomCodes.map(c =>
         c.code === customCode.code ? { ...c, currentUses: c.currentUses + 1 } : c
       )
       setCustomCodes(updatedCodes)
@@ -1111,22 +1158,35 @@ export function CouponCode({
         return
       }
       const daySettings = dayCodeSettings
-      // Auto-generate lower reward if admin forgot to configure
-      const rewardToUse: RewardOption = daySettings.rewardAmount > 0
-        ? { type: daySettings.rewardType, label: daySettings.label, emoji: daySettings.emoji, weight: 100 }
-        : { type: 'coins', label: '150 Coins (Auto)', emoji: '💰', weight: 100 } // Auto-generated with lower reward
-      applyReward(rewardToUse)
+      // Apply reward using configured amounts directly (not via applyReward which ignores rewardAmount)
+      if (daySettings.rewardAmount > 0) {
+        switch (daySettings.rewardType) {
+          case 'coins': onAddCoins(daySettings.rewardAmount); break
+          case 'spins': onAddSpinTickets(daySettings.rewardAmount); break
+          case 'magnets': onAddPowerUp('magnet', daySettings.rewardAmount); break
+          case 'bombs': onAddPowerUp('blast', daySettings.rewardAmount); break
+          case 'hammers': onAddPowerUp('hammer', daySettings.rewardAmount); break
+          case '5x': onAddCoins(daySettings.rewardAmount); break
+          case '2.5x': onAddCoins(daySettings.rewardAmount); break
+        }
+      } else {
+        // Auto-generate lower reward if admin forgot to configure
+        onAddCoins(150)
+      }
+      const rewardLabel = daySettings.rewardAmount > 0 ? daySettings.label : '150 Coins (Auto)'
+      const rewardEmoji = daySettings.rewardAmount > 0 ? daySettings.emoji : '💰'
+      onAddNotification('Day Code Reward! 🎉', `You received ${rewardEmoji} ${rewardLabel}!`, 'reward', '🎁')
       const newClaim: ClaimedCoupon = {
         code,
         date: today,
-        reward: `${rewardToUse.emoji} ${rewardToUse.label}`,
+        reward: `${rewardEmoji} ${rewardLabel}`,
         timestamp: Date.now(),
       }
       const updatedHistory = [newClaim, ...claimHistory].slice(0, 50)
       setClaimHistory(updatedHistory)
       saveClaimedCoupons(updatedHistory)
-      setShowReward({ label: rewardToUse.label, emoji: rewardToUse.emoji })
-      setStatusMessage({ text: `Day code redeemed! ${rewardToUse.emoji} ${rewardToUse.label}`, type: 'success' })
+      setShowReward({ label: rewardLabel, emoji: rewardEmoji })
+      setStatusMessage({ text: `Day code redeemed! ${rewardEmoji} ${rewardLabel}`, type: 'success' })
       setCodeInput('')
       return
     }
@@ -1139,21 +1199,35 @@ export function CouponCode({
         return
       }
       const nightSettings = nightCodeSettings
-      const rewardToUse: RewardOption = nightSettings.rewardAmount > 0
-        ? { type: nightSettings.rewardType, label: nightSettings.label, emoji: nightSettings.emoji, weight: 100 }
-        : { type: 'coins', label: '150 Coins (Auto)', emoji: '💰', weight: 100 }
-      applyReward(rewardToUse)
+      // Apply reward using configured amounts directly (not via applyReward which ignores rewardAmount)
+      if (nightSettings.rewardAmount > 0) {
+        switch (nightSettings.rewardType) {
+          case 'coins': onAddCoins(nightSettings.rewardAmount); break
+          case 'spins': onAddSpinTickets(nightSettings.rewardAmount); break
+          case 'magnets': onAddPowerUp('magnet', nightSettings.rewardAmount); break
+          case 'bombs': onAddPowerUp('blast', nightSettings.rewardAmount); break
+          case 'hammers': onAddPowerUp('hammer', nightSettings.rewardAmount); break
+          case '5x': onAddCoins(nightSettings.rewardAmount); break
+          case '2.5x': onAddCoins(nightSettings.rewardAmount); break
+        }
+      } else {
+        // Auto-generate lower reward if admin forgot to configure
+        onAddCoins(150)
+      }
+      const rewardLabel = nightSettings.rewardAmount > 0 ? nightSettings.label : '150 Coins (Auto)'
+      const rewardEmoji = nightSettings.rewardAmount > 0 ? nightSettings.emoji : '💰'
+      onAddNotification('Night Code Reward! 🎉', `You received ${rewardEmoji} ${rewardLabel}!`, 'reward', '🎁')
       const newClaim: ClaimedCoupon = {
         code,
         date: today,
-        reward: `${rewardToUse.emoji} ${rewardToUse.label}`,
+        reward: `${rewardEmoji} ${rewardLabel}`,
         timestamp: Date.now(),
       }
       const updatedHistory = [newClaim, ...claimHistory].slice(0, 50)
       setClaimHistory(updatedHistory)
       saveClaimedCoupons(updatedHistory)
-      setShowReward({ label: rewardToUse.label, emoji: rewardToUse.emoji })
-      setStatusMessage({ text: `Night code redeemed! ${rewardToUse.emoji} ${rewardToUse.label}`, type: 'success' })
+      setShowReward({ label: rewardLabel, emoji: rewardEmoji })
+      setStatusMessage({ text: `Night code redeemed! ${rewardEmoji} ${rewardLabel}`, type: 'success' })
       setCodeInput('')
       return
     }
@@ -1177,7 +1251,7 @@ export function CouponCode({
     setShowReward({ label: reward.label, emoji: reward.emoji })
     setStatusMessage({ text: `Code redeemed! ${reward.emoji} ${reward.label}`, type: 'success' })
     setCodeInput('')
-  }, [codeInput, claimHistory, customCodes, pickRandomReward, applyReward, applyAdminReward, applyCustomReward])
+  }, [codeInput, claimHistory, customCodes, pickRandomReward, applyReward, applyAdminReward, applyCustomReward, dayCodeSettings, nightCodeSettings, onAddCoins, onAddPowerUp, onAddSpinTickets, onAddNotification])
 
   // ===== ADMIN PANEL HANDLERS =====
 
@@ -1901,6 +1975,7 @@ export function CouponCode({
                 { key: 'history' as AdminTab, label: 'History', icon: <ChevronRight className="w-3 h-3" /> },
                 { key: 'users' as AdminTab, label: 'Users', icon: <Ban className="w-3 h-3" /> },
                 { key: 'partner' as AdminTab, label: 'Partner', icon: <UsersIcon className="w-3 h-3" /> },
+                { key: 'tasks' as AdminTab, label: 'Tasks', icon: <Sparkles className="w-3 h-3" /> },
               ].filter(t => {
                 if (!partnerMode) return true
                 if (partnerRole?.startsWith('PAY')) return t.key === 'payments' || t.key === 'dashboard'
@@ -2021,10 +2096,10 @@ export function CouponCode({
                               <p className="text-[9px] font-bold" style={{ color: '#F65E3B' }}>
                                 🔔 Pending Orders ({pendingOrderCount})
                               </p>
-                              <button onClick={() => setAdminTab('payments')}
+                              <button onClick={() => { setOrdersRefreshKey(k => k + 1); setAdminTab('payments'); }}
                                 className="text-[8px] font-bold px-2 py-0.5 rounded-lg"
                                 style={{ backgroundColor: 'rgba(246,94,59,0.1)', color: '#F65E3B' }}>
-                                View All →
+                                See →
                               </button>
                             </div>
                             <div className="space-y-1.5 max-h-48 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
@@ -2097,9 +2172,18 @@ export function CouponCode({
                     {/* ====== PAYMENTS TAB ====== */}
                     {adminTab === 'payments' && (
                       <div className="space-y-2">
-                        <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                          Pending Approvals ({pendingPurchases.length})
-                        </p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                            Pending Approvals ({pendingPurchases.length})
+                          </p>
+                          <button
+                            onClick={() => setOrdersRefreshKey(k => k + 1)}
+                            className="text-[8px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 transition-transform active:scale-95"
+                            style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' }}
+                          >
+                            <RefreshCw className="w-2.5 h-2.5" /> Refresh
+                          </button>
+                        </div>
 
                         {pendingPurchases.length === 0 ? (
                           <div className="text-center py-4">
@@ -3829,6 +3913,285 @@ export function CouponCode({
                         <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Security settings are only available to the main admin</p>
                       </div>
                     )}
+
+                    {/* ====== TASKS TAB (Admin only) ====== */}
+                    {adminTab === 'tasks' && adminRole === 'admin' && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Sparkles className="w-4 h-4" style={{ color: '#E040FB' }} />
+                          <p className="text-xs font-bold" style={{ color: '#E040FB' }}>Daily Tasks Manager</p>
+                        </div>
+                        <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                          Create custom daily tasks for players. If no custom tasks are active, the system uses default random tasks.
+                        </p>
+
+                        {/* Create New Task Form */}
+                        <div className="p-3 rounded-xl space-y-2" style={{ backgroundColor: 'rgba(224,64,251,0.06)', border: '1px solid rgba(224,64,251,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <Plus className="w-3 h-3" style={{ color: '#E040FB' }} />
+                            <p className="text-[9px] font-bold" style={{ color: '#E040FB' }}>Create New Task</p>
+                          </div>
+
+                          {/* Task Name */}
+                          <div>
+                            <label className="text-[7px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Task Name</label>
+                            <input
+                              value={newTaskName}
+                              onChange={(e) => setNewTaskName(e.target.value)}
+                              placeholder="e.g., Battle Warrior"
+                              className="w-full px-2 py-1.5 rounded-lg text-[9px] outline-none"
+                              style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                            />
+                          </div>
+
+                          {/* Task Description */}
+                          <div>
+                            <label className="text-[7px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Description</label>
+                            <input
+                              value={newTaskDesc}
+                              onChange={(e) => setNewTaskDesc(e.target.value)}
+                              placeholder="e.g., Play 3 battle games"
+                              className="w-full px-2 py-1.5 rounded-lg text-[9px] outline-none"
+                              style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                            />
+                          </div>
+
+                          {/* Action & Count Row */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[7px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Required Action</label>
+                              <select
+                                value={newTaskAction}
+                                onChange={(e) => setNewTaskAction(e.target.value as AdminDailyTask['action'])}
+                                className="w-full px-2 py-1.5 rounded-lg text-[9px] outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              >
+                                <option value="play_battle">⚔️ Play Battle</option>
+                                <option value="play_classic">🎮 Play Classic</option>
+                                <option value="watch_ad">📺 Watch Ad</option>
+                                <option value="visit_store">🏪 Visit Store</option>
+                                <option value="spin_wheel">🎰 Spin Wheel</option>
+                                <option value="win_battle">🏆 Win Battle</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[7px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Required Count</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={100}
+                                value={newTaskCount}
+                                onChange={(e) => setNewTaskCount(Math.max(1, parseInt(e.target.value) || 1))}
+                                className="w-full px-2 py-1.5 rounded-lg text-[9px] outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Reward Type & Amount Row */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[7px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Reward Type</label>
+                              <select
+                                value={newTaskRewardType}
+                                onChange={(e) => setNewTaskRewardType(e.target.value as AdminDailyTask['rewardType'])}
+                                className="w-full px-2 py-1.5 rounded-lg text-[9px] outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              >
+                                <option value="coins">💰 Coins</option>
+                                <option value="spins">🎫 Spins</option>
+                                <option value="hammer">🔨 Hammer</option>
+                                <option value="magnet">🧲 Magnet</option>
+                                <option value="blast">💣 Blast</option>
+                                <option value="timer">⏱️ Timer</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[7px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Reward Amount</label>
+                              <input
+                                type="number"
+                                min={1}
+                                max={10000}
+                                value={newTaskRewardAmount}
+                                onChange={(e) => setNewTaskRewardAmount(Math.max(1, parseInt(e.target.value) || 1))}
+                                className="w-full px-2 py-1.5 rounded-lg text-[9px] outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Active Toggle */}
+                          <div className="flex items-center justify-between py-1">
+                            <span className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Active</span>
+                            <button
+                              onClick={() => setNewTaskActive(!newTaskActive)}
+                              className="px-3 py-1 rounded-lg text-[8px] font-bold transition-transform active:scale-95"
+                              style={{
+                                backgroundColor: newTaskActive ? 'rgba(0,230,118,0.15)' : 'rgba(255,255,255,0.04)',
+                                border: newTaskActive ? '1px solid rgba(0,230,118,0.3)' : '1px solid rgba(255,255,255,0.1)',
+                                color: newTaskActive ? '#00E676' : 'rgba(255,255,255,0.4)',
+                              }}
+                            >
+                              {newTaskActive ? '✅ Active' : '⏸️ Inactive'}
+                            </button>
+                          </div>
+
+                          {/* Create Button */}
+                          <button
+                            onClick={() => {
+                              if (!newTaskName.trim()) return
+                              const newTask: AdminDailyTask = {
+                                id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                                name: newTaskName.trim(),
+                                description: newTaskDesc.trim() || newTaskName.trim(),
+                                action: newTaskAction,
+                                requiredCount: newTaskCount,
+                                rewardType: newTaskRewardType,
+                                rewardAmount: newTaskRewardAmount,
+                                active: newTaskActive,
+                                createdAt: Date.now(),
+                              }
+                              const updated = [...adminDailyTasks, newTask]
+                              setAdminDailyTasks(updated)
+                              saveAdminDailyTasks(updated)
+                              setNewTaskName('')
+                              setNewTaskDesc('')
+                              setNewTaskAction('play_battle')
+                              setNewTaskCount(1)
+                              setNewTaskRewardType('coins')
+                              setNewTaskRewardAmount(50)
+                              setNewTaskActive(true)
+                            }}
+                            className="w-full py-2 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                            style={{ background: 'linear-gradient(135deg, #E040FB, #7C4DFF)', color: '#FFFFFF' }}
+                          >
+                            ✨ CREATE TASK
+                          </button>
+                        </div>
+
+                        {/* Existing Tasks List */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                              Existing Tasks ({adminDailyTasks.length})
+                            </p>
+                            {adminDailyTasks.length > 0 && (
+                              <button
+                                onClick={() => {
+                                  setAdminDailyTasks([])
+                                  saveAdminDailyTasks([])
+                                }}
+                                className="text-[7px] font-bold px-2 py-1 rounded transition-transform active:scale-95"
+                                style={{ backgroundColor: 'rgba(246,94,59,0.1)', color: '#F65E3B' }}
+                              >
+                                Clear All
+                              </button>
+                            )}
+                          </div>
+
+                          {adminDailyTasks.length === 0 ? (
+                            <div className="text-center py-6 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                              <span className="text-2xl block mb-1">📋</span>
+                              <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.3)' }}>No custom tasks created</p>
+                              <p className="text-[7px] mt-1" style={{ color: 'rgba(255,255,255,0.2)' }}>The game will use default random tasks</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5 max-h-80 overflow-y-auto">
+                              {adminDailyTasks.map(task => {
+                                const actionEmoji: Record<string, string> = {
+                                  play_battle: '⚔️',
+                                  play_classic: '🎮',
+                                  watch_ad: '📺',
+                                  visit_store: '🏪',
+                                  spin_wheel: '🎰',
+                                  win_battle: '🏆',
+                                }
+                                const rewardEmoji: Record<string, string> = {
+                                  coins: '💰',
+                                  spins: '🎫',
+                                  hammer: '🔨',
+                                  magnet: '🧲',
+                                  blast: '💣',
+                                  timer: '⏱️',
+                                }
+                                return (
+                                  <div key={task.id}
+                                    className="p-2.5 rounded-lg"
+                                    style={{
+                                      backgroundColor: task.active ? 'rgba(0,230,118,0.04)' : 'rgba(255,255,255,0.02)',
+                                      border: task.active ? '1px solid rgba(0,230,118,0.12)' : '1px solid rgba(255,255,255,0.06)',
+                                    }}>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-[10px]">{actionEmoji[task.action] || '📋'}</span>
+                                          <p className="text-[9px] font-bold truncate" style={{ color: task.active ? '#FFFFFF' : 'rgba(255,255,255,0.4)' }}>
+                                            {task.name}
+                                          </p>
+                                          <span className="text-[6px] px-1.5 py-0.5 rounded-full font-bold"
+                                            style={{
+                                              backgroundColor: task.active ? 'rgba(0,230,118,0.15)' : 'rgba(255,255,255,0.04)',
+                                              color: task.active ? '#00E676' : 'rgba(255,255,255,0.3)',
+                                            }}>
+                                            {task.active ? 'ACTIVE' : 'INACTIVE'}
+                                          </span>
+                                        </div>
+                                        <p className="text-[7px] mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                                          {task.description}
+                                        </p>
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <span className="text-[7px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(224,64,251,0.1)', color: '#E040FB' }}>
+                                            {task.action.replace(/_/g, ' ')} × {task.requiredCount}
+                                          </span>
+                                          <span className="text-[7px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'rgba(237,194,46,0.1)', color: '#EDC22E' }}>
+                                            {rewardEmoji[task.rewardType]} {task.rewardAmount} {task.rewardType}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        <button
+                                          onClick={() => {
+                                            const updated = adminDailyTasks.map(t =>
+                                              t.id === task.id ? { ...t, active: !t.active } : t
+                                            )
+                                            setAdminDailyTasks(updated)
+                                            saveAdminDailyTasks(updated)
+                                          }}
+                                          className="text-[7px] font-bold px-2 py-1 rounded transition-transform active:scale-95"
+                                          style={{
+                                            backgroundColor: task.active ? 'rgba(246,94,59,0.1)' : 'rgba(0,230,118,0.1)',
+                                            color: task.active ? '#F65E3B' : '#00E676',
+                                          }}
+                                        >
+                                          {task.active ? 'Disable' : 'Enable'}
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            const updated = adminDailyTasks.filter(t => t.id !== task.id)
+                                            setAdminDailyTasks(updated)
+                                            saveAdminDailyTasks(updated)
+                                          }}
+                                          className="text-[7px] font-bold px-2 py-1 rounded transition-transform active:scale-95"
+                                          style={{ backgroundColor: 'rgba(246,94,59,0.1)', color: '#F65E3B' }}
+                                        >
+                                          <Trash2 className="w-2.5 h-2.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {adminTab === 'tasks' && adminRole === 'partner' && (
+                      <div className="text-center py-4">
+                        <span className="text-2xl block mb-1">🔒</span>
+                        <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Task management is only available to the main admin</p>
+                      </div>
+                    )}
             </div>
 
             {/* Admin Footer Navigation */}
@@ -3847,6 +4210,7 @@ export function CouponCode({
                 { key: 'users' as AdminTab, icon: '👥', label: 'Users' },
                 { key: 'partner' as AdminTab, icon: '🤝', label: 'Partner' },
                 { key: 'security' as AdminTab, icon: '🔐', label: 'Security' },
+                { key: 'tasks' as AdminTab, icon: '📋', label: 'Tasks' },
               ].filter(t => {
                 if (adminRole === 'admin' && !partnerMode) return true
                 if (adminRole === 'admin' && partnerMode) return true
@@ -3859,6 +4223,7 @@ export function CouponCode({
                   if (t.key === 'prices' && partnerPermissions.includes('manage_prices')) return true
                   if (t.key === 'users' && (partnerPermissions.includes('view_users') || partnerPermissions.includes('ban_users'))) return true
                   if (t.key === 'security') return false // Partners never see security
+                  if (t.key === 'tasks') return false // Partners never see tasks
                   return false
                 }
                 // Legacy partner mode (URL-based)

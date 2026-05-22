@@ -666,9 +666,110 @@ export function getCurrentLevelPoints(level: number): number {
 }
 
 // Generate daily tasks for today - varied tasks with coins + ability rewards
+// If admin has created custom tasks, use those; otherwise use default random tasks
 function generateDailyTasks(): DailyTask[] {
   const today = getTodayStr()
-  // Use day of year to vary tasks slightly each day
+
+  // Check for admin custom tasks first
+  try {
+    const adminTasksData = typeof window !== 'undefined' ? localStorage.getItem('adminDailyTasks') : null
+    if (adminTasksData) {
+      const adminTasks = JSON.parse(adminTasksData)
+      const activeTasks = adminTasks.filter((t: any) => t.active === true)
+      if (activeTasks.length > 0) {
+        // Map admin tasks to DailyTask format
+        return activeTasks.map((adminTask: any) => {
+          // Map action to actionType
+          let actionType: DailyTask['actionType'] = 'auto'
+          let emoji = '📋'
+          let visitCount: number | undefined = undefined
+
+          switch (adminTask.action) {
+            case 'play_battle':
+              actionType = 'play'
+              emoji = '⚔️'
+              break
+            case 'play_classic':
+              actionType = 'play'
+              emoji = '🎮'
+              break
+            case 'watch_ad':
+              actionType = 'visit'
+              emoji = '📺'
+              visitCount = adminTask.requiredCount
+              break
+            case 'visit_store':
+              actionType = 'visit'
+              emoji = '🏪'
+              visitCount = adminTask.requiredCount
+              break
+            case 'spin_wheel':
+              actionType = 'spin'
+              emoji = '🎰'
+              break
+            case 'win_battle':
+              actionType = 'play'
+              emoji = '🏆'
+              break
+            default:
+              actionType = 'auto'
+              emoji = '📋'
+          }
+
+          // Map reward type
+          let rewardType: DailyTaskReward['type'] = 'coins'
+          let rewardEmoji = '💰'
+          switch (adminTask.rewardType) {
+            case 'coins':
+              rewardType = 'coins'
+              rewardEmoji = '💰'
+              break
+            case 'spins':
+              rewardType = 'spin'
+              rewardEmoji = '🎫'
+              break
+            case 'hammer':
+              rewardType = 'hammer'
+              rewardEmoji = '🔨'
+              break
+            case 'magnet':
+              rewardType = 'magnet'
+              rewardEmoji = '🧲'
+              break
+            case 'blast':
+              rewardType = 'blast'
+              rewardEmoji = '💣'
+              break
+            case 'timer':
+              rewardType = 'extraTime'
+              rewardEmoji = '⏱️'
+              break
+          }
+
+          return {
+            id: `admin-${adminTask.id}-${today}`,
+            description: adminTask.description || adminTask.name,
+            emoji,
+            target: adminTask.requiredCount || 1,
+            progress: 0,
+            reward: {
+              type: rewardType,
+              count: adminTask.rewardAmount || 1,
+              label: `${adminTask.rewardAmount} ${adminTask.rewardType}`,
+              emoji: rewardEmoji,
+            },
+            claimed: false,
+            actionType,
+            visitCount,
+          }
+        })
+      }
+    }
+  } catch {
+    // Fall through to default tasks
+  }
+
+  // Default: Use day of year to vary tasks slightly each day
   const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24))
   const taskVariant = dayOfYear % 7 // Rotate ability rewards weekly
 

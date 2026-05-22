@@ -20,6 +20,7 @@ interface StoreProps {
   onAddPowerUp: (pu: 'hammer' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x' | 'extraTime', count: number) => void
   onAddUndos: (count: number) => void
   onAddRoomCards?: (count: number) => void
+  onAddSpinTickets?: (count: number) => void
 }
 
 interface CoinPack {
@@ -57,7 +58,7 @@ interface StoreOrder {
   upiId: string
 }
 
-type TabId = 'coins' | 'ability' | 'room' | 'history'
+type TabId = 'coins' | 'ability' | 'room' | 'spins' | 'history'
 
 // ─── Cart Types ────────────────────────────────────────────────────────────
 
@@ -293,6 +294,69 @@ function recordPurchase(abilityType: string, quantity: number) {
     limits[abilityType] = { ...existing, count: existing.count + quantity }
   }
   savePurchaseLimits(limits)
+}
+
+// ─── Spin Purchase Limit Tracking (15 spins via coins per 3 days) ──────────
+
+const SPIN_PURCHASE_LIMIT_KEY = 'mergeMaster2048_spinPurchaseLimits'
+const MAX_SPIN_COIN_PURCHASE_3DAYS = 15
+
+interface SpinPurchaseRecord {
+  count: number
+  resetAt: string
+}
+
+function loadSpinPurchaseLimits(): SpinPurchaseRecord | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(SPIN_PURCHASE_LIMIT_KEY)
+    if (!raw) return null
+    const data: SpinPurchaseRecord = JSON.parse(raw)
+    if (new Date(data.resetAt).getTime() <= Date.now()) {
+      localStorage.removeItem(SPIN_PURCHASE_LIMIT_KEY)
+      return null
+    }
+    return data
+  } catch {
+    return null
+  }
+}
+
+function getRemainingSpinCoinPurchase(): number {
+  const record = loadSpinPurchaseLimits()
+  if (!record) return MAX_SPIN_COIN_PURCHASE_3DAYS
+  return Math.max(0, MAX_SPIN_COIN_PURCHASE_3DAYS - record.count)
+}
+
+function recordSpinCoinPurchase(quantity: number) {
+  if (typeof window === 'undefined') return
+  const existing = loadSpinPurchaseLimits()
+  const now = Date.now()
+  const threeDays = 3 * 24 * 60 * 60 * 1000
+
+  if (!existing) {
+    localStorage.setItem(SPIN_PURCHASE_LIMIT_KEY, JSON.stringify({ count: quantity, resetAt: new Date(now + threeDays).toISOString() }))
+  } else {
+    localStorage.setItem(SPIN_PURCHASE_LIMIT_KEY, JSON.stringify({ ...existing, count: existing.count + quantity }))
+  }
+}
+
+// ─── Room Card Coin Purchase (once per day) ──────────────────────────────────
+
+const ROOM_CARD_COIN_PURCHASE_KEY = 'mergeMaster2048_roomCardCoinPurchase'
+
+function canBuyRoomCardWithCoins(): boolean {
+  if (typeof window === 'undefined') return false
+  const lastPurchase = localStorage.getItem(ROOM_CARD_COIN_PURCHASE_KEY)
+  if (!lastPurchase) return true
+  const today = new Date().toISOString().split('T')[0]
+  return lastPurchase !== today
+}
+
+function markRoomCardCoinPurchased() {
+  if (typeof window === 'undefined') return
+  const today = new Date().toISOString().split('T')[0]
+  localStorage.setItem(ROOM_CARD_COIN_PURCHASE_KEY, today)
 }
 
 // ─── Order Helpers ───────────────────────────────────────────────────────────
@@ -1088,45 +1152,7 @@ function AbilityCard({
 
 // ─── Ability Tab ─────────────────────────────────────────────────────────────
 
-function AbilityTab({ onBuy, onCoinBuy, coins, onClaimFreeRoomCard, consecutiveVisits, freeRoomCardAvailable, onAddRoomCards, onAddNotification, onDeductCoins, cart, onAddToCart, onUpdateCartQuantity }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number; onClaimFreeRoomCard?: () => void; consecutiveVisits: number; freeRoomCardAvailable: boolean; onAddRoomCards?: (count: number) => void; onAddNotification: (title: string, message: string, type: string, emoji: string) => void; onDeductCoins: (amount: number) => void; cart: CartItem[]; onAddToCart: (item: AbilityItem) => void; onUpdateCartQuantity: (id: string, delta: number) => void }) {
-  const [freeRoomCardPending, setFreeRoomCardPending] = useState(false)
-  const freeRoomCardOpenedRef = useRef(false)
-
-  // Listen for visibility change for free room card ad
-  useEffect(() => {
-    if (!freeRoomCardPending) return
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && freeRoomCardOpenedRef.current) {
-        freeRoomCardOpenedRef.current = false
-        setFreeRoomCardPending(false)
-        onClaimFreeRoomCard?.()
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => document.removeEventListener('visibilitychange', handleVisibility)
-  }, [freeRoomCardPending, onClaimFreeRoomCard])
-
-  const handleClaimFreeRoomCard = useCallback(() => {
-    if (!freeRoomCardAvailable || freeRoomCardPending) return
-    try {
-      window.open(getRandomLink(), '_blank')
-      freeRoomCardOpenedRef.current = true
-      setFreeRoomCardPending(true)
-    } catch {
-      // Popup blocked - skip
-    }
-  }, [freeRoomCardAvailable, freeRoomCardPending])
-
-  const handleBuyRoomCardWithCoins = useCallback(() => {
-    if (coins < 3000) {
-      onAddNotification('Not Enough Coins!', `You need 3,000 coins but have ${formatNumber(coins)}`, 'system', '😔')
-      return
-    }
-    onDeductCoins(3000)
-    onAddRoomCards?.(1)
-    onAddNotification('Room Card Purchased! 🃏', 'You bought 1 Room Card for 3,000 coins!', 'reward', '🃏')
-  }, [coins, onDeductCoins, onAddRoomCards, onAddNotification])
-
+function AbilityTab({ onBuy, onCoinBuy, coins, onAddNotification, onDeductCoins, cart, onAddToCart, onUpdateCartQuantity }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number; onAddNotification: (title: string, message: string, type: string, emoji: string) => void; onDeductCoins: (amount: number) => void; cart: CartItem[]; onAddToCart: (item: AbilityItem) => void; onUpdateCartQuantity: (id: string, delta: number) => void }) {
   // Daily Streak info
   const [dailyStreakInfo, setDailyStreakInfo] = useState<{ price: number; count: number } | null>(() => getDailyStreakInfo())
 
@@ -1236,92 +1262,27 @@ function AbilityTab({ onBuy, onCoinBuy, coins, onClaimFreeRoomCard, consecutiveV
 
 // ─── Room Tab ─────────────────────────────────────────────────────────────
 
-function RoomTab({ onBuy, onCoinBuy, coins, onAddRoomCards, onAddNotification, onDeductCoins, onClaimFreeRoomCard, consecutiveVisits, freeRoomCardAvailable, cart, onAddToCart, onUpdateCartQuantity }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number; onAddRoomCards?: (count: number) => void; onAddNotification: (title: string, message: string, type: string, emoji: string) => void; onDeductCoins: (amount: number) => void; onClaimFreeRoomCard?: () => void; consecutiveVisits: number; freeRoomCardAvailable: boolean; cart: CartItem[]; onAddToCart: (item: AbilityItem) => void; onUpdateCartQuantity: (id: string, delta: number) => void }) {
-  const [freeRoomCardPending, setFreeRoomCardPending] = useState(false)
-  const freeRoomCardOpenedRef = useRef(false)
-
-  useEffect(() => {
-    if (!freeRoomCardPending) return
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && freeRoomCardOpenedRef.current) {
-        freeRoomCardOpenedRef.current = false
-        setFreeRoomCardPending(false)
-        onClaimFreeRoomCard?.()
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-    return () => document.removeEventListener('visibilitychange', handleVisibility)
-  }, [freeRoomCardPending, onClaimFreeRoomCard])
-
-  const handleClaimFreeRoomCard = useCallback(() => {
-    if (!freeRoomCardAvailable || freeRoomCardPending) return
-    try {
-      window.open(getRandomLink(), '_blank')
-      freeRoomCardOpenedRef.current = true
-      setFreeRoomCardPending(true)
-    } catch {
-      // Popup blocked
-    }
-  }, [freeRoomCardAvailable, freeRoomCardPending])
+function RoomTab({ onBuy, onCoinBuy, coins, onAddRoomCards, onAddNotification, onDeductCoins, cart, onAddToCart, onUpdateCartQuantity }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number; onAddRoomCards?: (count: number) => void; onAddNotification: (title: string, message: string, type: string, emoji: string) => void; onDeductCoins: (amount: number) => void; cart: CartItem[]; onAddToCart: (item: AbilityItem) => void; onUpdateCartQuantity: (id: string, delta: number) => void }) {
+  const [roomCardCoinPurchased, setRoomCardCoinPurchased] = useState(() => !canBuyRoomCardWithCoins())
 
   const handleBuyRoomCardWithCoins = useCallback(() => {
+    if (!canBuyRoomCardWithCoins()) {
+      onAddNotification('Limit Reached!', 'You can only buy 1 Room Card with coins per day.', 'system', '⏳')
+      return
+    }
     if (coins < 3000) {
       onAddNotification('Not Enough Coins!', `You need 3,000 coins but have ${formatNumber(coins)}`, 'system', '😔')
       return
     }
     onDeductCoins(3000)
     onAddRoomCards?.(1)
+    markRoomCardCoinPurchased()
+    setRoomCardCoinPurchased(true)
     onAddNotification('Room Card Purchased! 🃏', 'You bought 1 Room Card for 3,000 coins!', 'reward', '🃏')
   }, [coins, onDeductCoins, onAddRoomCards, onAddNotification])
 
   return (
     <div className="space-y-4">
-      {/* Free Room Card - Daily Visit Streak */}
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-sm">🃏</span>
-          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#E040FB' }}>
-            DAILY FREE ROOM CARD
-          </h4>
-        </div>
-        <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(224,64,251,0.06)', border: '1px solid rgba(224,64,251,0.15)' }}>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ backgroundColor: 'rgba(224,64,251,0.1)', border: '1px solid rgba(224,64,251,0.2)' }}>
-              🃏
-            </div>
-            <div className="flex-1">
-              <p className="text-xs font-bold" style={{ color: '#FFFFFF' }}>Free Room Card</p>
-              <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                Visit store 7 days in a row!
-              </p>
-              <div className="flex items-center gap-1 mt-1">
-                {Array.from({ length: 7 }, (_, i) => (
-                  <div key={i} className="w-3.5 h-3.5 rounded-full flex items-center justify-center"
-                    style={{
-                      backgroundColor: i < consecutiveVisits ? 'rgba(224,64,251,0.3)' : 'rgba(255,255,255,0.06)',
-                      border: i < consecutiveVisits ? '1px solid rgba(224,64,251,0.5)' : '1px solid rgba(255,255,255,0.1)',
-                    }}>
-                    {i < consecutiveVisits && <span className="text-[6px]" style={{ color: '#E040FB' }}>✓</span>}
-                  </div>
-                ))}
-                <span className="text-[8px] ml-1" style={{ color: consecutiveVisits >= 7 ? '#E040FB' : 'rgba(255,255,255,0.3)' }}>{consecutiveVisits}/7</span>
-              </div>
-            </div>
-            {freeRoomCardAvailable ? (
-              <button onClick={handleClaimFreeRoomCard} disabled={freeRoomCardPending}
-                className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, #E040FB, #7C4DFF)', color: '#FFFFFF' }}>
-                {freeRoomCardPending ? 'Waiting...' : 'CLAIM 🎬'}
-              </button>
-            ) : (
-              <div className="px-3 py-1.5 rounded-lg text-[9px] font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.3)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                {consecutiveVisits < 7 ? `${7 - consecutiveVisits} more days` : 'Come back tomorrow'}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* Room Cards - INR */}
       <div>
         <div className="flex items-center gap-2 mb-2">
@@ -1337,15 +1298,18 @@ function RoomTab({ onBuy, onCoinBuy, coins, onAddRoomCards, onAddNotification, o
         </div>
       </div>
 
-      {/* Room Card - Coins */}
+      {/* Room Card - Coins (once per day) */}
       <div>
         <div className="flex items-center gap-2 mb-2">
           <Coins className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
           <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#E040FB' }}>
             ROOM CARD (COINS)
           </h4>
+          <span className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(224,64,251,0.15)', color: '#E040FB' }}>
+            1/day
+          </span>
         </div>
-        <div className="relative flex items-center justify-between p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="relative flex items-center justify-between p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', opacity: roomCardCoinPurchased ? 0.5 : 1 }}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ backgroundColor: 'rgba(224,64,251,0.1)', border: '1px solid rgba(224,64,251,0.2)' }}>
               🃏
@@ -1353,12 +1317,15 @@ function RoomTab({ onBuy, onCoinBuy, coins, onAddRoomCards, onAddNotification, o
             <div>
               <p className="text-xs font-bold" style={{ color: '#FFFFFF' }}>1 Room Card</p>
               <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>3,000 Coins</p>
+              {roomCardCoinPurchased && (
+                <p className="text-[8px]" style={{ color: '#F65E3B' }}>Purchased today</p>
+              )}
             </div>
           </div>
-          <button onClick={handleBuyRoomCardWithCoins} disabled={coins < 3000}
+          <button onClick={handleBuyRoomCardWithCoins} disabled={coins < 3000 || roomCardCoinPurchased}
             className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40"
             style={{ background: 'linear-gradient(135deg, #E040FB, #7C4DFF)', color: '#FFFFFF' }}>
-            BUY 💰
+            {roomCardCoinPurchased ? 'SOLD OUT' : 'BUY 💰'}
           </button>
         </div>
       </div>
@@ -1536,13 +1503,214 @@ function HistoryTab({ orders, onDeleteAll, onDeleteSelected }: { orders: StoreOr
   )
 }
 
+// ─── Spin Data ──────────────────────────────────────────────────────────────
+
+interface SpinPack {
+  id: string
+  spins: number
+  price: number
+  tag?: { label: string; color: string; fireStyling?: boolean }
+  currency: 'inr' | 'coin'
+  bonusSpins?: number // Extra free spins (e.g. 10+2 free)
+}
+
+const SPIN_INR_PACKS: SpinPack[] = [
+  { id: 'spin-9', spins: 9, price: 5, tag: { label: 'HOT', color: '#F65E3B' }, currency: 'inr' },
+  { id: 'spin-20', spins: 20, price: 9, tag: { label: 'POPULAR', color: '#00E676' }, currency: 'inr' },
+  { id: 'spin-33', spins: 33, price: 15, tag: { label: 'VERY HOT', color: '#F65E3B', fireStyling: true }, currency: 'inr' },
+  { id: 'spin-50', spins: 50, price: 25, tag: { label: 'BEST VALUE', color: '#EDC22E' }, currency: 'inr' },
+]
+
+const SPIN_COIN_PACKS: SpinPack[] = [
+  { id: 'spin-coin-1', spins: 1, price: 300, currency: 'coin' },
+  { id: 'spin-coin-3', spins: 3, price: 900, currency: 'coin' },
+  { id: 'spin-coin-5', spins: 5, price: 1500, currency: 'coin' },
+  { id: 'spin-coin-10', spins: 10, price: 3000, tag: { label: '+2 FREE', color: '#00E676' }, currency: 'coin', bonusSpins: 2 },
+]
+
+// ─── Spins Tab ──────────────────────────────────────────────────────────────
+
+function SpinsTab({ onBuy, coins, onDeductCoins, onAddSpinTickets, onAddNotification }: {
+  onBuy: (item: string, price: number, quantity: number) => void
+  coins: number
+  onDeductCoins: (amount: number) => void
+  onAddSpinTickets?: (count: number) => void
+  onAddNotification: (title: string, message: string, type: string, emoji: string) => void
+}) {
+  const [remainingSpins, setRemainingSpins] = useState(() => getRemainingSpinCoinPurchase())
+
+  const handleCoinBuy = useCallback((pack: SpinPack) => {
+    if (coins < pack.price) {
+      onAddNotification('Not Enough Coins!', `You need ${formatNumber(pack.price)} coins but have ${formatNumber(coins)}`, 'system', '😔')
+      return
+    }
+    const spinsToBuy = pack.spins
+    if (spinsToBuy > remainingSpins) {
+      onAddNotification('Limit Reached!', `You can only buy ${remainingSpins} more spins with coins in this period.`, 'system', '⏳')
+      return
+    }
+    // Deduct coins
+    onDeductCoins(pack.price)
+    // Add spin tickets (including bonus)
+    const totalSpins = pack.spins + (pack.bonusSpins || 0)
+    onAddSpinTickets?.(totalSpins)
+    // Record limit
+    recordSpinCoinPurchase(spinsToBuy)
+    setRemainingSpins(getRemainingSpinCoinPurchase())
+
+    onAddNotification(
+      'Spins Purchased! 🎫',
+      `You bought ${pack.spins} spin${pack.spins > 1 ? 's' : ''}${pack.bonusSpins ? ` +${pack.bonusSpins} FREE` : ''} for ${formatNumber(pack.price)} coins!`,
+      'reward',
+      '🎫'
+    )
+  }, [coins, remainingSpins, onDeductCoins, onAddSpinTickets, onAddNotification])
+
+  return (
+    <div className="space-y-4">
+      {/* Spins - INR */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-sm">🎫</span>
+          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#F65E3B' }}>
+            SPIN TICKETS (₹)
+          </h4>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {SPIN_INR_PACKS.map((pack, i) => (
+            <motion.div
+              key={pack.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.06, duration: 0.3 }}
+              className="relative flex flex-col items-center justify-between p-4 pt-5 rounded-2xl"
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                boxShadow: pack.tag ? `0 0 20px ${pack.tag.color}15` : 'none',
+              }}
+            >
+              {pack.tag && (
+                <div
+                  className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[9px] font-extrabold tracking-wide whitespace-nowrap z-10"
+                  style={{
+                    backgroundColor: pack.tag.color,
+                    color: '#FFFFFF',
+                    boxShadow: pack.tag.fireStyling
+                      ? `0 0 12px ${pack.tag.color}, 0 0 24px ${pack.tag.color}66, 0 0 36px ${pack.tag.color}33`
+                      : `0 2px 8px ${pack.tag.color}66`,
+                    ...(pack.tag.fireStyling ? {
+                      animation: 'pulse 1.5s ease-in-out infinite',
+                      textShadow: '0 0 8px rgba(255,255,255,0.5)',
+                    } : {}),
+                  }}
+                >
+                  {pack.tag.fireStyling && '🔥 '}{pack.tag.label}{pack.tag.fireStyling && ' 🔥'}
+                </div>
+              )}
+              <div className="text-center mb-3">
+                <div className="text-2xl mb-1">🎫</div>
+                <p className="text-sm font-extrabold" style={{ color: '#F65E3B' }}>
+                  {pack.spins}
+                </p>
+                <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Spins</p>
+              </div>
+              <div className="w-full">
+                <p className="text-center text-xs font-bold mb-2" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                  {pack.spins} Spins = ₹{pack.price}
+                </p>
+                <BuyButton
+                  onPress={() => onBuy(`${pack.spins} Spin Tickets`, pack.price, pack.spins)}
+                />
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      {/* Spins - Coins */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <Coins className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
+          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#EDC22E' }}>
+            SPIN TICKETS (COINS)
+          </h4>
+          <span className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(237,194,46,0.15)', color: '#EDC22E' }}>
+            {remainingSpins}/15 per 3 days
+          </span>
+        </div>
+        <div className="space-y-2">
+          {SPIN_COIN_PACKS.map((pack) => {
+            const isDisabled = coins < pack.price || remainingSpins < pack.spins
+            return (
+              <motion.div
+                key={pack.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="relative flex items-center justify-between p-3 rounded-xl"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  opacity: remainingSpins < pack.spins ? 0.5 : 1,
+                }}
+              >
+                {pack.tag && (
+                  <div
+                    className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[9px] font-extrabold tracking-wide whitespace-nowrap z-10"
+                    style={{
+                      backgroundColor: pack.tag.color,
+                      color: '#FFFFFF',
+                      boxShadow: `0 2px 8px ${pack.tag.color}66`,
+                    }}
+                  >
+                    {pack.tag.label}
+                  </div>
+                )}
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-lg"
+                    style={{
+                      backgroundColor: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    🎫
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold" style={{ color: '#FFFFFF' }}>
+                      {pack.spins} Spin{pack.spins > 1 ? 's' : ''}
+                      {pack.bonusSpins ? <span style={{ color: '#00E676' }}> → {pack.spins + pack.bonusSpins}</span> : ''}
+                    </p>
+                    <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                      💰 {formatNumber(pack.price)}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleCoinBuy(pack)}
+                  disabled={isDisabled}
+                  className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{
+                    background: 'linear-gradient(135deg, #EDC22E, #FFB300)',
+                    color: '#FFFFFF',
+                  }}
+                >
+                  BUY
+                </button>
+              </motion.div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Store Component ────────────────────────────────────────────────────
 
-export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos, onAddRoomCards }: StoreProps) {
+export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos, onAddRoomCards, onAddSpinTickets }: StoreProps) {
   const [activeTab, setActiveTab] = useState<TabId>('coins')
   const [orders, setOrders] = useState<StoreOrder[]>(() => loadOrders())
-  const [consecutiveVisits, setConsecutiveVisits] = useState(0)
-  const [freeRoomCardAvailable, setFreeRoomCardAvailable] = useState(false)
   const [paymentModal, setPaymentModal] = useState<{ open: boolean; itemName: string; itemPrice: number; itemQuantity: number }>({
     open: false,
     itemName: '',
@@ -1582,17 +1750,10 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
     return unsubscribe
   }, [playerId, onAddNotification])
 
-  // Track store visit for daily free room card
+  // Track store visit (keep for visit tracking even though free room card claim removed)
   useEffect(() => {
     if (isOpen) {
       recordStoreVisit()
-      const visits = getConsecutiveVisitCount()
-      const available = canClaimFreeRoomCard()
-      // Use microtask to avoid synchronous setState in effect
-      queueMicrotask(() => {
-        setConsecutiveVisits(visits)
-        setFreeRoomCardAvailable(available)
-      })
     }
   }, [isOpen])
 
@@ -1603,14 +1764,6 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
       setOrders(loadOrders())
     }
   }, [])
-  // Handle free room card claim
-  const handleClaimFreeRoomCard = useCallback(() => {
-    if (!canClaimFreeRoomCard()) return
-    markFreeRoomCardClaimed()
-    onAddRoomCards?.(1)
-    onAddNotification('Room Card Claimed! 🃏', 'You received a free Room Card! Use it for Room Fight battles.', 'reward', '🃏')
-    setFreeRoomCardAvailable(false)
-  }, [onAddRoomCards, onAddNotification])
 
   const handleCoinBuy = useCallback(
     (item: AbilityItem) => {
@@ -1700,6 +1853,7 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
   const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
     { id: 'coins', label: 'Coins', icon: <Coins className="w-3.5 h-3.5" /> },
     { id: 'ability', label: 'Ability', icon: <Zap className="w-3.5 h-3.5" /> },
+    { id: 'spins', label: 'Spins', icon: <span className="text-xs">🎫</span> },
     { id: 'room', label: 'Room', icon: <span className="text-xs">🃏</span> },
     { id: 'history', label: 'History', icon: <Clock className="w-3.5 h-3.5" /> },
   ]
@@ -2082,7 +2236,18 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <AbilityTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onClaimFreeRoomCard={handleClaimFreeRoomCard} consecutiveVisits={consecutiveVisits} freeRoomCardAvailable={freeRoomCardAvailable} onAddRoomCards={onAddRoomCards} onAddNotification={onAddNotification} onDeductCoins={onDeductCoins} cart={cart} onAddToCart={addToCart} onUpdateCartQuantity={updateCartQuantity} />
+                    <AbilityTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onAddNotification={onAddNotification} onDeductCoins={onDeductCoins} cart={cart} onAddToCart={addToCart} onUpdateCartQuantity={updateCartQuantity} />
+                  </motion.div>
+                )}
+                {activeTab === 'spins' && (
+                  <motion.div
+                    key="spins"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <SpinsTab onBuy={handleBuy} coins={coins} onDeductCoins={onDeductCoins} onAddSpinTickets={onAddSpinTickets} onAddNotification={onAddNotification} />
                   </motion.div>
                 )}
                 {activeTab === 'room' && (
@@ -2093,7 +2258,7 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <RoomTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onAddRoomCards={onAddRoomCards} onAddNotification={onAddNotification} onDeductCoins={onDeductCoins} onClaimFreeRoomCard={handleClaimFreeRoomCard} consecutiveVisits={consecutiveVisits} freeRoomCardAvailable={freeRoomCardAvailable} cart={cart} onAddToCart={addToCart} onUpdateCartQuantity={updateCartQuantity} />
+                    <RoomTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onAddRoomCards={onAddRoomCards} onAddNotification={onAddNotification} onDeductCoins={onDeductCoins} cart={cart} onAddToCart={addToCart} onUpdateCartQuantity={updateCartQuantity} />
                   </motion.div>
                 )}
                 {activeTab === 'history' && (

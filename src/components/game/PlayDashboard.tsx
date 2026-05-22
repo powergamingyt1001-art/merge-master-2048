@@ -786,14 +786,15 @@ export function PlayDashboard({
         userCode={userCode} totalCoinsEarned={totalCoinsEarned} roomCardCount={roomCardCount}
         battleBestScore={gameHistory.filter(g => g.mode === 'bot' || g.mode === 'coins' || g.mode === 'tournament').reduce((max, g) => Math.max(max, g.score), 0)}
         gameHistory={gameHistory}
-        onOpenRoomFight={() => { setShowProfile(false); setShowRoomFight(true) }} />
+        onOpenRoomFight={() => { setShowProfile(false); setShowRoomFight(true) }}
+        onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} />
       <NotificationsPanel isOpen={showNotifications} onClose={() => setShowNotifications(false)}
         notifications={notifications} onMarkRead={onMarkNotificationRead} onMarkAllRead={onMarkAllNotificationsRead}
         onDeleteNotification={onDeleteNotification} onDeleteReadNotifications={onDeleteReadNotifications} />
       <PrivacyPolicy isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
       <AboutPage isOpen={showAbout} onClose={() => setShowAbout(false)} />
       <ContactPage isOpen={showContact} onClose={() => setShowContact(false)} />
-      <Store isOpen={showStore} onClose={() => setShowStore(false)} playerId={playerId} playerName={playerName} userCode={userCode} coins={coins} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} onDeductCoins={onDeductCoins} onAddPowerUp={onAddPowerUp} onAddUndos={onAddUndos} onAddRoomCards={onAddRoomCards} />
+      <Store isOpen={showStore} onClose={() => setShowStore(false)} playerId={playerId} playerName={playerName} userCode={userCode} coins={coins} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} onDeductCoins={onDeductCoins} onAddPowerUp={onAddPowerUp} onAddUndos={onAddUndos} onAddRoomCards={onAddRoomCards} onAddSpinTickets={onAddSpinTickets} />
       <CouponCode isOpen={showCoupon} onClose={() => setShowCoupon(false)} coins={coins} hammerCount={hammerCount} magnetCount={magnetCount} blastCount={blastCount} spinTickets={spinTickets} onAddCoins={onAddCoins} onAddPowerUp={onAddPowerUp} onAddSpinTickets={onAddSpinTickets} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} />
 
       <RoomFight

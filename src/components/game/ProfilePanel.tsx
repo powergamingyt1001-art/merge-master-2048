@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users, TrendingUp, Percent, Gift, Trash2, Sun, Moon, Copy, DoorOpen, History, Search, Lock, Heart } from 'lucide-react'
+import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users, TrendingUp, Percent, Gift, Trash2, Sun, Moon, Copy, DoorOpen, History, Search, Lock, Heart, UserPlus } from 'lucide-react'
 import { Notification, PLAYER_AVATARS, getLevelInfo, getLevelThreshold, MAX_LEVEL, GameHistoryEntry } from '@/hooks/useGame'
 import { AdsterraBanner320x50 } from '@/components/ads/AdsterraAds'
 import { useTheme } from 'next-themes'
@@ -52,6 +52,7 @@ interface ProfilePanelProps {
   likeCount?: number
   isLiked?: boolean
   onToggleLike?: () => void
+  onAddNotification?: (title: string, message: string, type: string, emoji: string) => void
 }
 
 // Coin count formatter: 1000→1K, 2500→2.5K, 1000000→1M
@@ -128,6 +129,7 @@ export function ProfilePanel({
   userCode, totalCoinsEarned, roomCardCount, battleBestScore, gameHistory,
   onOpenRoomFight, onStartRoomGame,
   skillPoints, isOwnProfile = true, likeCount = 0, isLiked = false, onToggleLike,
+  onAddNotification,
 }: ProfilePanelProps) {
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState(playerName)
@@ -222,6 +224,27 @@ export function ProfilePanel({
       setCopiedCode(true)
       setTimeout(() => setCopiedCode(false), 2000)
     })
+  }
+
+  const handleInviteFriend = () => {
+    try {
+      const requests = JSON.parse(localStorage.getItem('mergeMaster2048_friendRequests') || '[]')
+      const existingIndex = requests.findIndex((r: any) => r.uid === userCode)
+      if (existingIndex >= 0) {
+        // Already sent
+        return
+      }
+      requests.push({
+        uid: userCode,
+        name: playerName,
+        avatar: playerAvatar,
+        level: playerLevel,
+        date: new Date().toISOString(),
+        status: 'pending'
+      })
+      localStorage.setItem('mergeMaster2048_friendRequests', JSON.stringify(requests))
+      onAddNotification?.('Friend Request Sent! 🎉', `Request sent to ${playerName}`, 'social', '👤')
+    } catch { /* ignore */ }
   }
 
   // Filter game history by tab
@@ -391,13 +414,7 @@ export function ProfilePanel({
                   )}
                 </div>
 
-                {/* 4. Level inline text - NO capsule, just text with icon and level color */}
-                <div className="flex items-center gap-1 mt-1 cursor-pointer" onClick={() => setShowLevelList(true)}>
-                  <span className="text-sm">{levelInfo.icon}</span>
-                  <span className="text-[11px] font-bold" style={{ color: levelInfo.color }}>Lv.{playerLevel} {levelInfo.title}</span>
-                </div>
-
-                {/* 5. UID with copy - at the capsule's old position, right below level text */}
+                {/* 4. UID with copy + Invite button - right below name */}
                 <div className="flex items-center gap-1.5 mt-1">
                   <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>ID:</span>
                   <div className="flex items-center gap-1 px-2 py-0.5 rounded-md"
@@ -409,6 +426,15 @@ export function ProfilePanel({
                       <Copy className="w-2.5 h-2.5" style={{ color: copiedCode ? '#00E676' : 'rgba(255,255,255,0.5)' }} />
                     </button>
                   </div>
+                  {!isOwnProfile && (
+                    <button
+                      onClick={handleInviteFriend}
+                      className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold transition-transform active:scale-90"
+                      style={{ backgroundColor: 'rgba(0,230,118,0.15)', border: '1px solid rgba(0,230,118,0.3)', color: '#00E676' }}>
+                      <UserPlus className="w-2.5 h-2.5" />
+                      Invite
+                    </button>
+                  )}
                   {copiedCode && (
                     <span className="text-[8px] font-bold" style={{ color: '#00E676' }}>Copied!</span>
                   )}
@@ -577,12 +603,11 @@ export function ProfilePanel({
                 )}
               </div>
 
-              {/* 7. Stats Row (4 boxes) - Classic Best, Battle Best, Coins, Level SP */}
-              <div className="grid grid-cols-4 gap-2 mb-3">
+              {/* 7. Stats Row (3 boxes) - Classic Best, Battle Best, Tournament Best */}
+              <div className="grid grid-cols-3 gap-2 mb-3">
                 <StatBox icon={<Trophy className="w-3 h-3" />} label="Classic" value={bestScore > 0 ? bestScore.toLocaleString() : '-'} color="#EDC22E" />
                 <StatBox icon={<Swords className="w-3 h-3" />} label="Battle" value={battleBestScore > 0 ? battleBestScore.toLocaleString() : '-'} color="#F65E3B" />
-                <StatBox icon={<Coins className="w-3 h-3" />} label="Coins" value={formatCoinCount(coins)} color="#EDC22E" />
-                <StatBox icon={<Target className="w-3 h-3" />} label="Level SP" value={spValue > 0 ? spValue.toLocaleString() : '0'} color="#00E676" />
+                <StatBox icon={<Crown className="w-3 h-3" />} label="Tour Best" value={modBestScore > 0 ? modBestScore.toLocaleString() : '-'} color="#E040FB" />
               </div>
 
               {/* 8. Bottom Row (3 boxes) - Games Today, History, Room Cards */}
@@ -854,32 +879,47 @@ export function ProfilePanel({
                               </div>
                             </div>
 
-                            {/* Random Match */}
-                            <button
-                              onClick={handleJoinRandom}
-                              disabled={isSearching}
-                              className="w-full py-3 rounded-lg text-[11px] font-bold flex items-center justify-center gap-2 transition-transform active:scale-95"
-                              style={{
-                                backgroundColor: isSearching ? 'rgba(0,230,118,0.1)' : 'rgba(0,230,118,0.15)',
-                                border: `1.5px solid ${isSearching ? 'rgba(0,230,118,0.3)' : 'rgba(0,230,118,0.4)'}`,
-                                color: '#00E676',
-                              }}>
-                              {isSearching ? (
-                                <>
-                                  <motion.div
-                                    animate={{ rotate: 360 }}
-                                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
-                                    <Search className="w-4 h-4" />
-                                  </motion.div>
-                                  <span>Searching for opponent...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Search className="w-4 h-4" />
-                                  <span>🎮 Random Match</span>
-                                </>
-                              )}
-                            </button>
+                            {/* Room Code Input + Join & Random Buttons */}
+                            <div>
+                              <label className="text-[8px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Room Code (optional)</label>
+                              <input
+                                value={opponentUid}
+                                onChange={(e) => setOpponentUid(e.target.value)}
+                                placeholder="Enter room code..."
+                                className="w-full px-2 py-1.5 rounded-lg text-[10px] mb-2"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.1)', outline: 'none' }}
+                              />
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => {
+                                    if (!opponentUid.trim()) return
+                                    onStartRoomGame?.({ mode: 'join', type: 'code', opponentUid: opponentUid.trim() })
+                                  }}
+                                  className="flex-1 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                                  style={{ background: 'linear-gradient(135deg, #00C853, #00E676)', color: '#FFFFFF' }}>
+                                  🔗 Join
+                                </button>
+                                <button onClick={handleJoinRandom}
+                                  disabled={isSearching}
+                                  className="flex-1 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                                  style={{ background: isSearching ? 'rgba(246,94,59,0.4)' : 'linear-gradient(135deg, #F65E3B, #FF7A00)', color: '#FFFFFF' }}>
+                                  {isSearching ? (
+                                    <>
+                                      <motion.div
+                                        animate={{ rotate: 360 }}
+                                        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                                        className="w-3 h-3"
+                                      >
+                                        <Search className="w-3 h-3" />
+                                      </motion.div>
+                                      <span>Searching...</span>
+                                    </>
+                                  ) : (
+                                    <>🎲 Random</>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
 
                             {isSearching && (
                               <motion.div

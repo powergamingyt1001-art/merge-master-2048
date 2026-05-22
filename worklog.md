@@ -180,3 +180,162 @@ Stage Summary:
 - Player profile popup enhanced with Battle Best Score, Total Battles, and Win Rate stats
 - Like/heart button already present in player profile popup
 - All existing functionality preserved (ads, game modes, real-time battle, Firebase sync)
+
+---
+Task ID: 1
+Agent: profile-panel-ui-agent
+Task: Profile Panel UI Changes - Remove Level Inline, Move UID, Update Stats Row, Add Invite Button
+
+Work Log:
+
+### Changes Made:
+
+1. **Removed Level inline text between Name and UID** (was section 4):
+   - Deleted the `<div className="flex items-center gap-1 mt-1 cursor-pointer" onClick={() => setShowLevelList(true)}>` block that showed level icon + "Lv.X Title" text
+   - Level info is already shown in the Level XP Progress Box (section 10) at the bottom, so it was redundant
+
+2. **Moved UID up to right below the name** (replacing where level was):
+   - UID section now appears directly after the name edit section
+   - Updated section comment from "5. UID with copy" to "4. UID with copy + Invite button"
+   - Added "Invite" button with `UserPlus` icon next to the UID copy button (visible only when `!isOwnProfile`)
+
+3. **Replaced Stats Row from 4 boxes to 3 boxes**:
+   - Changed `grid-cols-4` to `grid-cols-3`
+   - Kept: Classic Best (Trophy, gold) and Battle Best (Swords, red)
+   - Removed: Coins and Level SP boxes
+   - Added: Tournament Best (Crown, purple #E040FB) using `modBestScore` prop
+
+4. **Added Invite Friends button functionality**:
+   - Added `UserPlus` to lucide-react imports
+   - Added `onAddNotification` optional prop to `ProfilePanelProps` interface
+   - Implemented `handleInviteFriend` function that:
+     - Saves friend request to localStorage key `mergeMaster2048_friendRequests`
+     - Checks for duplicate requests (same UID)
+     - Pushes new request with uid, name, avatar, level, date, status='pending'
+     - Calls `onAddNotification` with success message
+   - Invite button only shown when viewing another user's profile (`!isOwnProfile`)
+
+5. **Passed `onAddNotification` prop from PlayDashboard.tsx**:
+   - Added `onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)}` to ProfilePanel usage
+
+### Technical changes:
+- `ProfilePanel.tsx`: Added `UserPlus` to lucide-react imports
+- `ProfilePanel.tsx`: Added `onAddNotification` prop to interface and destructuring
+- `ProfilePanel.tsx`: Removed level inline text section (4 lines)
+- `ProfilePanel.tsx`: Moved UID section up, added Invite button
+- `ProfilePanel.tsx`: Changed stats row from 4 to 3 boxes with Tournament Best
+- `ProfilePanel.tsx`: Added `handleInviteFriend` function
+- `PlayDashboard.tsx`: Passed `onAddNotification` prop to ProfilePanel
+
+### Lint Results
+- 0 errors, 0 warnings after all changes
+
+---
+Task ID: 5
+Agent: spin-wheel-update-agent
+Task: Update SpinWheel Component - Pricing & Pack Options
+
+Work Log:
+
+### Changes Made:
+
+1. **Updated COIN_COST_PER_SPIN from 500 to 300**: Changed the constant on line 94 from 500 to 300, reducing the per-spin coin cost.
+
+2. **Updated SPIN_COUNTS from [1, 5, 10] to [1, 3, 5, 10]**: Added the 3-spin pack option so users have more granular choices.
+
+3. **Updated coin spin button text**: Changed from "🪙 Coin Spin (500/spin)" to "🪙 Coin Spin (300🪙)" to reflect the new price and use the coin emoji.
+
+4. **Simplified coinCost calculation**: Removed the special case `effectiveMultiplier === 10 ? 1500 : ...` and simplified to `effectiveMultiplier * COIN_COST_PER_SPIN`. Since 10 × 300 = 3000, the 10-pack now costs 3000 coins (previously 1500). The 2 extra free spins are still given (12 total for 10-pack).
+
+5. **Updated cost labels in multiplier selector**: Removed the hardcoded `count === 10 ? '1500🪙'` special case. Now all labels are computed as `${count * COIN_COST_PER_SPIN}🪙`, producing:
+   - 1x: "300🪙"
+   - 3x: "900🪙"
+   - 5x: "1500🪙"
+   - 10x: "3000🪙"
+
+6. **Updated FREE badge to "+2 FREE"**: Changed the 10x pack badge from "FREE" to "+2 FREE" for clearer communication of the bonus.
+
+7. **Updated info text**: Changed "1,500 coins = 12 spins!" to "3,000 coins = 12 spins!" in the multi-spin info section.
+
+8. **Fixed missing useEffect import**: Added `useEffect` to the React import (was missing from a previous agent's change that used `useEffect` without importing it).
+
+### Pricing Summary:
+- 1 spin = 300 coins
+- 3 spins = 900 coins
+- 5 spins = 1500 coins
+- 10 spins = 3000 coins (12 total with +2 FREE)
+
+### Lint Results
+- 0 errors, 0 warnings
+
+---
+Task ID: 4
+Agent: leaderboard-profile-overlay-agent
+Task: Update Leaderboard Player Profile Overlay View
+
+Work Log:
+
+### Changes Made to `/home/z/my-project/src/components/game/Leaderboard.tsx`:
+
+1. **Updated imports**: Added `UserPlus` and `Copy` to the lucide-react import statement.
+
+2. **Added `formatCoinCount` utility function**: Same as ProfilePanel — formats 1000→1K, 2500→2.5K, 1000000→1M.
+
+3. **Added like tracking with localStorage**: Since `FirebasePlayer` interface doesn't have a `likes` field, added `getPlayerLikes()` and `setPlayerLikes()` helper functions that read/write to `mergeMaster2048_playerLikes` localStorage key (a map of playerId → like count).
+
+4. **Added new state variables**: `likeCount` (number, initialized from localStorage on player select) and `copiedUid` (boolean for copy feedback).
+
+5. **Updated `setSelectedPlayer` wrapper**: Now also loads `likeCount` from localStorage via `getPlayerLikes()` and resets `copiedUid` when changing selected player.
+
+6. **Added `handleCopyUid` function**: Copies the last 8 chars of `selectedPlayer.playerId` to clipboard with fallback for older browsers, shows "Copied!" feedback for 2 seconds.
+
+7. **Added `handleSendFriendRequest` function**: Saves friend request to `mergeMaster2048_friendRequests` localStorage key with uid, name, avatar, level, date, status='pending'. Checks for duplicate requests.
+
+8. **Restructured Name + Level section**: Changed from separate Name and Level Title capsule to inline layout — Name on one line with "(You)" tag, level inline text on next line (icon + "Lv.X Title"), removed the capsule pill styling.
+
+9. **Added UID + Invite section**: Between level inline and online indicator. Shows "ID:" label, last 8 chars of playerId in cyan monospace, copy button with visual feedback, and green "Invite" button (UserPlus icon) — only shown for other players, not yourself.
+
+10. **Replaced stats grid (6-box → new layout)**:
+    - **Win Rate** — now shown prominently in its own large box with big percentage text and W/L sub-text
+    - **3-column score row**: Classic Best (Trophy/gold), Battle Best (Swords/red), Tournament Best (Crown/purple using tournamentPoints)
+    - **Total Coins** — display box with emoji, formatted count (formatCoinCount), and exact number badge
+    - Removed: "Total Battles" box, "Level XP" box, "Tournament Points" standalone row, "Level Progress Bar"
+
+11. **Updated Like button**: Now shows like count: `{liked ? 'Liked ❤️' : 'Like'} ({likeCount})`. Toggling like increments/decrements the count in localStorage and updates the displayed count.
+
+### Lint Results
+- 0 errors, 0 warnings after all changes
+
+---
+Task ID: 2
+Agent: store-spins-room-agent
+Task: Store Component Changes - Remove Daily Free Room, Add Spins Tab, Add Room Card Coin Purchase
+
+Work Log:
+
+### 1. Removed "Daily Free Room Card" section
+- Removed the entire "DAILY FREE ROOM CARD" section from RoomTab (7-day visit tracker with claim button)
+- Removed `onClaimFreeRoomCard`, `consecutiveVisits`, `freeRoomCardAvailable` props from RoomTab
+- Cleaned up AbilityTab: removed free room card related props and code
+- Removed `consecutiveVisits`, `freeRoomCardAvailable` state and `handleClaimFreeRoomCard` from main Store component
+- Kept helper functions: `getStoreVisitDays`, `recordStoreVisit`, `getConsecutiveVisitCount`, `canClaimFreeRoomCard`, `markFreeRoomCardClaimed`
+
+### 2. Added "Spins" tab
+- Updated TabId type to include 'spins'
+- Created SpinPack interface, SPIN_INR_PACKS (9/₹5 HOT, 20/₹9 POPULAR, 33/₹15 VERY HOT with glow, 50/₹25 BEST VALUE), SPIN_COIN_PACKS (1/300, 3/900, 5/1500, 10/3000 +2 FREE)
+- Created SpinsTab component with INR grid and coin list layouts
+- Tab positioned between Ability and Room with 🎫 icon
+
+### 3. Spin Purchase Limits (15 spins/3 days via coins)
+- localStorage key: mergeMaster2048_spinPurchaseLimits
+
+### 4. Room Card coin purchase (once per day)
+- localStorage key: mergeMaster2048_roomCardCoinPurchase
+- Shows "1/day" badge, "SOLD OUT" when purchased today
+
+### 5. Added onAddSpinTickets prop to StoreProps
+- PlayDashboard.tsx updated to pass it to Store
+
+### 6. Spin Delivery: INR via UPI order system, Coins instant (10-pack = 12 spins total)
+
+### Lint: 0 errors, 0 warnings

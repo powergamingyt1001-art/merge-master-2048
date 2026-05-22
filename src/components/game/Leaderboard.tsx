@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Crown, Medal, Star, Trophy, Swords, Coins, Wifi, WifiOff, Target, ChevronRight, Heart, Zap, Shield } from 'lucide-react'
+import { X, Crown, Medal, Star, Trophy, Swords, Coins, Wifi, WifiOff, Target, ChevronRight, Heart, Zap, Shield, UserPlus, Copy } from 'lucide-react'
 import { getLeaderboardPlayers, onLeaderboardUpdate, type FirebasePlayer } from '@/lib/firebase-service'
 import { getLevelInfo, getLevelThreshold } from '@/hooks/useGame'
 
@@ -34,6 +34,34 @@ interface LeaderboardEntry {
 function isOnline(lastActive: number | undefined): boolean {
   if (!lastActive) return false
   return Date.now() - lastActive < 2 * 60 * 1000
+}
+
+// Coin count formatter: 1000→1K, 2500→2.5K, 1000000→1M
+function formatCoinCount(count: number): string {
+  if (count >= 1000000) return `${(count / 1000000).toFixed(1).replace(/\.0$/, '')}M`
+  if (count >= 1000) return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`
+  return count.toString()
+}
+
+// Get likes count for a player from localStorage
+function getPlayerLikes(playerId: string): number {
+  try {
+    const likesMap = JSON.parse(localStorage.getItem('mergeMaster2048_playerLikes') || '{}')
+    return likesMap[playerId] || 0
+  } catch {
+    return 0
+  }
+}
+
+// Set likes count for a player in localStorage
+function setPlayerLikes(playerId: string, count: number): void {
+  try {
+    const likesMap = JSON.parse(localStorage.getItem('mergeMaster2048_playerLikes') || '{}')
+    likesMap[playerId] = count
+    localStorage.setItem('mergeMaster2048_playerLikes', JSON.stringify(likesMap))
+  } catch {
+    // ignore
+  }
 }
 
 // Offline rank players - progressive, beat one to advance
@@ -159,11 +187,57 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
   const [firebasePlayers, setFirebasePlayers] = useState<FirebasePlayer[]>([])
   const [selectedPlayer, setSelectedPlayerRaw] = useState<LeaderboardEntry | null>(null)
   const [liked, setLiked] = useState(false)
+  const [likeCount, setLikeCount] = useState(0)
+  const [copiedUid, setCopiedUid] = useState(false)
 
   // Wrapper to reset liked when selectedPlayer changes
   const setSelectedPlayer = (player: LeaderboardEntry | null) => {
     setSelectedPlayerRaw(player)
     setLiked(false)
+    if (player?.playerId) {
+      setLikeCount(getPlayerLikes(player.playerId))
+    } else {
+      setLikeCount(0)
+    }
+    setCopiedUid(false)
+  }
+
+  const handleCopyUid = () => {
+    if (!selectedPlayer?.playerId) return
+    const uid = selectedPlayer.playerId.slice(-8)
+    navigator.clipboard.writeText(uid).catch(() => {
+      const textArea = document.createElement('textarea')
+      textArea.value = uid
+      document.body.appendChild(textArea)
+      textArea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textArea)
+    })
+    setCopiedUid(true)
+    setTimeout(() => setCopiedUid(false), 2000)
+  }
+
+  const handleSendFriendRequest = () => {
+    if (!selectedPlayer?.playerId) return
+    try {
+      const requests = JSON.parse(localStorage.getItem('mergeMaster2048_friendRequests') || '[]')
+      const uid = selectedPlayer.playerId.slice(-8)
+      const existingIndex = requests.findIndex((r: { uid: string }) => r.uid === uid)
+      if (existingIndex >= 0) {
+        return
+      }
+      requests.push({
+        uid,
+        name: selectedPlayer.name,
+        avatar: selectedPlayer.avatar,
+        level: selectedFirebasePlayer?.level || 1,
+        date: new Date().toISOString(),
+        status: 'pending',
+      })
+      localStorage.setItem('mergeMaster2048_friendRequests', JSON.stringify(requests))
+    } catch {
+      // ignore
+    }
   }
 
   // Listen to Firebase leaderboard in real-time
@@ -432,18 +506,41 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
                       </div>
                     </div>
 
-                    {/* Name */}
-                    <p className="text-base font-bold mb-1" style={{ color: '#FFFFFF' }}>
-                      {selectedPlayer.name}
-                      {selectedPlayer.isPlayer && <span className="text-[9px] ml-1" style={{ color: '#EDC22E' }}>(You)</span>}
-                    </p>
-
-                    {/* Level Title */}
-                    <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full mb-2"
-                      style={{ backgroundColor: `${selectedLevelInfo.color}15`, border: `1px solid ${selectedLevelInfo.color}30` }}>
+                    {/* Name + Level Inline */}
+                    <div className="flex items-center justify-center gap-1.5 mb-0.5">
+                      <p className="text-base font-bold" style={{ color: '#FFFFFF' }}>
+                        {selectedPlayer.name}
+                      </p>
+                      {selectedPlayer.isPlayer && <span className="text-[9px]" style={{ color: '#EDC22E' }}>(You)</span>}
+                    </div>
+                    <div className="flex items-center justify-center gap-1 mb-1">
                       <span className="text-sm">{selectedLevelInfo.icon}</span>
                       <span className="text-[9px] font-bold" style={{ color: selectedLevelInfo.color }}>Lv.{selectedLevel} {selectedLevelInfo.title}</span>
                     </div>
+
+                    {/* UID + Invite */}
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-md"
+                        style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                        <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>ID:</span>
+                        <span className="text-[9px] font-mono font-bold" style={{ color: '#00FFFF' }}>{selectedPlayer.playerId?.slice(-8) || '?'}</span>
+                        <button onClick={handleCopyUid} className="w-4 h-4 rounded flex items-center justify-center"
+                          style={{ backgroundColor: copiedUid ? 'rgba(0,230,118,0.2)' : 'rgba(255,255,255,0.08)' }}>
+                          <Copy className="w-2 h-2" style={{ color: copiedUid ? '#00E676' : 'rgba(255,255,255,0.5)' }} />
+                        </button>
+                      </div>
+                      {!selectedPlayer.isPlayer && (
+                        <button onClick={handleSendFriendRequest}
+                          className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold transition-transform active:scale-90"
+                          style={{ backgroundColor: 'rgba(0,230,118,0.15)', border: '1px solid rgba(0,230,118,0.3)', color: '#00E676' }}>
+                          <UserPlus className="w-2.5 h-2.5" />
+                          Invite
+                        </button>
+                      )}
+                    </div>
+                    {copiedUid && (
+                      <span className="text-[8px] font-bold mb-1" style={{ color: '#00E676' }}>Copied!</span>
+                    )}
 
                     {/* Online Indicator */}
                     <div className="flex items-center justify-center gap-1.5 mb-3">
@@ -453,108 +550,87 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
                       </span>
                     </div>
 
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-2 gap-2 mb-3">
-                      {/* Best Score (Classic) */}
+                    {/* Win Rate - Prominent */}
+                    <div className="p-3 rounded-xl mb-2 text-center" style={{ backgroundColor: 'rgba(224,64,251,0.08)', border: '1px solid rgba(224,64,251,0.15)' }}>
+                      <div className="flex items-center justify-center gap-1.5 mb-1">
+                        <Zap className="w-4 h-4" style={{ color: '#E040FB' }} />
+                        <span className="text-[9px] font-bold" style={{ color: '#E040FB' }}>Win Rate</span>
+                      </div>
+                      <span className="text-2xl font-extrabold" style={{ color: '#E040FB' }}>
+                        {selectedFirebasePlayer?.totalBattlesPlayed
+                          ? `${Math.round((selectedFirebasePlayer.totalBattlesWon / selectedFirebasePlayer.totalBattlesPlayed) * 100)}%`
+                          : '0%'}
+                      </span>
+                      {selectedFirebasePlayer?.totalBattlesPlayed ? (
+                        <p className="text-[7px] mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                          {selectedFirebasePlayer.totalBattlesWon}W / {selectedFirebasePlayer.totalBattlesPlayed - selectedFirebasePlayer.totalBattlesWon}L
+                        </p>
+                      ) : null}
+                    </div>
+
+                    {/* Score Stats Row */}
+                    <div className="grid grid-cols-3 gap-1.5 mb-2">
+                      {/* Classic Best */}
                       <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.12)' }}>
                         <div className="flex items-center justify-center gap-1 mb-1">
-                          <Trophy className="w-3 h-3" style={{ color: '#EDC22E' }} />
-                          <span className="text-[7px] font-bold" style={{ color: '#EDC22E' }}>Classic Best</span>
+                          <Trophy className="w-2.5 h-2.5" style={{ color: '#EDC22E' }} />
+                          <span className="text-[6px] font-bold" style={{ color: '#EDC22E' }}>Classic</span>
                         </div>
-                        <span className="text-sm font-extrabold" style={{ color: '#EDC22E' }}>
+                        <span className="text-xs font-extrabold" style={{ color: '#EDC22E' }}>
                           {(selectedFirebasePlayer?.bestScore || 0).toLocaleString()}
                         </span>
                       </div>
 
-                      {/* Battle Best Score */}
+                      {/* Battle Best */}
                       <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(246,94,59,0.06)', border: '1px solid rgba(246,94,59,0.12)' }}>
                         <div className="flex items-center justify-center gap-1 mb-1">
-                          <Swords className="w-3 h-3" style={{ color: '#F65E3B' }} />
-                          <span className="text-[7px] font-bold" style={{ color: '#F65E3B' }}>Battle Best</span>
+                          <Swords className="w-2.5 h-2.5" style={{ color: '#F65E3B' }} />
+                          <span className="text-[6px] font-bold" style={{ color: '#F65E3B' }}>Battle</span>
                         </div>
-                        <span className="text-sm font-extrabold" style={{ color: '#F65E3B' }}>
+                        <span className="text-xs font-extrabold" style={{ color: '#F65E3B' }}>
                           {(selectedFirebasePlayer?.modBestScore || 0).toLocaleString()}
                         </span>
                       </div>
 
-                      {/* Coins */}
-                      <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.12)' }}>
-                        <div className="flex items-center justify-center gap-1 mb-1">
-                          <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
-                          <span className="text-[7px] font-bold" style={{ color: '#EDC22E' }}>Coins</span>
-                        </div>
-                        <span className="text-sm font-extrabold" style={{ color: '#EDC22E' }}>
-                          {(selectedFirebasePlayer?.coins || 0).toLocaleString()}
-                        </span>
-                      </div>
-
-                      {/* Total Battles */}
-                      <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.12)' }}>
-                        <div className="flex items-center justify-center gap-1 mb-1">
-                          <Swords className="w-3 h-3" style={{ color: '#00E676' }} />
-                          <span className="text-[7px] font-bold" style={{ color: '#00E676' }}>Total Battles</span>
-                        </div>
-                        <span className="text-sm font-extrabold" style={{ color: '#00E676' }}>
-                          {(selectedFirebasePlayer?.totalBattlesPlayed || 0).toLocaleString()}
-                        </span>
-                      </div>
-
-                      {/* Win Rate */}
+                      {/* Tournament Best */}
                       <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(224,64,251,0.06)', border: '1px solid rgba(224,64,251,0.12)' }}>
                         <div className="flex items-center justify-center gap-1 mb-1">
-                          <Zap className="w-3 h-3" style={{ color: '#E040FB' }} />
-                          <span className="text-[7px] font-bold" style={{ color: '#E040FB' }}>Win Rate</span>
+                          <Crown className="w-2.5 h-2.5" style={{ color: '#E040FB' }} />
+                          <span className="text-[6px] font-bold" style={{ color: '#E040FB' }}>Tourney</span>
                         </div>
-                        <span className="text-sm font-extrabold" style={{ color: '#E040FB' }}>
-                          {selectedFirebasePlayer?.totalBattlesPlayed
-                            ? `${Math.round((selectedFirebasePlayer.totalBattlesWon / selectedFirebasePlayer.totalBattlesPlayed) * 100)}%`
-                            : '0%'}
-                        </span>
-                      </div>
-
-                      {/* Level XP */}
-                      <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(0,188,212,0.06)', border: '1px solid rgba(0,188,212,0.12)' }}>
-                        <div className="flex items-center justify-center gap-1 mb-1">
-                          <Zap className="w-3 h-3" style={{ color: '#00BCD4' }} />
-                          <span className="text-[7px] font-bold" style={{ color: '#00BCD4' }}>Level XP</span>
-                        </div>
-                        <span className="text-sm font-extrabold" style={{ color: '#00BCD4' }}>
-                          {(selectedFirebasePlayer?.levelXP || 0).toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Tournament Points */}
-                    <div className="p-2 rounded-xl mb-3" style={{ backgroundColor: 'rgba(224,64,251,0.06)', border: '1px solid rgba(224,64,251,0.12)' }}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <Shield className="w-3.5 h-3.5" style={{ color: '#E040FB' }} />
-                          <span className="text-[8px] font-bold" style={{ color: '#E040FB' }}>Tournament Points</span>
-                        </div>
-                        <span className="text-sm font-extrabold" style={{ color: '#E040FB' }}>
+                        <span className="text-xs font-extrabold" style={{ color: '#E040FB' }}>
                           {(selectedFirebasePlayer?.tournamentPoints || 0).toLocaleString()}
                         </span>
                       </div>
                     </div>
 
-                    {/* Level Progress Bar */}
-                    <div className="mb-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Level Progress</span>
-                        <span className="text-[8px] font-bold" style={{ color: selectedLevelInfo.color }}>
-                          {selectedFirebasePlayer?.levelXP || 0} / {getLevelThreshold(selectedLevel + 1).toLocaleString()} XP
-                        </span>
-                      </div>
-                      <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
-                        <div className="h-full rounded-full transition-all" style={{
-                          width: `${Math.min(100, ((selectedFirebasePlayer?.levelXP || 0) / getLevelThreshold(selectedLevel + 1)) * 100)}%`,
-                          background: `linear-gradient(90deg, ${selectedLevelInfo.color}, ${selectedLevelInfo.color}CC)`,
-                        }} />
+                    {/* Total Coins Display */}
+                    <div className="p-2.5 rounded-xl mb-3" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">💰</span>
+                          <div>
+                            <p className="text-[8px] font-bold" style={{ color: '#EDC22E' }}>Total Coins</p>
+                            <p className="text-sm font-extrabold" style={{ color: '#EDC22E' }}>{formatCoinCount(selectedFirebasePlayer?.coins || 0)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md" style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '1px solid rgba(237,194,46,0.2)' }}>
+                          <Coins className="w-2.5 h-2.5" style={{ color: '#EDC22E' }} />
+                          <span className="text-[7px] font-bold" style={{ color: '#EDC22E' }}>{(selectedFirebasePlayer?.coins || 0).toLocaleString()}</span>
+                        </div>
                       </div>
                     </div>
 
                     {/* Like Button */}
-                    <button onClick={() => { setLiked(!liked) }}
+                    <button onClick={() => {
+                      const newLiked = !liked
+                      setLiked(newLiked)
+                      const pid = selectedPlayer?.playerId || ''
+                      const currentCount = getPlayerLikes(pid)
+                      const newCount = newLiked ? currentCount + 1 : Math.max(0, currentCount - 1)
+                      setPlayerLikes(pid, newCount)
+                      setLikeCount(newCount)
+                    }}
                       className="w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
                       style={{
                         backgroundColor: liked ? 'rgba(246,94,59,0.15)' : 'rgba(255,255,255,0.06)',
@@ -562,7 +638,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
                         color: liked ? '#F65E3B' : 'rgba(255,255,255,0.5)',
                       }}>
                       <Heart fill={liked ? '#F65E3B' : 'none'} className="w-4 h-4" />
-                      {liked ? 'Liked ❤️' : 'Like'}
+                      {liked ? 'Liked ❤️' : 'Like'} ({likeCount})
                     </button>
                   </motion.div>
                 </motion.div>
