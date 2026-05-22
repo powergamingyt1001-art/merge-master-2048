@@ -781,7 +781,9 @@ export function PlayDashboard({
         autoClaimCommission={autoClaimCommission} onClaimCommission={onClaimCommission}
         onClaimFirebaseCommission={onClaimFirebaseCommission}
         onToggleAutoClaim={onToggleAutoClaim}
-        firebaseReferrals={firebaseReferrals} firebaseCommissionPending={firebaseCommissionPending} />
+        firebaseReferrals={firebaseReferrals} firebaseCommissionPending={firebaseCommissionPending}
+        playerId={playerId} playerName={playerName} playerAvatar={playerAvatar} playerLevel={playerLevel}
+        onAddNotification={onAddNotification} />
       <ProfilePanel isOpen={showProfile} onClose={() => setShowProfile(false)}
         playerName={playerName} playerAvatar={playerAvatar} playerLevel={playerLevel}
         gamePoints={gamePoints} levelXP={levelXP} bestScore={bestScore} modBestScore={modBestScore}

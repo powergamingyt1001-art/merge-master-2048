@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Crown, Medal, Star, Trophy, Swords, Coins, Wifi, WifiOff, Target, ChevronRight, Heart } from 'lucide-react'
+import { X, Crown, Medal, Star, Trophy, Swords, Coins, Wifi, WifiOff, Target, ChevronRight, Heart, Zap, Shield } from 'lucide-react'
 import { getLeaderboardPlayers, onLeaderboardUpdate, type FirebasePlayer } from '@/lib/firebase-service'
+import { getLevelInfo, getLevelThreshold } from '@/hooks/useGame'
 
 interface LeaderboardProps {
   isOpen: boolean
@@ -35,8 +36,6 @@ function isOnline(lastActive: number | undefined): boolean {
   return Date.now() - lastActive < 2 * 60 * 1000
 }
 
-// No fake fallback players - show real data only or empty message
-
 // Offline rank players - progressive, beat one to advance
 const OFFLINE_RANKS = [
   { name: 'Rookie Raj', avatar: '🌱', targetScore: 100 },
@@ -55,14 +54,12 @@ function buildModesLeaderboard(playerBestScore: number, playerName: string, play
   const entries: LeaderboardEntry[] = []
 
   if (firebasePlayers.length > 0) {
-    // Use real Firebase data
     firebasePlayers.forEach(p => {
       if (p.id !== playerId) {
         entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.bestScore || 0, isPlayer: false, lastActive: p.lastActive, playerId: p.id })
       }
     })
   }
-  // No fake fallback players - show real data only or empty message
 
   // Deduplicate by playerId (keep highest score entry)
   const seenById = new Map<string, LeaderboardEntry>()
@@ -74,7 +71,7 @@ function buildModesLeaderboard(playerBestScore: number, playerName: string, play
     }
   }
 
-  // Also deduplicate by name (case-insensitive) — same person with different IDs
+  // Also deduplicate by name (case-insensitive)
   const seenByName = new Map<string, LeaderboardEntry>()
   for (const entry of seenById.values()) {
     const nameKey = entry.name.toLowerCase().trim()
@@ -86,7 +83,6 @@ function buildModesLeaderboard(playerBestScore: number, playerName: string, play
 
   const deduped: LeaderboardEntry[] = []
   for (const entry of seenByName.values()) {
-    // Filter out zero-value entries and generic "Player" names
     if (entry.value === 0) continue
     if (entry.name.toLowerCase().trim() === 'player') continue
     deduped.push(entry)
@@ -108,7 +104,6 @@ function buildCoinsLeaderboard(playerCoins: number, playerName: string, playerAv
       }
     })
   }
-  // No fake fallback players - show real data only or empty message
 
   // Deduplicate by playerId (keep highest coins entry)
   const seenById = new Map<string, LeaderboardEntry>()
@@ -120,7 +115,7 @@ function buildCoinsLeaderboard(playerCoins: number, playerName: string, playerAv
     }
   }
 
-  // Also deduplicate by name (case-insensitive) — same person with different IDs
+  // Also deduplicate by name (case-insensitive)
   const seenByName = new Map<string, LeaderboardEntry>()
   for (const entry of seenById.values()) {
     const nameKey = entry.name.toLowerCase().trim()
@@ -132,7 +127,6 @@ function buildCoinsLeaderboard(playerCoins: number, playerName: string, playerAv
 
   const deduped: LeaderboardEntry[] = []
   for (const entry of seenByName.values()) {
-    // Filter out zero-value entries and generic "Player" names
     if (entry.value === 0) continue
     if (entry.name.toLowerCase().trim() === 'player') continue
     deduped.push(entry)
@@ -184,6 +178,16 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
   const coinsEntries = buildCoinsLeaderboard(coins, playerName, playerAvatar, firebasePlayers, playerId)
   const { currentRank, nextTarget, beatenRanks } = getOfflineRank(bestScore)
 
+  // Look up full FirebasePlayer data for the selected player
+  const selectedFirebasePlayer = selectedPlayer?.playerId
+    ? firebasePlayers.find(p => p.id === selectedPlayer.playerId)
+    : null
+
+  // Get level info for the selected player
+  const selectedLevel = selectedFirebasePlayer?.level || (selectedPlayer?.isPlayer ? 1 : 1)
+  const selectedLevelInfo = getLevelInfo(selectedLevel)
+  const onlineStatus = isOnline(selectedPlayer?.lastActive)
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -213,7 +217,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
             {/* Tab Switch - 3 sections */}
             <div className="flex mx-4 mb-3 rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
               {[
-                { key: 'modesScore' as TabType, icon: <Swords className="w-3 h-3" />, label: 'Weekly' },
+                { key: 'modesScore' as TabType, icon: <Swords className="w-3 h-3" />, label: 'Battle' },
                 { key: 'coinsRank' as TabType, icon: <Coins className="w-3 h-3" />, label: 'Coins' },
                 { key: 'offlineRank' as TabType, icon: <WifiOff className="w-3 h-3" />, label: 'Classic' },
               ].map((t) => (
@@ -234,18 +238,18 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
             </div>
 
             <div className="px-4 pb-4">
-              {/* MODES BEST SCORE TAB */}
+              {/* BATTLE SCORE TAB */}
               {tab === 'modesScore' && (
                 <div>
                   {/* Reset period indicator */}
                   <div className="flex items-center justify-center gap-1.5 mb-2 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.12)' }}>
-                    <span className="text-[8px] font-bold" style={{ color: '#F65E3B' }}>🔄 Resets every Monday — All scores reset to 0</span>
+                    <span className="text-[8px] font-bold" style={{ color: '#F65E3B' }}>⚔️ Battle Mode — Resets every Monday</span>
                   </div>
                   {modesEntries.length <= 1 && !modesEntries.some(e => !e.isPlayer) ? (
                     <div className="flex flex-col items-center justify-center py-8">
-                      <span className="text-3xl mb-2">🏆</span>
+                      <span className="text-3xl mb-2">⚔️</span>
                       <p className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>No players yet</p>
-                      <p className="text-[9px] mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>Play to be the first on the board!</p>
+                      <p className="text-[9px] mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>Play battles to rank up!</p>
                     </div>
                   ) : (
                     <>
@@ -389,7 +393,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
               )}
             </div>
 
-            {/* Player Profile Overlay */}
+            {/* Player Profile Overlay - READ-ONLY */}
             <AnimatePresence>
               {selectedPlayer && (
                 <motion.div
@@ -397,38 +401,144 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   className="absolute inset-0 z-50 flex items-center justify-center"
-                  style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}
+                  style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}
                 >
                   <motion.div
-                    initial={{ scale: 0.8 }}
-                    animate={{ scale: 1 }}
-                    exit={{ scale: 0.8 }}
-                    className="w-64 rounded-2xl p-5 text-center relative"
+                    initial={{ scale: 0.8, y: 10 }}
+                    animate={{ scale: 1, y: 0 }}
+                    exit={{ scale: 0.8, y: 10 }}
+                    className="w-72 rounded-2xl p-5 text-center relative max-h-[80vh] overflow-y-auto"
                     style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
                   >
-                    <button onClick={() => setSelectedPlayer(null)} className="absolute top-3 right-3 w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
+                    {/* Close button */}
+                    <button onClick={() => setSelectedPlayer(null)} className="absolute top-3 right-3 w-6 h-6 rounded-full flex items-center justify-center z-10" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
                       <X className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
                     </button>
-                    <div className="w-16 h-16 rounded-full mx-auto mb-3 flex items-center justify-center text-3xl"
-                      style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', border: '2px solid rgba(255,255,255,0.2)' }}>
-                      {selectedPlayer.avatar}
+
+                    {/* Avatar + Level Badge */}
+                    <div className="w-18 h-18 rounded-full mx-auto mb-2 flex items-center justify-center text-3xl relative"
+                      style={{
+                        width: '72px',
+                        height: '72px',
+                        background: `linear-gradient(135deg, ${selectedLevelInfo.color}, ${selectedLevelInfo.color}88)`,
+                        border: '3px solid rgba(255,255,255,0.2)',
+                        boxShadow: `0 0 16px ${selectedLevelInfo.color}40`,
+                      }}>
+                      <span className="text-3xl">{selectedPlayer.avatar}</span>
+                      {/* Level badge */}
+                      <div className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold"
+                        style={{ backgroundColor: selectedLevelInfo.color, color: '#FFFFFF', border: '2px solid #1a0533' }}>
+                        {selectedLevel}
+                      </div>
                     </div>
-                    <p className="text-base font-bold mb-1" style={{ color: '#FFFFFF' }}>{selectedPlayer.name}</p>
-                    <div className="flex items-center justify-center gap-1.5 mb-2">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: isOnline(selectedPlayer.lastActive) ? '#00E676' : '#666' }} />
-                      <span className="text-[9px] font-bold" style={{ color: isOnline(selectedPlayer.lastActive) ? '#00E676' : '#666' }}>
-                        {isOnline(selectedPlayer.lastActive) ? 'Online' : 'Offline'}
+
+                    {/* Name */}
+                    <p className="text-base font-bold mb-1" style={{ color: '#FFFFFF' }}>
+                      {selectedPlayer.name}
+                      {selectedPlayer.isPlayer && <span className="text-[9px] ml-1" style={{ color: '#EDC22E' }}>(You)</span>}
+                    </p>
+
+                    {/* Level Title */}
+                    <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full mb-2"
+                      style={{ backgroundColor: `${selectedLevelInfo.color}15`, border: `1px solid ${selectedLevelInfo.color}30` }}>
+                      <span className="text-sm">{selectedLevelInfo.icon}</span>
+                      <span className="text-[9px] font-bold" style={{ color: selectedLevelInfo.color }}>Lv.{selectedLevel} {selectedLevelInfo.title}</span>
+                    </div>
+
+                    {/* Online Indicator */}
+                    <div className="flex items-center justify-center gap-1.5 mb-3">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: onlineStatus ? '#00E676' : '#666' }} />
+                      <span className="text-[9px] font-bold" style={{ color: onlineStatus ? '#00E676' : '#666' }}>
+                        {onlineStatus ? 'Online Now' : 'Offline'}
                       </span>
                     </div>
-                    <p className="text-xl font-extrabold mb-1" style={{ color: '#EDC22E' }}>{selectedPlayer.value.toLocaleString()}</p>
-                    <p className="text-[9px] mb-3" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                      {tab === 'coinsRank' ? 'Coins' : 'Score'}
-                    </p>
+
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-2 gap-2 mb-3">
+                      {/* Best Score (Classic) */}
+                      <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.12)' }}>
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                          <Trophy className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                          <span className="text-[7px] font-bold" style={{ color: '#EDC22E' }}>Classic Best</span>
+                        </div>
+                        <span className="text-sm font-extrabold" style={{ color: '#EDC22E' }}>
+                          {(selectedFirebasePlayer?.bestScore || 0).toLocaleString()}
+                        </span>
+                      </div>
+
+                      {/* Battle Score */}
+                      <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(246,94,59,0.06)', border: '1px solid rgba(246,94,59,0.12)' }}>
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                          <Swords className="w-3 h-3" style={{ color: '#F65E3B' }} />
+                          <span className="text-[7px] font-bold" style={{ color: '#F65E3B' }}>Battle Score</span>
+                        </div>
+                        <span className="text-sm font-extrabold" style={{ color: '#F65E3B' }}>
+                          {selectedPlayer.value.toLocaleString()}
+                        </span>
+                      </div>
+
+                      {/* Coins */}
+                      <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.12)' }}>
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                          <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                          <span className="text-[7px] font-bold" style={{ color: '#EDC22E' }}>Coins</span>
+                        </div>
+                        <span className="text-sm font-extrabold" style={{ color: '#EDC22E' }}>
+                          {(selectedFirebasePlayer?.coins || 0).toLocaleString()}
+                        </span>
+                      </div>
+
+                      {/* Level XP */}
+                      <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.12)' }}>
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                          <Zap className="w-3 h-3" style={{ color: '#00E676' }} />
+                          <span className="text-[7px] font-bold" style={{ color: '#00E676' }}>Level XP</span>
+                        </div>
+                        <span className="text-sm font-extrabold" style={{ color: '#00E676' }}>
+                          {(selectedFirebasePlayer?.levelXP || 0).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Tournament Points */}
+                    <div className="p-2 rounded-xl mb-3" style={{ backgroundColor: 'rgba(224,64,251,0.06)', border: '1px solid rgba(224,64,251,0.12)' }}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <Shield className="w-3.5 h-3.5" style={{ color: '#E040FB' }} />
+                          <span className="text-[8px] font-bold" style={{ color: '#E040FB' }}>Tournament Points</span>
+                        </div>
+                        <span className="text-sm font-extrabold" style={{ color: '#E040FB' }}>
+                          {(selectedFirebasePlayer?.tournamentPoints || 0).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Level Progress Bar */}
+                    <div className="mb-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Level Progress</span>
+                        <span className="text-[8px] font-bold" style={{ color: selectedLevelInfo.color }}>
+                          {selectedFirebasePlayer?.levelXP || 0} / {getLevelThreshold(selectedLevel + 1).toLocaleString()} XP
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                        <div className="h-full rounded-full transition-all" style={{
+                          width: `${Math.min(100, ((selectedFirebasePlayer?.levelXP || 0) / getLevelThreshold(selectedLevel + 1)) * 100)}%`,
+                          background: `linear-gradient(90deg, ${selectedLevelInfo.color}, ${selectedLevelInfo.color}CC)`,
+                        }} />
+                      </div>
+                    </div>
+
+                    {/* Like Button */}
                     <button onClick={() => { setLiked(!liked) }}
-                      className="w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2"
-                      style={{ backgroundColor: liked ? 'rgba(246,94,59,0.15)' : 'rgba(255,255,255,0.06)', border: liked ? '1px solid rgba(246,94,59,0.4)' : '1px solid rgba(255,255,255,0.08)', color: liked ? '#F65E3B' : 'rgba(255,255,255,0.5)' }}>
+                      className="w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
+                      style={{
+                        backgroundColor: liked ? 'rgba(246,94,59,0.15)' : 'rgba(255,255,255,0.06)',
+                        border: liked ? '1px solid rgba(246,94,59,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                        color: liked ? '#F65E3B' : 'rgba(255,255,255,0.5)',
+                      }}>
                       <Heart fill={liked ? '#F65E3B' : 'none'} className="w-4 h-4" />
-                      {liked ? 'Liked' : 'Like'}
+                      {liked ? 'Liked ❤️' : 'Like'}
                     </button>
                   </motion.div>
                 </motion.div>
@@ -447,10 +557,21 @@ function PodiumSlot({ entry, place, onClick }: { entry: LeaderboardEntry; place:
   const borderColor = entry.isPlayer ? 'rgba(237,194,46,0.3)' : `${medalColor}30`
   const height = place === 1 ? 'py-2.5' : 'py-1.5'
   const avatarSize = place === 1 ? 'text-3xl' : 'text-2xl'
+  const playerOnline = isOnline(entry.lastActive)
 
   return (
     <div className="flex flex-col items-center cursor-pointer" style={{ minWidth: place === 1 ? 80 : 68 }} onClick={onClick}>
-      <span className={`${avatarSize} mb-0.5`}>{entry.avatar}</span>
+      <div className="relative">
+        <span className={`${avatarSize} mb-0.5`}>{entry.avatar}</span>
+        {/* Online indicator dot on avatar */}
+        {!entry.isPlayer && (
+          <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
+            style={{
+              backgroundColor: playerOnline ? '#00E676' : '#666',
+              border: '1.5px solid #1a0533',
+            }} />
+        )}
+      </div>
       <div className={`w-full ${height} rounded-t-lg text-center`} style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}` }}>
         {place === 1 ? (
           <Crown className="w-4 h-4 mx-auto mb-0.5" style={{ color: '#FFD700' }} />
@@ -472,15 +593,17 @@ function PodiumSlot({ entry, place, onClick }: { entry: LeaderboardEntry; place:
 }
 
 function RankRow({ entry, color, onClick }: { entry: LeaderboardEntry; color: string; onClick?: () => void }) {
+  const playerOnline = isOnline(entry.lastActive)
+
   return (
-    <div className="flex items-center gap-2 py-1.5 px-2 rounded-lg mb-1 cursor-pointer"
+    <div className="flex items-center gap-2 py-1.5 px-2 rounded-lg mb-1 cursor-pointer transition-colors hover:bg-white/5"
       style={{ backgroundColor: entry.isPlayer ? 'rgba(237,194,46,0.12)' : 'rgba(255,255,255,0.03)', border: entry.isPlayer ? '1px solid rgba(237,194,46,0.2)' : '1px solid transparent' }}
       onClick={onClick}>
       <span className="text-[10px] font-bold w-5 text-center" style={{ color: 'rgba(255,255,255,0.4)' }}>#{entry.rank}</span>
       <span className="text-sm">{entry.avatar}</span>
-      {/* Online/Offline indicator - only for rank 4+ */}
+      {/* Online indicator */}
       <div className="w-2 h-2 rounded-full flex-shrink-0"
-        style={{ backgroundColor: isOnline(entry.lastActive) ? '#00E676' : '#F65E3B' }} />
+        style={{ backgroundColor: playerOnline ? '#00E676' : entry.isPlayer ? '#EDC22E' : '#F65E3B' }} />
       <span className="text-[10px] font-semibold flex-1 truncate" style={{ color: entry.isPlayer ? '#EDC22E' : 'rgba(255,255,255,0.7)' }}>
         {entry.name} {entry.isPlayer && '(You)'}
       </span>

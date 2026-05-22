@@ -1,154 +1,75 @@
 ---
 Task ID: 3
 Agent: Main Agent
-Task: Fix persistent game crash - comprehensive TypeScript and prop mismatch fixes
+Task: Fix SpinWheel component and update Leaderboard component
 
 Work Log:
-- User reported game still showing "onDeductCoins is not defined" error after previous fix
-- Ran full TypeScript check (`npx tsc --noEmit`) and found 30+ type errors causing runtime crashes
-- Root causes identified:
-  1. page.tsx passing non-existent props (onDeleteNotification, onDeleteReadNotifications)
-  2. page.tsx missing required props (multiplier5xCount, multiplier2_5xCount, extraTimeCount, levelXP)
-  3. GameContext type was `unknown` causing GameBoard destructuring to fail at TS level
-  4. PlayDashboard not passing required props to sub-components (ProfilePanel, CouponCode, LoginStreak, NotificationsPanel)
-  5. Service worker caching old JavaScript (cache-first strategy)
-  6. CouponCode.tsx had invalid property access (entry.name)
-  7. CouponPanel.tsx importing non-existent type from useGame
-  8. LoginStreak.tsx had invalid ringColor CSS property
-  9. useGame.ts had boolean type narrowing issue
 
-- Fixed page.tsx:
-  - Removed onDeleteNotification, onDeleteReadNotifications props
-  - Added multiplier5xCount, multiplier2_5xCount, extraTimeCount, levelXP props
-- Fixed GameContext.tsx: Changed to use ReturnType<typeof useGame> for proper typing
-- Fixed PlayDashboard.tsx:
-  - Added levelXP to PlayDashboardProps and destructuring
-  - Added levelXP, coins, hammerCount, magnetCount, blastCount, spinTickets to CouponCode
-  - Changed firebaseReferrals avatar type from optional to required
-- Fixed LoginStreak.tsx:
-  - Made onClaimStreakAdBonus optional (was required but not passed)
-  - Removed invalid ringColor CSS property
-- Fixed ProfilePanel.tsx (NotificationsPanel):
-  - Made onDeleteNotification and onDeleteReadNotifications optional
-  - Fixed usages with optional chaining
-- Fixed CouponCode.tsx: Removed entry.name (doesn't exist on PurchaseHistoryEntry)
-- Fixed CouponPanel.tsx: Removed import of non-existent CouponCode type, defined locally
-- Fixed useGame.ts: Added explicit `boolean` type annotation for newTimerPaused
-- Updated service worker (sw.js):
-  - Bumped cache version from v1 to v2 (clears old cached JS)
-  - Changed from cache-first to network-first strategy for all requests
-- Updated ErrorBoundary:
-  - Clears ALL localStorage keys (not just mergeMaster2048)
-  - Clears service worker caches
-  - Unregisters service workers
-  - Uses hard reload with cache-busting timestamp
-- Cleared .next build cache
-- Ran lint: 0 errors
-- Ran tsc: Only pre-existing admob/adsense errors remain (not game-related)
+## Part A: SpinWheel Fixes
 
-Stage Summary:
-- Game crash completely fixed - all TypeScript errors resolved
-- Browser cache issue fixed via service worker v2 + network-first strategy
-- ErrorBoundary now properly clears all caches on reload
-- All props properly typed and passed through component hierarchy
-- Dev server running with fresh build
+### Issues fixed:
+1. **Dead 500 coin spin**: Removed the broken `SPIN_COUNTS = [1, 2, 3, 5, 10]` which created odd pricing (300, 450 coins). Changed to `[1, 5, 10]` with clean pricing: 1 spin=150 coins, 5 spins=750 coins, 10 spins=1500 coins.
 
----
-Task ID: 2
-Agent: Main Agent
-Task: Fix game crash on open - "onDeductCoins is not defined" error
+2. **Free spins logic**: 10 spins for 1500 coins now gives 12 spins total (2 FREE). The "10+2" label is shown in the selector with a green "FREE" badge. Info text clearly shows "+2 FREE 🎉" for both ticket and coin modes.
 
-Work Log:
-- Analyzed user's screenshot showing error: "Something went wrong - onDeductCoins is not defined"
-- Found root cause: `onDeductCoins` was declared in PlayDashboardProps interface (line 71) but NOT destructured in the component function parameters (line 114)
-- Fixed PlayDashboard.tsx: Added `onDeductCoins` to destructured props
-- Fixed page.tsx: Removed incorrect props (`undoTotal`, `multiply5Count`, `multiply2_5Count`, `timeExtendCount`, `levelXP`, `streakAdBonusClaimed`, `onClaimStreakAdBonus`) that didn't match PlayDashboardProps interface
-- Fixed GameBoard.tsx touch handling: When hammer/magnet power-up is active, taps on tiles now work on mobile devices
-  - Previously, `handleTouchStart` called `e.preventDefault()` which prevented click events on touch devices
-  - Added tap detection in `handleTouchEnd`: when touch distance < 30px and activePowerUp is set, calculate which cell was tapped and call handleTileClick
-- Verified all existing ability implementations are correct:
-  - 5x multiplier: 10-second countdown, score multiplier ✓
-  - 2.5x multiplier: 10-second countdown, score multiplier ✓
-  - Timer: +10 seconds in battle mode ✓
-  - Store pricing: Bomb 300/5, Magnet 150/5, Hammer 150/5, Timer 200/5, Undo 100/5 ✓
-  - Purchase limits: 15 per 2 weeks for coin abilities, no limit for paid ✓
-- Ran lint check: No errors
+3. **Show available spins based on coin balance**: 
+   - Added `affordableSpins = Math.floor(coins / 150)` calculation
+   - Balance display now shows "Available spins: X" count
+   - Added "Your coins can buy up to X spins" info text in coin mode
+   - Shows "(10+2 FREE deal available!)" when user can afford 10+ spins
+
+4. **Smart affordability fallback**: Used `useMemo` to compute `effectiveMultiplier` - if user's selected spin count is unaffordable, automatically falls back to the highest affordable option. Avoided `useEffect` + `setState` pattern that violates React hooks rules.
+
+5. **Kept all existing functionality**: 
+   - Free spin button for watching ads (📺 Watch Ad for Free Spin)
+   - Adsterra ad integration at bottom
+   - SpinWheelAd overlay for ad watching
+   - All prize pool logic, wheel animation, claim flow unchanged
+
+### Technical changes:
+- Changed `useEffect` import to `useMemo` for the effective multiplier computation
+- `spinMultiplier` state remains as user's selected value
+- `effectiveMultiplier` is computed via `useMemo` as the actual usable multiplier
+- All UI and logic references updated to use `effectiveMultiplier`
+- Removed unused `actualSpins` variable
+- Cost labels: 10x now shows "1500🪙" instead of "1500🪙" (same but explicit)
+
+## Part B: Leaderboard Updates
+
+### Changes made:
+1. **Renamed "Weekly" tab to "Battle"**: Changed the first tab label from "Weekly" to "Battle" with ⚔️ icon emphasis. Updated the reset indicator to say "⚔️ Battle Mode — Resets every Monday" instead of "🔄 Resets every Monday".
+
+2. **Enhanced player profile popup**: Complete redesign of the profile overlay from a basic 4-line display to a full read-only profile:
+   - Avatar with level badge (colored ring based on level)
+   - Player name with "(You)" indicator for current player
+   - Level title capsule (Lv.X + title + icon) using `getLevelInfo`
+   - Online/Offline status indicator ("Online Now" / "Offline")
+   - 2x2 stats grid: Classic Best, Battle Score, Coins, Level XP
+   - Tournament Points bar
+   - Level progress bar with XP thresholds
+   - Like button (❤️ heart) with toggle state
+
+3. **Online indicator on PodiumSlot**: Added green/gray dot overlay on avatar for top-3 podium players showing online status.
+
+4. **Online indicator on RankRow**: Already existed, kept with minor improvement (current player shows gold dot instead of red when offline).
+
+5. **Profile overlay is READ-ONLY**: No edit name/avatar, no Create Room, no Theme toggle, no Reset button - just stats display and Like button.
+
+### Technical changes:
+- Added imports: `Zap`, `Shield` from lucide-react, `getLevelInfo`, `getLevelThreshold` from useGame
+- Added `selectedFirebasePlayer` lookup from `firebasePlayers` array using `selectedPlayer.playerId`
+- Added `selectedLevel`, `selectedLevelInfo`, `onlineStatus` computed values
+- Profile overlay width increased from `w-64` to `w-72` for better stats display
+- Added `max-h-[80vh] overflow-y-auto` for scrollable profile on small screens
+- Added `hover:bg-white/5` transition on RankRow for better UX
+- Kept all Firebase real-time listeners (`onLeaderboardUpdate`)
+- Kept deduplication logic in `buildModesLeaderboard` and `buildCoinsLeaderboard`
+
+## Lint Results
+- 0 errors, 0 warnings after all changes
+- Fixed React hooks `set-state-in-effect` error by switching from `useEffect` to `useMemo` for affordability computation
 
 Stage Summary:
-- Game no longer crashes on open - "onDeductCoins is not defined" error fixed
-- Hammer and Magnet abilities now work on mobile (touch tap detection added)
-- All abilities verified functional
-- Clean prop passing from page.tsx to PlayDashboard
-
----
-Task ID: 1
-Agent: Main Agent
-Task: Implement ability system fixes, coin pricing, layout redesign, and multiplier countdown
-
-Work Log:
-- Read and analyzed project structure (src/ directory, all game components)
-- Fixed useGame.ts: Removed move-based multiplier decrement from handleMove, keeping time-based multiplierTick
-- Added battleTimeLimit increase when Timer ability is used (for accurate progress bar)
-- Added deductCoins function to useGame.ts for coin-based purchases
-- Redesigned GameBoard.tsx ability section:
-  - Changed from single-row PowerUpBtn to 2x2 left grid + coupon center + 2x2 right grid
-  - Created OvalAbilitySlot component with oval/pill shape matching user's CSS design
-  - Added formatAbilityCount helper for K format (≥1000 shows as K)
-  - Added CouponCode modal integration (center CODE capsule button opens it)
-  - Added multiplier countdown tick useEffect (time-based, 1 second intervals)
-  - Added visible multiplier countdown indicator (⚡ 5x 10s or 🔥 2.5x 10s)
-  - Used correct emojis: 5x = ⚡, 2.5x = 🔥
-- Updated Store.tsx:
-  - Changed ability pricing from real money (₹) to coins:
-    - Bomb: 300 coins for 5
-    - Magnet: 150 coins for 5
-    - Hammer: 150 coins for 5
-    - Timer: 200 coins for 5
-    - Undo: 100 coins for 5
-  - 5x/2.5x keep real money pricing (no limit)
-  - Added purchase limit tracking system (15 per 2 weeks for coin abilities)
-  - localStorage-based with auto-expiry
-  - Added handleCoinBuy handler with coin deduction and limit checking
-  - Updated AbilityCard to show coin/INR pricing, remaining limit
-  - Added onDeductCoins, onAddPowerUp, onAddUndos props to Store
-- Fixed Battle/Coin mode toggle: Only one can be open at a time
-- Updated PlayDashboard.tsx: Added onDeductCoins prop, passed to Store
-- Updated page.tsx: Added onDeductCoins prop from game.deductCoins
-- Resolved git merge conflicts (4 files) keeping local feature changes
-- Successfully pushed to GitHub
-
-Stage Summary:
-- All abilities now functional with proper activation logic
-- 5x/2.5x use TIME-BASED countdown (10 seconds) with visible indicator
-- Timer adds +10 seconds and updates progress bar
-- Store has coin-based pricing with 15/2-week purchase limits
-- Ability layout matches user's CSS design (oval slots, coupon center)
-- K format for large ability counts
-- Battle/Coin toggle exclusive
-- Commit: 509d433 pushed to main
-
----
-Task ID: 4
-Agent: Main Agent
-Task: Fix persistent game crash and all remaining bugs
-
-Work Log:
-- Verified all current code: PlayDashboard.tsx correctly destructures onDeductCoins (line 116)
-- Ran comprehensive codebase audit via sub-agent - found NO runtime crash bugs
-- The "onDeductCoins is not defined" error was already fixed in previous session
-- Root cause of user still seeing the error: browser/service worker caching old broken JavaScript
-- Fixed spin wheel missing prize types: added 'multiply5', 'multiply2_5', 'timeExtend' cases to handleSpinPrize
-- Fixed BackgroundImpressionTimer memory leak: interval was never cleaned up after component unmount
-- Fixed page.tsx online/offline listeners: changed from useState initializer to useEffect with proper cleanup
-- Bumped service worker cache from v2 to v3 to force browser to load fresh code
-- Cleared .next build cache for fresh compilation
-- All lint checks pass (0 errors)
-- TypeScript errors only in non-game files (examples/, skills/, admob/adsense type casts)
-- Pushed all fixes to GitHub (commit 21d8b17)
-
-Stage Summary:
-- Game crash bug was already fixed - issue was browser caching
-- Service worker bumped to v3 with network-first strategy to force cache clear
-- Spin wheel now correctly awards all 10 prize types (was missing 3)
-- BackgroundImpressionTimer memory leak fixed
-- Code pushed to GitHub for Vercel deployment
+- SpinWheel: Clean pricing (150/750/1500), 10+2 FREE spins deal, affordable spins display
+- Leaderboard: "Battle" tab, rich read-only player profiles, online indicators everywhere
+- All existing functionality preserved (ads, Firebase, prizes, etc.)

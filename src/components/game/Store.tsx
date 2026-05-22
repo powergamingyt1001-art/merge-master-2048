@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Coins, Zap, Clock, AlertCircle, Copy, Check, Upload, FileText, ImageIcon, Trash2 } from 'lucide-react'
+import { X, Coins, Zap, Clock, AlertCircle, Copy, Check, Upload, FileText, ImageIcon, Trash2, ShoppingCart, Minus, Plus, Tag } from 'lucide-react'
 import { getRandomLink } from '@/components/ads/AdOverlay'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -54,7 +54,33 @@ interface StoreOrder {
   upiId: string
 }
 
-type TabId = 'coins' | 'ability' | 'history'
+type TabId = 'coins' | 'ability' | 'room' | 'history'
+
+// ─── Cart Types ────────────────────────────────────────────────────────────
+
+interface CartItem {
+  id: string
+  emoji: string
+  name: string
+  price: number
+  quantity: number
+  currency: 'coin' | 'inr'
+  abilityType?: string
+  section?: string
+}
+
+interface Coupon {
+  code: string
+  discountPercent: number
+  minPurchase: number
+  used: boolean
+}
+
+const CART_KEY = 'mergeMaster2048_cart'
+const USED_COUPONS_KEY = 'mergeMaster2048_usedCoupons'
+
+// Admin coupons stored in localStorage
+const ADMIN_COUPONS_KEY = 'adminCoupons'
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -506,6 +532,8 @@ interface PaymentModalProps {
   itemQuantity: number
   playerId: string
   onOrderPlaced: (order: StoreOrder) => void
+  discountCouponCode?: string
+  discountAmount?: number
 }
 
 function UPIPaymentModal({
@@ -516,6 +544,8 @@ function UPIPaymentModal({
   itemQuantity,
   playerId,
   onOrderPlaced,
+  discountCouponCode,
+  discountAmount,
 }: PaymentModalProps) {
   const [whatsappNumber, setWhatsappNumber] = useState(() => {
     if (typeof window === 'undefined') return ''
@@ -536,7 +566,7 @@ function UPIPaymentModal({
   const [submitting, setSubmitting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const upiLink = generateUpiLink(itemPrice)
+  const upiLink = generateUpiLink(itemPrice - (discountAmount || 0))
   const qrUrl = generateQrUrl(upiLink)
 
   const handleCopyUpiId = useCallback(() => {
@@ -581,7 +611,7 @@ function UPIPaymentModal({
       date: new Date().toISOString(),
       playerId,
       item: itemName,
-      price: itemPrice,
+      price: (discountAmount && discountAmount > 0) ? itemPrice - discountAmount : itemPrice,
       quantity: itemQuantity,
       whatsappNumber: whatsappNumber.trim(),
       name: name.trim(),
@@ -593,6 +623,14 @@ function UPIPaymentModal({
     }
 
     onOrderPlaced(order)
+
+    // Consume discount coupon if used (only when order is actually placed)
+    if (discountCouponCode && discountAmount && discountAmount > 0) {
+      try {
+        const { consumeDiscountCoupon } = require('@/components/game/CouponCode')
+        consumeDiscountCoupon(discountCouponCode)
+      } catch { /* ignore */ }
+    }
 
     // Reset transaction-specific fields only (keep name & whatsapp)
     setTransactionId('')
@@ -712,6 +750,18 @@ function UPIPaymentModal({
                 <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Price</span>
                 <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>₹{itemPrice}</span>
               </div>
+              {discountAmount && discountAmount > 0 && discountCouponCode && (
+                <div className="flex justify-between">
+                  <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Coupon ({discountCouponCode})</span>
+                  <span className="text-[10px] font-bold" style={{ color: '#00E676' }}>-₹{discountAmount}</span>
+                </div>
+              )}
+              {discountAmount && discountAmount > 0 && (
+                <div className="flex justify-between pt-1" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                  <span className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>Total</span>
+                  <span className="text-[11px] font-bold" style={{ color: '#00E676' }}>₹{itemPrice - discountAmount}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Quantity</span>
                 <span className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>x{itemQuantity}</span>
@@ -1031,107 +1081,17 @@ function AbilityTab({ onBuy, onCoinBuy, coins, onClaimFreeRoomCard, consecutiveV
 
   return (
     <div className="space-y-4">
-      {/* Daily Free Room Card Section */}
+      {/* Daily Streak Section (replaces DAILY FREE) */}
       <div>
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-sm">🃏</span>
+          <span className="text-sm">🔥</span>
           <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#E040FB' }}>
-            DAILY FREE
+            DAILY STREAK
           </h4>
         </div>
         <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(224,64,251,0.06)', border: '1px solid rgba(224,64,251,0.15)' }}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ backgroundColor: 'rgba(224,64,251,0.1)', border: '1px solid rgba(224,64,251,0.2)' }}>
-              🃏
-            </div>
-            <div className="flex-1">
-              <p className="text-xs font-bold" style={{ color: '#FFFFFF' }}>Free Room Card</p>
-              <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                Visit store 7 days in a row!
-              </p>
-              <div className="flex items-center gap-1 mt-1">
-                {Array.from({ length: 7 }, (_, i) => (
-                  <div key={i} className="w-3.5 h-3.5 rounded-full flex items-center justify-center"
-                    style={{
-                      backgroundColor: i < consecutiveVisits ? 'rgba(224,64,251,0.3)' : 'rgba(255,255,255,0.06)',
-                      border: i < consecutiveVisits ? '1px solid rgba(224,64,251,0.5)' : '1px solid rgba(255,255,255,0.1)',
-                    }}>
-                    {i < consecutiveVisits && <span className="text-[6px]" style={{ color: '#E040FB' }}>✓</span>}
-                  </div>
-                ))}
-                <span className="text-[8px] ml-1" style={{ color: consecutiveVisits >= 7 ? '#E040FB' : 'rgba(255,255,255,0.3)' }}>{consecutiveVisits}/7</span>
-              </div>
-            </div>
-            {freeRoomCardAvailable ? (
-              <button
-                onClick={handleClaimFreeRoomCard}
-                disabled={freeRoomCardPending}
-                className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, #E040FB, #7C4DFF)', color: '#FFFFFF' }}
-              >
-                {freeRoomCardPending ? 'Waiting...' : 'CLAIM 🎬'}
-              </button>
-            ) : (
-              <div className="px-3 py-1.5 rounded-lg text-[9px] font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.3)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                {consecutiveVisits < 7 ? `${7 - consecutiveVisits} more days` : 'Come back tomorrow'}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Room Cards - INR */}
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-sm">🃏</span>
-          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#E040FB' }}>
-            ROOM CARDS (₹)
-          </h4>
-        </div>
-        <div className="space-y-2">
-          {ROOM_CARD_PACKS.map(item => (
-            <AbilityCard key={item.id} item={item as any} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} />
-          ))}
-        </div>
-      </div>
-
-      {/* Room Cards - Coins */}
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <Coins className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
-          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#E040FB' }}>
-            ROOM CARD (COINS)
-          </h4>
-        </div>
-        <div className="relative flex items-center justify-between p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ backgroundColor: 'rgba(224,64,251,0.1)', border: '1px solid rgba(224,64,251,0.2)' }}>
-              🃏
-            </div>
-            <div>
-              <p className="text-xs font-bold" style={{ color: '#FFFFFF' }}>1 Room Card</p>
-              <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>3,000 Coins</p>
-            </div>
-          </div>
-          <button onClick={handleBuyRoomCardWithCoins} disabled={coins < 3000}
-            className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40"
-            style={{ background: 'linear-gradient(135deg, #E040FB, #7C4DFF)', color: '#FFFFFF' }}>
-            BUY 💰
-          </button>
-        </div>
-      </div>
-
-      {/* Daily Purchase Streak */}
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-sm">🔥</span>
-          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#FF7A00' }}>
-            DAILY STREAK
-          </h4>
-        </div>
-        <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,122,0,0.06)', border: '1px solid rgba(255,122,0,0.15)' }}>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ backgroundColor: 'rgba(255,122,0,0.1)', border: '1px solid rgba(255,122,0,0.2)' }}>
               🔥
             </div>
             <div className="flex-1">
@@ -1139,20 +1099,20 @@ function AbilityTab({ onBuy, onCoinBuy, coins, onClaimFreeRoomCard, consecutiveV
               <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
                 Buy the same ₹ pack 7 days in a row!
               </p>
-              <p className="text-[8px] mt-0.5" style={{ color: '#FF7A00' }}>
+              <p className="text-[8px] mt-0.5" style={{ color: '#E040FB' }}>
                 🎁 Day 7: FREE coins + 1 Room Card!
               </p>
               <div className="flex items-center gap-1 mt-1">
                 {Array.from({ length: 7 }, (_, i) => (
                   <div key={i} className="w-3.5 h-3.5 rounded-full flex items-center justify-center"
                     style={{
-                      backgroundColor: dailyStreakInfo && i < dailyStreakInfo.count ? 'rgba(255,122,0,0.3)' : 'rgba(255,255,255,0.06)',
-                      border: dailyStreakInfo && i < dailyStreakInfo.count ? '1px solid rgba(255,122,0,0.5)' : '1px solid rgba(255,255,255,0.1)',
+                      backgroundColor: dailyStreakInfo && i < dailyStreakInfo.count ? 'rgba(224,64,251,0.3)' : 'rgba(255,255,255,0.06)',
+                      border: dailyStreakInfo && i < dailyStreakInfo.count ? '1px solid rgba(224,64,251,0.5)' : '1px solid rgba(255,255,255,0.1)',
                     }}>
-                    {dailyStreakInfo && i < dailyStreakInfo.count && <span className="text-[6px]" style={{ color: '#FF7A00' }}>✓</span>}
+                    {dailyStreakInfo && i < dailyStreakInfo.count && <span className="text-[6px]" style={{ color: '#E040FB' }}>✓</span>}
                   </div>
                 ))}
-                <span className="text-[8px] ml-1" style={{ color: dailyStreakInfo && dailyStreakInfo.count >= 7 ? '#FF7A00' : 'rgba(255,255,255,0.3)' }}>
+                <span className="text-[8px] ml-1" style={{ color: dailyStreakInfo && dailyStreakInfo.count >= 7 ? '#E040FB' : 'rgba(255,255,255,0.3)' }}>
                   {dailyStreakInfo ? `${dailyStreakInfo.count}/7` : '0/7'}
                 </span>
               </div>
@@ -1217,6 +1177,138 @@ function AbilityTab({ onBuy, onCoinBuy, coins, onClaimFreeRoomCard, consecutiveV
           {getEffectiveRegularAbilities().map((item) => (
             <AbilityCard key={item.id} item={item} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} />
           ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Room Tab ─────────────────────────────────────────────────────────────
+
+function RoomTab({ onBuy, onCoinBuy, coins, onAddRoomCards, onAddNotification, onDeductCoins, onClaimFreeRoomCard, consecutiveVisits, freeRoomCardAvailable }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number; onAddRoomCards?: (count: number) => void; onAddNotification: (title: string, message: string, type: string, emoji: string) => void; onDeductCoins: (amount: number) => void; onClaimFreeRoomCard?: () => void; consecutiveVisits: number; freeRoomCardAvailable: boolean }) {
+  const [freeRoomCardPending, setFreeRoomCardPending] = useState(false)
+  const freeRoomCardOpenedRef = useRef(false)
+
+  useEffect(() => {
+    if (!freeRoomCardPending) return
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && freeRoomCardOpenedRef.current) {
+        freeRoomCardOpenedRef.current = false
+        setFreeRoomCardPending(false)
+        onClaimFreeRoomCard?.()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [freeRoomCardPending, onClaimFreeRoomCard])
+
+  const handleClaimFreeRoomCard = useCallback(() => {
+    if (!freeRoomCardAvailable || freeRoomCardPending) return
+    try {
+      window.open(getRandomLink(), '_blank')
+      freeRoomCardOpenedRef.current = true
+      setFreeRoomCardPending(true)
+    } catch {
+      // Popup blocked
+    }
+  }, [freeRoomCardAvailable, freeRoomCardPending])
+
+  const handleBuyRoomCardWithCoins = useCallback(() => {
+    if (coins < 3000) {
+      onAddNotification('Not Enough Coins!', `You need 3,000 coins but have ${formatNumber(coins)}`, 'system', '😔')
+      return
+    }
+    onDeductCoins(3000)
+    onAddRoomCards?.(1)
+    onAddNotification('Room Card Purchased! 🃏', 'You bought 1 Room Card for 3,000 coins!', 'reward', '🃏')
+  }, [coins, onDeductCoins, onAddRoomCards, onAddNotification])
+
+  return (
+    <div className="space-y-4">
+      {/* Free Room Card - Daily Visit Streak */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-sm">🃏</span>
+          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#E040FB' }}>
+            DAILY FREE ROOM CARD
+          </h4>
+        </div>
+        <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(224,64,251,0.06)', border: '1px solid rgba(224,64,251,0.15)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ backgroundColor: 'rgba(224,64,251,0.1)', border: '1px solid rgba(224,64,251,0.2)' }}>
+              🃏
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-bold" style={{ color: '#FFFFFF' }}>Free Room Card</p>
+              <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                Visit store 7 days in a row!
+              </p>
+              <div className="flex items-center gap-1 mt-1">
+                {Array.from({ length: 7 }, (_, i) => (
+                  <div key={i} className="w-3.5 h-3.5 rounded-full flex items-center justify-center"
+                    style={{
+                      backgroundColor: i < consecutiveVisits ? 'rgba(224,64,251,0.3)' : 'rgba(255,255,255,0.06)',
+                      border: i < consecutiveVisits ? '1px solid rgba(224,64,251,0.5)' : '1px solid rgba(255,255,255,0.1)',
+                    }}>
+                    {i < consecutiveVisits && <span className="text-[6px]" style={{ color: '#E040FB' }}>✓</span>}
+                  </div>
+                ))}
+                <span className="text-[8px] ml-1" style={{ color: consecutiveVisits >= 7 ? '#E040FB' : 'rgba(255,255,255,0.3)' }}>{consecutiveVisits}/7</span>
+              </div>
+            </div>
+            {freeRoomCardAvailable ? (
+              <button onClick={handleClaimFreeRoomCard} disabled={freeRoomCardPending}
+                className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
+                style={{ background: 'linear-gradient(135deg, #E040FB, #7C4DFF)', color: '#FFFFFF' }}>
+                {freeRoomCardPending ? 'Waiting...' : 'CLAIM 🎬'}
+              </button>
+            ) : (
+              <div className="px-3 py-1.5 rounded-lg text-[9px] font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.3)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                {consecutiveVisits < 7 ? `${7 - consecutiveVisits} more days` : 'Come back tomorrow'}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Room Cards - INR */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-sm">🃏</span>
+          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#E040FB' }}>
+            ROOM CARDS (₹)
+          </h4>
+        </div>
+        <div className="space-y-2">
+          {ROOM_CARD_PACKS.map(item => (
+            <AbilityCard key={item.id} item={item as any} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} />
+          ))}
+        </div>
+      </div>
+
+      {/* Room Card - Coins */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <Coins className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
+          <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#E040FB' }}>
+            ROOM CARD (COINS)
+          </h4>
+        </div>
+        <div className="relative flex items-center justify-between p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ backgroundColor: 'rgba(224,64,251,0.1)', border: '1px solid rgba(224,64,251,0.2)' }}>
+              🃏
+            </div>
+            <div>
+              <p className="text-xs font-bold" style={{ color: '#FFFFFF' }}>1 Room Card</p>
+              <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.4)' }}>3,000 Coins</p>
+            </div>
+          </div>
+          <button onClick={handleBuyRoomCardWithCoins} disabled={coins < 3000}
+            className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40"
+            style={{ background: 'linear-gradient(135deg, #E040FB, #7C4DFF)', color: '#FFFFFF' }}>
+            BUY 💰
+          </button>
         </div>
       </div>
     </div>
@@ -1519,8 +1611,144 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
   const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
     { id: 'coins', label: 'Coins', icon: <Coins className="w-3.5 h-3.5" /> },
     { id: 'ability', label: 'Ability', icon: <Zap className="w-3.5 h-3.5" /> },
+    { id: 'room', label: 'Room', icon: <span className="text-xs">🃏</span> },
     { id: 'history', label: 'History', icon: <Clock className="w-3.5 h-3.5" /> },
   ]
+
+  // ─── Cart State ────────────────────────────────────────────────────────
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const data = localStorage.getItem(CART_KEY)
+      return data ? JSON.parse(data) : []
+    } catch { return [] }
+  })
+  const [showCart, setShowCart] = useState(false)
+  const [couponCode, setCouponCode] = useState('')
+  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null)
+  const [couponError, setCouponError] = useState('')
+
+  const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
+  const cartTotalINR = cart.filter(i => i.currency === 'inr').reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const cartTotalCoins = cart.filter(i => i.currency === 'coin').reduce((sum, item) => sum + item.price * item.quantity, 0)
+
+  // Persist cart to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(CART_KEY, JSON.stringify(cart))
+    }
+  }, [cart])
+
+  const addToCart = useCallback((item: AbilityItem | CoinPack, type: 'ability' | 'coinPack') => {
+    setCart(prev => {
+      const existing = prev.find(c => c.id === (type === 'coinPack' ? (item as CoinPack).id : (item as AbilityItem).id))
+      if (existing) {
+        return prev.map(c => c.id === existing.id ? { ...c, quantity: c.quantity + 1 } : c)
+      }
+      if (type === 'coinPack') {
+        const pack = item as CoinPack
+        return [...prev, { id: pack.id, emoji: '💰', name: `${formatNumber(pack.amount)} Coins`, price: pack.price, quantity: 1, currency: 'inr' }]
+      }
+      const ability = item as AbilityItem
+      return [...prev, { id: ability.id, emoji: ability.emoji, name: ability.name, price: ability.price, quantity: 1, currency: ability.currency, abilityType: ability.abilityType, section: ability.section }]
+    })
+  }, [])
+
+  const updateCartQuantity = useCallback((id: string, delta: number) => {
+    setCart(prev => {
+      const updated = prev.map(c => {
+        if (c.id === id) {
+          const newQty = Math.max(0, c.quantity + delta)
+          return newQty === 0 ? null : { ...c, quantity: newQty }
+        }
+        return c
+      }).filter(Boolean) as CartItem[]
+      return updated
+    })
+  }, [])
+
+  const removeFromCart = useCallback((id: string) => {
+    setCart(prev => prev.filter(c => c.id !== id))
+  }, [])
+
+  const applyCoupon = useCallback(() => {
+    if (!couponCode.trim()) return
+    setCouponError('')
+
+    // Check if already used
+    try {
+      const usedCoupons: string[] = JSON.parse(localStorage.getItem(USED_COUPONS_KEY) || '[]')
+      if (usedCoupons.includes(couponCode.trim().toUpperCase())) {
+        setCouponError('Coupon already used')
+        return
+      }
+    } catch { /* ignore */ }
+
+    // Check admin coupons
+    try {
+      const adminCoupons: Array<{ code: string; discount: number; minPurchase?: number; oneTime?: boolean }> = JSON.parse(localStorage.getItem(ADMIN_COUPONS_KEY) || '[]')
+      const found = adminCoupons.find(c => c.code.toUpperCase() === couponCode.trim().toUpperCase())
+      if (found) {
+        const minPurchase = found.minPurchase || 0
+        if (minPurchase > 0 && cartTotalINR < minPurchase) {
+          setCouponError(`Minimum ₹${minPurchase} purchase required`)
+          return
+        }
+        setAppliedCoupon({
+          code: found.code,
+          discountPercent: found.discount || 10,
+          minPurchase: minPurchase,
+          used: false,
+        })
+        return
+      }
+    } catch { /* ignore */ }
+
+    setCouponError('Invalid coupon code')
+  }, [couponCode, cartTotalINR])
+
+  const discountAmount = appliedCoupon ? Math.round(cartTotalINR * appliedCoupon.discountPercent / 100) : 0
+  const finalTotal = cartTotalINR - discountAmount
+
+  const handlePlaceOrder = useCallback(() => {
+    if (cart.length === 0) return
+
+    // Mark coupon as used
+    if (appliedCoupon) {
+      try {
+        const usedCoupons: string[] = JSON.parse(localStorage.getItem(USED_COUPONS_KEY) || '[]')
+        usedCoupons.push(appliedCoupon.code)
+        localStorage.setItem(USED_COUPONS_KEY, JSON.stringify(usedCoupons))
+      } catch { /* ignore */ }
+      setAppliedCoupon(null)
+    }
+
+    // Process coin items immediately
+    cart.filter(i => i.currency === 'coin').forEach(item => {
+      onDeductCoins(item.price * item.quantity)
+      if (item.abilityType === 'undo') {
+        onAddUndos(item.quantity)
+      } else if (item.abilityType === 'timer') {
+        onAddPowerUp('extraTime', item.quantity)
+      } else if (item.abilityType) {
+        onAddPowerUp(item.abilityType as any, item.quantity)
+      }
+      onAddNotification('Ability Purchased! 🎉', `You bought ${item.emoji} ${item.name} x${item.quantity} for ${formatNumber(item.price * item.quantity)} coins`, 'reward', item.emoji)
+    })
+
+    // For INR items, open payment modal with combined total
+    const inrItems = cart.filter(i => i.currency === 'inr')
+    if (inrItems.length > 0) {
+      const total = finalTotal
+      const itemNames = inrItems.map(i => `${i.emoji} ${i.name} x${i.quantity}`).join(', ')
+      setPaymentModal({ open: true, itemName: itemNames, itemPrice: total, itemQuantity: 1 })
+    }
+
+    // Clear cart
+    setCart([])
+    setCouponCode('')
+    setShowCart(false)
+  }, [cart, appliedCoupon, finalTotal, onDeductCoins, onAddPowerUp, onAddUndos, onAddNotification])
 
   return (
     <AnimatePresence>
@@ -1563,14 +1791,152 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
                   </span>
                 </p>
               </div>
-              <button
-                onClick={onClose}
-                className="w-7 h-7 rounded-full flex items-center justify-center transition-transform active:scale-90"
-                style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}
-              >
-                <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Cart Icon */}
+                <button
+                  onClick={() => setShowCart(!showCart)}
+                  className="relative w-8 h-8 rounded-full flex items-center justify-center transition-transform active:scale-90"
+                  style={{ backgroundColor: showCart ? 'rgba(237,194,46,0.2)' : 'rgba(255,255,255,0.1)' }}
+                >
+                  <ShoppingCart className="w-4 h-4" style={{ color: showCart ? '#EDC22E' : 'rgba(255,255,255,0.5)' }} />
+                  {cartItemCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold" style={{ backgroundColor: '#F65E3B', color: '#FFFFFF' }}>
+                      {cartItemCount}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={onClose}
+                  className="w-7 h-7 rounded-full flex items-center justify-center transition-transform active:scale-90"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}
+                >
+                  <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                </button>
+              </div>
             </div>
+
+            {/* Cart Slide-in Panel */}
+            <AnimatePresence>
+              {showCart && (
+                <motion.div
+                  initial={{ x: '100%' }}
+                  animate={{ x: 0 }}
+                  exit={{ x: '100%' }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                  className="absolute inset-0 z-20 flex"
+                >
+                  <div className="flex-1" onClick={() => setShowCart(false)} style={{ backgroundColor: 'rgba(0,0,0,0.3)' }} />
+                  <div className="w-[85%] h-full flex flex-col overflow-hidden" style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', borderLeft: '1px solid rgba(255,255,255,0.1)' }}>
+                    {/* Cart Header */}
+                    <div className="flex items-center justify-between p-3 shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                      <div className="flex items-center gap-2">
+                        <ShoppingCart className="w-4 h-4" style={{ color: '#EDC22E' }} />
+                        <span className="text-sm font-bold" style={{ color: '#FFFFFF' }}>Cart ({cartItemCount})</span>
+                      </div>
+                      <button onClick={() => setShowCart(false)} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
+                        <X className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                      </button>
+                    </div>
+
+                    {/* Cart Items */}
+                    <div className="flex-1 overflow-y-auto p-3 space-y-2" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+                      {cart.length === 0 ? (
+                        <div className="text-center py-8">
+                          <ShoppingCart className="w-10 h-10 mx-auto mb-2" style={{ color: 'rgba(255,255,255,0.15)' }} />
+                          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Cart is empty</p>
+                          <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.25)' }}>Add items from the store</p>
+                        </div>
+                      ) : (
+                        cart.map(item => (
+                          <div key={item.id} className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                            <span className="text-sm">{item.emoji}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] font-bold truncate" style={{ color: '#FFFFFF' }}>{item.name}</p>
+                              <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                {item.currency === 'inr' ? `₹${item.price}` : `💰 ${formatNumber(item.price)}`} each
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => updateCartQuantity(item.id, -1)} className="w-5 h-5 rounded flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                                <Minus className="w-2.5 h-2.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                              </button>
+                              <span className="text-[10px] font-bold w-5 text-center" style={{ color: '#FFFFFF' }}>{item.quantity}</span>
+                              <button onClick={() => updateCartQuantity(item.id, 1)} className="w-5 h-5 rounded flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                                <Plus className="w-2.5 h-2.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                              </button>
+                            </div>
+                            <p className="text-[10px] font-bold ml-1" style={{ color: item.currency === 'inr' ? '#EDC22E' : '#EDC22E' }}>
+                              {item.currency === 'inr' ? `₹${item.price * item.quantity}` : `💰${formatNumber(item.price * item.quantity)}`}
+                            </p>
+                            <button onClick={() => removeFromCart(item.id)} className="w-5 h-5 rounded flex items-center justify-center" style={{ backgroundColor: 'rgba(246,94,59,0.1)' }}>
+                              <X className="w-2.5 h-2.5" style={{ color: '#F65E3B' }} />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Coupon & Checkout */}
+                    {cart.length > 0 && (
+                      <div className="shrink-0 p-3 space-y-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                        {/* Coupon */}
+                        <div className="flex gap-1.5">
+                          <div className="flex-1 flex items-center gap-1 px-2 py-1.5 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <Tag className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                            <input type="text" value={couponCode} onChange={e => { setCouponCode(e.target.value); setCouponError('') }} placeholder="Enter coupon code" className="flex-1 bg-transparent text-[9px] outline-none" style={{ color: '#FFFFFF' }} />
+                          </div>
+                          <button onClick={applyCoupon} disabled={!couponCode.trim()} className="px-2.5 py-1.5 rounded-lg text-[9px] font-bold disabled:opacity-40" style={{ backgroundColor: 'rgba(237,194,46,0.15)', border: '1px solid rgba(237,194,46,0.3)', color: '#EDC22E' }}>
+                            Apply
+                          </button>
+                        </div>
+                        {couponError && <p className="text-[8px]" style={{ color: '#F65E3B' }}>{couponError}</p>}
+                        {appliedCoupon && <p className="text-[8px]" style={{ color: '#00E676' }}>✅ {appliedCoupon.discountPercent}% off applied!</p>}
+
+                        {/* Totals */}
+                        <div className="space-y-1">
+                          {cartTotalINR > 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>₹ Total:</span>
+                              <span className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>₹{cartTotalINR}</span>
+                            </div>
+                          )}
+                          {cartTotalCoins > 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>💰 Total:</span>
+                              <span className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>💰 {formatNumber(cartTotalCoins)}</span>
+                            </div>
+                          )}
+                          {discountAmount > 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-[9px]" style={{ color: '#00E676' }}>Discount:</span>
+                              <span className="text-[9px] font-bold" style={{ color: '#00E676' }}>-₹{discountAmount}</span>
+                            </div>
+                          )}
+                          {finalTotal > 0 && discountAmount > 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-[9px] font-bold" style={{ color: '#FFFFFF' }}>Final:</span>
+                              <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>₹{finalTotal}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* UPI Info */}
+                        {cartTotalINR > 0 && (
+                          <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.1)' }}>
+                            <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>UPI: <span className="font-mono font-bold" style={{ color: '#EDC22E' }}>{UPI_ID}</span></p>
+                          </div>
+                        )}
+
+                        <button onClick={handlePlaceOrder} className="w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-transform hover:scale-[1.02] active:scale-95" style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF', boxShadow: '0 2px 12px rgba(237,194,46,0.3)' }}>
+                          <ShoppingCart className="w-3.5 h-3.5" />
+                          Place Order{cartTotalINR > 0 ? ` • ₹${finalTotal || cartTotalINR}` : ''}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Tab Switcher */}
             <div className="flex px-4 pt-3 pb-0 shrink-0">
@@ -1578,7 +1944,7 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
                 <button
                   key={tab.id}
                   onClick={() => handleTabChange(tab.id)}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-bold rounded-t-xl transition-all"
+                  className="flex-1 flex items-center justify-center gap-1 py-2.5 text-[10px] font-bold rounded-t-xl transition-all"
                   style={{
                     backgroundColor:
                       activeTab === tab.id ? 'rgba(255,255,255,0.08)' : 'transparent',
@@ -1617,6 +1983,17 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
                     transition={{ duration: 0.2 }}
                   >
                     <AbilityTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onClaimFreeRoomCard={handleClaimFreeRoomCard} consecutiveVisits={consecutiveVisits} freeRoomCardAvailable={freeRoomCardAvailable} onAddRoomCards={onAddRoomCards} onAddNotification={onAddNotification} onDeductCoins={onDeductCoins} />
+                  </motion.div>
+                )}
+                {activeTab === 'room' && (
+                  <motion.div
+                    key="room"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <RoomTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onAddRoomCards={onAddRoomCards} onAddNotification={onAddNotification} onDeductCoins={onDeductCoins} onClaimFreeRoomCard={handleClaimFreeRoomCard} consecutiveVisits={consecutiveVisits} freeRoomCardAvailable={freeRoomCardAvailable} />
                   </motion.div>
                 )}
                 {activeTab === 'history' && (

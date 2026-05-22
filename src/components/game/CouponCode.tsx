@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon, Copy } from 'lucide-react'
+import { X, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon, Copy, Percent, Package, TrendingUp, DollarSign, Send } from 'lucide-react'
 import { getTotalUserCount, getOnlineUserCount, getTotalReferralsCount } from '@/lib/firebase-service'
 
 interface CouponCodeProps {
@@ -333,7 +333,7 @@ function getCoinAmountFromItem(item: string): number {
   return 500
 }
 
-type AdminTab = 'payments' | 'coupons' | 'prices' | 'history' | 'users' | 'partner'
+type AdminTab = 'dashboard' | 'payments' | 'coupons' | 'prices' | 'history' | 'users' | 'partner'
 
 // Custom price overrides stored in localStorage
 interface CustomPriceOverride {
@@ -501,6 +501,72 @@ function unbanUser(playerId: string): void {
 // Export for use in other files
 export { isUserBanned, loadBannedUsers }
 
+// ============================================================
+// DISCOUNT COUPONS - Stored in localStorage
+// ============================================================
+
+export interface DiscountCoupon {
+  code: string
+  discountPercent: number
+  minPurchase: number
+  maxUses: number
+  currentUses: number
+  oneTime: boolean
+  targetUserIds: string[] // empty = available to all users
+  createdAt: number
+  createdBy: string // 'admin' or 'system'
+  description: string
+  disabled?: boolean
+}
+
+const DISCOUNT_COUPONS_KEY = 'adminDiscountCoupons'
+
+export function loadDiscountCoupons(): DiscountCoupon[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const data = localStorage.getItem(DISCOUNT_COUPONS_KEY)
+    return data ? JSON.parse(data) : []
+  } catch {
+    return []
+  }
+}
+
+export function saveDiscountCoupons(coupons: DiscountCoupon[]) {
+  localStorage.setItem(DISCOUNT_COUPONS_KEY, JSON.stringify(coupons))
+}
+
+// Validate a discount coupon for a given user and cart total
+export function validateDiscountCoupon(code: string, userCode: string, cartTotal: number): { valid: boolean; coupon?: DiscountCoupon; error?: string } {
+  const coupons = loadDiscountCoupons()
+  const coupon = coupons.find(c => c.code.toUpperCase() === code.toUpperCase())
+  if (!coupon) return { valid: false, error: 'Invalid coupon code' }
+  if (coupon.disabled) return { valid: false, error: 'This coupon has been disabled' }
+  if (coupon.currentUses >= coupon.maxUses) return { valid: false, error: 'This coupon has reached its max uses' }
+  if (coupon.minPurchase > 0 && cartTotal < coupon.minPurchase) return { valid: false, error: `Minimum purchase of ₹${coupon.minPurchase} required` }
+  if (coupon.targetUserIds.length > 0 && !coupon.targetUserIds.includes(userCode)) return { valid: false, error: 'This coupon is not available for your account' }
+  return { valid: true, coupon }
+}
+
+// Apply discount coupon - only call when purchase is actually completed
+export function consumeDiscountCoupon(code: string): boolean {
+  const coupons = loadDiscountCoupons()
+  const idx = coupons.findIndex(c => c.code.toUpperCase() === code.toUpperCase())
+  if (idx === -1) return false
+  coupons[idx].currentUses++
+  saveDiscountCoupons(coupons)
+  return true
+}
+
+// Restore discount coupon count (when order is cancelled/rejected)
+export function restoreDiscountCoupon(code: string): boolean {
+  const coupons = loadDiscountCoupons()
+  const idx = coupons.findIndex(c => c.code.toUpperCase() === code.toUpperCase())
+  if (idx === -1) return false
+  if (coupons[idx].currentUses > 0) coupons[idx].currentUses--
+  saveDiscountCoupons(coupons)
+  return true
+}
+
 // Default COIN_PACKAGES (matching Store.tsx)
 const DEFAULT_COIN_PACKAGES = [
   { coins: 10000, price: 10 },
@@ -582,7 +648,7 @@ export function CouponCode({
 
   // Admin panel state
   const [showAdminPanel, setShowAdminPanel] = useState(false)
-  const [adminTab, setAdminTab] = useState<AdminTab>('payments')
+  const [adminTab, setAdminTab] = useState<AdminTab>('dashboard')
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryEntry[]>(() => loadPurchaseHistory())
   const [customCodes, setCustomCodes] = useState<CustomCouponCode[]>(() => loadCustomCouponCodes())
   const [nightCodeSettings, setNightCodeSettings] = useState<NightCodeSettings>(() => loadNightCodeSettings())
@@ -625,6 +691,20 @@ export function CouponCode({
   const [partnerNewName, setPartnerNewName] = useState('')
   const [generatedLink, setGeneratedLink] = useState<string | null>(null)
   const [tournamentPrizes, setTournamentPrizes] = useState<TournamentPrizes>(() => loadTournamentPrizes())
+
+  // Discount coupon state
+  const [discountCoupons, setDiscountCoupons] = useState<DiscountCoupon[]>(() => loadDiscountCoupons())
+  const [newDiscountCode, setNewDiscountCode] = useState('')
+  const [newDiscountPercent, setNewDiscountPercent] = useState(10)
+  const [newDiscountMinPurchase, setNewDiscountMinPurchase] = useState(0)
+  const [newDiscountMaxUses, setNewDiscountMaxUses] = useState(100)
+  const [newDiscountOneTime, setNewDiscountOneTime] = useState(false)
+  const [newDiscountTargetUsers, setNewDiscountTargetUsers] = useState('')
+  const [newDiscountDescription, setNewDiscountDescription] = useState('')
+
+  // Total revenue tracker
+  const [totalRevenue, setTotalRevenue] = useState<number>(0)
+  const [pendingOrderCount, setPendingOrderCount] = useState<number>(0)
 
   // Check for partner access from URL
   useEffect(() => {
@@ -710,6 +790,7 @@ export function CouponCode({
       setLockDuration(loadLockDuration())
       setSelectedHistoryIds(new Set())
       setBannedUsers(loadBannedUsers())
+      setDiscountCoupons(loadDiscountCoupons())
       // Load user stats from Firebase
       setUserStatsLoading(true)
       Promise.all([getTotalUserCount(), getOnlineUserCount(), getTotalReferralsCount()])
@@ -720,6 +801,11 @@ export function CouponCode({
         })
         .catch(() => { /* silent */ })
         .finally(() => setUserStatsLoading(false))
+      // Compute revenue and pending count from orders
+      const orders = loadStoreOrders()
+      const approvedRevenue = orders.filter(o => o.status === 'approved').reduce((sum, o) => sum + o.price, 0)
+      setTotalRevenue(approvedRevenue)
+      setPendingOrderCount(orders.filter(o => o.status === 'pending').length)
       // Also reload day code settings
       try {
         const dcData = localStorage.getItem('adminDayCodeSettings')
@@ -1247,6 +1333,59 @@ export function CouponCode({
     saveDayCodeSettings(settings)
   }, [dcRewardType, dcRewardAmount])
 
+  // Create a discount coupon
+  const handleCreateDiscountCoupon = useCallback(() => {
+    const code = newDiscountCode.trim().toUpperCase()
+    if (!code) return
+    if (discountCoupons.some(c => c.code.toUpperCase() === code)) return
+
+    const targetUsers = newDiscountTargetUsers
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+
+    const newCoupon: DiscountCoupon = {
+      code,
+      discountPercent: newDiscountPercent,
+      minPurchase: newDiscountMinPurchase,
+      maxUses: newDiscountMaxUses,
+      currentUses: 0,
+      oneTime: newDiscountOneTime,
+      targetUserIds: targetUsers,
+      createdAt: Date.now(),
+      createdBy: 'admin',
+      description: newDiscountDescription || `${newDiscountPercent}% off${newDiscountMinPurchase > 0 ? ` on ₹${newDiscountMinPurchase}+` : ''}`,
+    }
+
+    const updated = [...discountCoupons, newCoupon]
+    setDiscountCoupons(updated)
+    saveDiscountCoupons(updated)
+
+    // Reset form
+    setNewDiscountCode('')
+    setNewDiscountPercent(10)
+    setNewDiscountMinPurchase(0)
+    setNewDiscountMaxUses(100)
+    setNewDiscountOneTime(false)
+    setNewDiscountTargetUsers('')
+    setNewDiscountDescription('')
+  }, [newDiscountCode, newDiscountPercent, newDiscountMinPurchase, newDiscountMaxUses, newDiscountOneTime, newDiscountTargetUsers, newDiscountDescription, discountCoupons])
+
+  // Delete/disable a discount coupon
+  const handleDeleteDiscountCoupon = useCallback((code: string) => {
+    const updated = discountCoupons.filter(c => c.code !== code)
+    setDiscountCoupons(updated)
+    saveDiscountCoupons(updated)
+  }, [discountCoupons])
+
+  const handleToggleDiscountCoupon = useCallback((code: string) => {
+    const updated = discountCoupons.map(c =>
+      c.code === code ? { ...c, disabled: !c.disabled } : c
+    )
+    setDiscountCoupons(updated)
+    saveDiscountCoupons(updated)
+  }, [discountCoupons])
+
   const dayCode = generateDayCode()
   const nightCode = generateNightCode()
   const rotationDay = getRotationSuffix()
@@ -1626,6 +1765,7 @@ export function CouponCode({
             {/* Admin Tabs - Hidden on mobile, replaced by footer nav */}
             <div className="hidden sm:flex border-b shrink-0" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
               {[
+                { key: 'dashboard' as AdminTab, label: 'Dashboard', icon: <TrendingUp className="w-3 h-3" /> },
                 { key: 'payments' as AdminTab, label: 'Payments', icon: <Clock className="w-3 h-3" /> },
                 { key: 'coupons' as AdminTab, label: 'Coupons', icon: <Ticket className="w-3 h-3" /> },
                 { key: 'prices' as AdminTab, label: 'Prices', icon: <Coins className="w-3 h-3" /> },
@@ -1634,9 +1774,9 @@ export function CouponCode({
                 { key: 'partner' as AdminTab, label: 'Partner', icon: <UsersIcon className="w-3 h-3" /> },
               ].filter(t => {
                 if (!partnerMode) return true
-                if (partnerRole?.startsWith('PAY')) return t.key === 'payments'
-                if (partnerRole?.startsWith('SKILL')) return t.key === 'prices'
-                if (partnerRole?.startsWith('COUPON')) return t.key === 'coupons'
+                if (partnerRole?.startsWith('PAY')) return t.key === 'payments' || t.key === 'dashboard'
+                if (partnerRole?.startsWith('SKILL')) return t.key === 'prices' || t.key === 'dashboard'
+                if (partnerRole?.startsWith('COUPON')) return t.key === 'coupons' || t.key === 'dashboard'
                 return false
               }).map(tab => (
                 <button
@@ -1661,6 +1801,170 @@ export function CouponCode({
 
             {/* Scrollable Content Area - Full Screen */}
             <div className="flex-1 overflow-y-auto p-3">
+                    {/* ====== DASHBOARD TAB ====== */}
+                    {adminTab === 'dashboard' && (
+                      <div className="space-y-3">
+                        {/* Stats Summary Cards */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="p-3 rounded-xl"
+                            style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.2)' }}>
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <UsersIcon className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
+                              <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Total Users</p>
+                            </div>
+                            <p className="text-xl font-bold" style={{ color: '#EDC22E' }}>
+                              {userStatsLoading ? '...' : totalUsers}
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-xl"
+                            style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.2)' }}>
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Zap className="w-3.5 h-3.5" style={{ color: '#00E676' }} />
+                              <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Online Now</p>
+                            </div>
+                            <p className="text-xl font-bold" style={{ color: '#00E676' }}>
+                              {userStatsLoading ? '...' : onlineUsers}
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-xl"
+                            style={{ backgroundColor: 'rgba(255,109,0,0.08)', border: '1px solid rgba(255,109,0,0.2)' }}>
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <DollarSign className="w-3.5 h-3.5" style={{ color: '#FF6D00' }} />
+                              <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Total Revenue</p>
+                            </div>
+                            <p className="text-xl font-bold" style={{ color: '#FF6D00' }}>
+                              ₹{totalRevenue}
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-xl"
+                            style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.2)' }}>
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Package className="w-3.5 h-3.5" style={{ color: '#F65E3B' }} />
+                              <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Pending Orders</p>
+                            </div>
+                            <p className="text-xl font-bold" style={{ color: '#F65E3B' }}>
+                              {pendingOrderCount}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Quick Actions */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                          <p className="text-[9px] font-bold mb-2" style={{ color: 'rgba(255,255,255,0.5)' }}>Quick Actions</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            <button onClick={() => setAdminTab('payments')}
+                              className="p-2 rounded-lg text-center transition-transform active:scale-95"
+                              style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)' }}>
+                              <span className="text-lg block">💳</span>
+                              <p className="text-[7px] font-bold mt-1" style={{ color: '#F65E3B' }}>Payments</p>
+                              {pendingOrderCount > 0 && (
+                                <span className="text-[6px] px-1.5 py-0.5 rounded-full mt-0.5 inline-block" style={{ backgroundColor: '#F65E3B', color: '#FFFFFF' }}>
+                                  {pendingOrderCount} pending
+                                </span>
+                              )}
+                            </button>
+                            <button onClick={() => setAdminTab('coupons')}
+                              className="p-2 rounded-lg text-center transition-transform active:scale-95"
+                              style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                              <span className="text-lg block">🎟️</span>
+                              <p className="text-[7px] font-bold mt-1" style={{ color: '#EDC22E' }}>Coupons</p>
+                              <span className="text-[6px] mt-0.5 inline-block" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                {customCodes.length + discountCoupons.length} active
+                              </span>
+                            </button>
+                            <button onClick={() => setAdminTab('users')}
+                              className="p-2 rounded-lg text-center transition-transform active:scale-95"
+                              style={{ backgroundColor: 'rgba(124,77,255,0.08)', border: '1px solid rgba(124,77,255,0.15)' }}>
+                              <span className="text-lg block">👥</span>
+                              <p className="text-[7px] font-bold mt-1" style={{ color: '#7C4DFF' }}>Users</p>
+                              <span className="text-[6px] mt-0.5 inline-block" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                {bannedUsers.length} banned
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Recent Pending Orders */}
+                        {pendingOrderCount > 0 && (
+                          <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <p className="text-[9px] font-bold" style={{ color: '#F65E3B' }}>
+                                🔔 Pending Orders ({pendingOrderCount})
+                              </p>
+                              <button onClick={() => setAdminTab('payments')}
+                                className="text-[8px] font-bold px-2 py-0.5 rounded-lg"
+                                style={{ backgroundColor: 'rgba(246,94,59,0.1)', color: '#F65E3B' }}>
+                                View All →
+                              </button>
+                            </div>
+                            <div className="space-y-1.5 max-h-48 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                              {pendingPurchases.slice(0, 5).map(entry => (
+                                <div key={entry.id} className="flex items-center justify-between px-2.5 py-2 rounded-lg"
+                                  style={{ backgroundColor: 'rgba(246,94,59,0.04)', border: '1px solid rgba(246,94,59,0.12)' }}>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[9px] font-bold truncate" style={{ color: '#FFFFFF' }}>{entry.item}</p>
+                                    <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                      {entry.amount} • {entry.buyerName || 'Unknown'}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <button
+                                      onClick={() => handleApprovePurchase(entry)}
+                                      className="px-2 py-1 rounded text-[7px] font-bold transition-transform active:scale-95"
+                                      style={{ backgroundColor: 'rgba(0,230,118,0.15)', color: '#00E676' }}>
+                                      ✓ Approve
+                                    </button>
+                                    <button
+                                      onClick={() => handleDenyPurchase(entry)}
+                                      className="px-2 py-1 rounded text-[7px] font-bold transition-transform active:scale-95"
+                                      style={{ backgroundColor: 'rgba(246,94,59,0.15)', color: '#F65E3B' }}>
+                                      ✗ Deny
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Active Discount Coupons Summary */}
+                        {discountCoupons.length > 0 && (
+                          <div>
+                            <p className="text-[9px] font-bold mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                              💸 Active Discount Coupons ({discountCoupons.filter(c => !c.disabled).length})
+                            </p>
+                            <div className="space-y-1 max-h-32 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                              {discountCoupons.filter(c => !c.disabled).slice(0, 5).map(c => (
+                                <div key={c.code} className="flex items-center justify-between px-2 py-1.5 rounded-lg"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                  <div>
+                                    <p className="text-[9px] font-bold font-mono" style={{ color: '#EDC22E' }}>{c.code}</p>
+                                    <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                      {c.discountPercent}% off • Uses: {c.currentUses}/{c.maxUses}
+                                      {c.targetUserIds.length > 0 ? ` • ${c.targetUserIds.length} targeted` : ' • All users'}
+                                    </p>
+                                  </div>
+                                  <span className="text-[10px] font-bold" style={{ color: '#FF6D00' }}>-{c.discountPercent}%</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Referral Stats */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(124,77,255,0.06)', border: '1px solid rgba(124,77,255,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <ThumbsUp className="w-3 h-3" style={{ color: '#7C4DFF' }} />
+                            <p className="text-[9px] font-bold" style={{ color: '#7C4DFF' }}>Referral Stats</p>
+                          </div>
+                          <p className="text-lg font-bold" style={{ color: '#7C4DFF' }}>{totalReferrals}</p>
+                          <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Total referrals across all users</p>
+                        </div>
+                      </div>
+                    )}
+
                     {/* ====== PAYMENTS TAB ====== */}
                     {adminTab === 'payments' && (
                       <div className="space-y-2">
@@ -2193,6 +2497,199 @@ export function CouponCode({
                             </div>
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* ====== DISCOUNT COUPONS SECTION (in Coupons tab) ====== */}
+                    {adminTab === 'coupons' && (
+                      <div className="space-y-3 mt-3">
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(255,109,0,0.06)', border: '1px solid rgba(255,109,0,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Percent className="w-3 h-3" style={{ color: '#FF6D00' }} />
+                            <p className="text-[9px] font-bold" style={{ color: '#FF6D00' }}>Discount Coupons</p>
+                            <span className="text-[7px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,109,0,0.12)', color: '#FF6D00' }}>
+                              {discountCoupons.length} total
+                            </span>
+                          </div>
+
+                          {/* Create new discount coupon */}
+                          <div className="space-y-1.5 mb-3 p-2 rounded-lg"
+                            style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,109,0,0.2)' }}>
+                            <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Create Discount Coupon</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Code:</p>
+                              <input
+                                type="text"
+                                value={newDiscountCode}
+                                onChange={(e) => setNewDiscountCode(e.target.value.toUpperCase())}
+                                placeholder="e.g. SAVE20"
+                                className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              />
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Discount:</p>
+                              <input
+                                type="number"
+                                value={newDiscountPercent}
+                                onChange={(e) => setNewDiscountPercent(parseInt(e.target.value) || 0)}
+                                min={1}
+                                max={100}
+                                className="w-16 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FF6D00' }}
+                              />
+                              <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>% off</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Min ₹:</p>
+                              <input
+                                type="number"
+                                value={newDiscountMinPurchase}
+                                onChange={(e) => setNewDiscountMinPurchase(parseInt(e.target.value) || 0)}
+                                min={0}
+                                className="w-16 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              />
+                              <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>0 = no minimum</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Max Uses:</p>
+                              <input
+                                type="number"
+                                value={newDiscountMaxUses}
+                                onChange={(e) => setNewDiscountMaxUses(parseInt(e.target.value) || 1)}
+                                min={1}
+                                className="w-16 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              />
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Targets:</p>
+                              <input
+                                type="text"
+                                value={newDiscountTargetUsers}
+                                onChange={(e) => setNewDiscountTargetUsers(e.target.value)}
+                                placeholder="User IDs (comma-separated) or empty for all"
+                                className="flex-1 px-2 py-1 rounded-lg text-[7px] font-semibold outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              />
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Desc:</p>
+                              <input
+                                type="text"
+                                value={newDiscountDescription}
+                                onChange={(e) => setNewDiscountDescription(e.target.value)}
+                                placeholder="Optional description"
+                                className="flex-1 px-2 py-1 rounded-lg text-[7px] font-semibold outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              />
+                            </div>
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={newDiscountOneTime}
+                                onChange={(e) => setNewDiscountOneTime(e.target.checked)}
+                                className="w-3 h-3 accent-orange-500"
+                              />
+                              <span className="text-[7px] font-semibold" style={{ color: '#FF6D00' }}>One-time use per user</span>
+                            </label>
+                            <button
+                              onClick={handleCreateDiscountCoupon}
+                              disabled={!newDiscountCode.trim()}
+                              className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                              style={{
+                                background: newDiscountCode.trim() ? 'linear-gradient(135deg, #FF6D00, #FF9100)' : 'rgba(255,255,255,0.06)',
+                                color: newDiscountCode.trim() ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
+                                boxShadow: newDiscountCode.trim() ? '0 2px 10px rgba(255,109,0,0.3)' : 'none',
+                              }}
+                            >
+                              💸 CREATE DISCOUNT COUPON
+                            </button>
+                          </div>
+
+                          {/* Discount coupon list */}
+                          {discountCoupons.length > 0 ? (
+                            <div className="space-y-1 max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                              {discountCoupons.map(c => (
+                                <div key={c.code} className="p-2 rounded-lg"
+                                  style={{
+                                    backgroundColor: c.disabled ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.03)',
+                                    border: `1px solid ${c.disabled ? 'rgba(255,255,255,0.04)' : 'rgba(255,109,0,0.15)'}`,
+                                    opacity: c.disabled ? 0.5 : 1,
+                                  }}>
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="text-[9px] font-bold font-mono" style={{ color: c.disabled ? 'rgba(255,255,255,0.3)' : '#FF6D00' }}>{c.code}</p>
+                                        <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full"
+                                          style={{ backgroundColor: 'rgba(255,109,0,0.12)', color: '#FF6D00' }}>
+                                          -{c.discountPercent}%
+                                        </span>
+                                        {c.oneTime && (
+                                          <span className="text-[6px] px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(237,194,46,0.1)', color: '#EDC22E' }}>1x ONLY</span>
+                                        )}
+                                        {c.disabled && (
+                                          <span className="text-[6px] px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(246,94,59,0.1)', color: '#F65E3B' }}>DISABLED</span>
+                                        )}
+                                        {c.createdBy === 'system' && (
+                                          <span className="text-[6px] px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(0,230,118,0.1)', color: '#00E676' }}>AUTO</span>
+                                        )}
+                                      </div>
+                                      <p className="text-[7px] mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                        {c.description}
+                                        {c.minPurchase > 0 && ` • Min: ₹${c.minPurchase}`}
+                                        {' • Uses: '}{c.currentUses}/{c.maxUses}
+                                      </p>
+                                      {c.targetUserIds.length > 0 && (
+                                        <p className="text-[7px]" style={{ color: 'rgba(124,77,255,0.8)' }}>
+                                          🎯 Targeted: {c.targetUserIds.slice(0, 3).join(', ')}{c.targetUserIds.length > 3 ? ` +${c.targetUserIds.length - 3} more` : ''}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button
+                                        onClick={() => handleToggleDiscountCoupon(c.code)}
+                                        className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-95"
+                                        style={{ backgroundColor: c.disabled ? 'rgba(0,230,118,0.1)' : 'rgba(237,194,46,0.1)', border: `1px solid ${c.disabled ? 'rgba(0,230,118,0.2)' : 'rgba(237,194,46,0.2)'}` }}
+                                        title={c.disabled ? 'Enable' : 'Disable'}
+                                      >
+                                        <span className="text-[8px]">{c.disabled ? '▶️' : '⏸️'}</span>
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          // Send notification to targeted users
+                                          if (c.targetUserIds.length > 0) {
+                                            onAddNotification('New Coupon Available! 🎟️', `You have a ${c.discountPercent}% off coupon: ${c.code}! ${c.description}`, 'reward', '💸')
+                                          }
+                                        }}
+                                        className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-95"
+                                        style={{ backgroundColor: 'rgba(124,77,255,0.1)', border: '1px solid rgba(124,77,255,0.2)' }}
+                                        title="Notify targeted users"
+                                      >
+                                        <Send className="w-2.5 h-2.5" style={{ color: '#7C4DFF' }} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteDiscountCoupon(c.code)}
+                                        className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-95"
+                                        style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)' }}
+                                        title="Delete coupon"
+                                      >
+                                        <Trash2 className="w-2.5 h-2.5" style={{ color: '#F65E3B' }} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center py-3">
+                              <span className="text-xl block mb-1">💸</span>
+                              <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No discount coupons yet</p>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -3040,6 +3537,7 @@ export function CouponCode({
                 backdropFilter: 'blur(10px)'
               }}>
               {[
+                { key: 'dashboard' as AdminTab, icon: '📊', label: 'Home' },
                 { key: 'payments' as AdminTab, icon: '💳', label: 'Pay' },
                 { key: 'coupons' as AdminTab, icon: '🎟️', label: 'Coupon' },
                 { key: 'prices' as AdminTab, icon: '💰', label: 'Price' },
@@ -3048,9 +3546,9 @@ export function CouponCode({
                 { key: 'partner' as AdminTab, icon: '🤝', label: 'Partner' },
               ].filter(t => {
                 if (!partnerMode) return true
-                if (partnerRole?.startsWith('PAY')) return t.key === 'payments'
-                if (partnerRole?.startsWith('SKILL')) return t.key === 'prices'
-                if (partnerRole?.startsWith('COUPON')) return t.key === 'coupons'
+                if (partnerRole?.startsWith('PAY')) return t.key === 'payments' || t.key === 'dashboard'
+                if (partnerRole?.startsWith('SKILL')) return t.key === 'prices' || t.key === 'dashboard'
+                if (partnerRole?.startsWith('COUPON')) return t.key === 'coupons' || t.key === 'dashboard'
                 return false
               }).map((t) => (
                 <button
@@ -3067,7 +3565,7 @@ export function CouponCode({
                     {t.label}
                   </span>
                   {t.key === 'payments' && pendingPurchases.length > 0 && (
-                    <span className="text-[6px] px-1 rounded-full absolute -top-1 -right-1" style={{ backgroundColor: '#F65E3B', color: '#FFFFFF' }}>
+                    <span className="text-[6px] px-1 rounded-full" style={{ backgroundColor: '#F65E3B', color: '#FFFFFF', position: 'absolute', top: -2, right: -2 }}>
                       {pendingPurchases.length}
                     </span>
                   )}

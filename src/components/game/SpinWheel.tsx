@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Play, Tv } from 'lucide-react'
 import { SpinWheelAd } from '@/components/ads/AdOverlay'
@@ -53,7 +53,7 @@ function pickPrize(): { index: number; prize: SpinPrize } {
   return { index: 0, prize: { ...PRIZE_POOL[0].prize } }
 }
 
-const SPIN_COUNTS = [1, 2, 3, 5, 10]
+const SPIN_COUNTS = [1, 5, 10]
 
 export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPrize, onWatchAdForSpin, isOnline, coins, onDeductCoins }: SpinWheelProps) {
   const [spinning, setSpinning] = useState(false)
@@ -68,9 +68,27 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
   const timeoutRefs = useRef<ReturnType<typeof setTimeout>[]>([])
 
   const COIN_COST_PER_SPIN = 150
-  const totalSpins = spinMultiplier === 10 ? 12 : spinMultiplier
-  const ticketCost = spinMultiplier
-  const coinCost = spinMultiplier * COIN_COST_PER_SPIN
+  // How many single spins can user afford with current coins
+  const affordableSpins = Math.floor(coins / COIN_COST_PER_SPIN)
+  // How many ticket spins can user afford
+  const affordableTicketSpins = spinTickets
+
+  // Compute the effective multiplier: if user can't afford selected, fall back to highest affordable
+  const effectiveMultiplier = useMemo(() => {
+    const canAfford = spinMode === 'ticket' ? spinTickets >= spinMultiplier : coins >= spinMultiplier * COIN_COST_PER_SPIN
+    if (canAfford) return spinMultiplier
+    // Find the highest affordable option
+    for (let i = SPIN_COUNTS.length - 1; i >= 0; i--) {
+      const count = SPIN_COUNTS[i]
+      const affordable = spinMode === 'ticket' ? spinTickets >= count : coins >= count * COIN_COST_PER_SPIN
+      if (affordable) return count
+    }
+    return 1
+  }, [spinMode, spinMultiplier, spinTickets, coins])
+
+  const totalSpins = effectiveMultiplier === 10 ? 12 : effectiveMultiplier
+  const ticketCost = effectiveMultiplier
+  const coinCost = effectiveMultiplier * COIN_COST_PER_SPIN
   const canAffordSpin = spinMode === 'ticket' ? spinTickets >= ticketCost : coins >= coinCost
 
   // Clear pending timeouts to prevent stale state after close
@@ -118,7 +136,7 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
 
     setRotation(targetRotation)
 
-    if (spinMultiplier === 1) {
+    if (effectiveMultiplier === 1) {
       // Single spin: the visual result IS the prize
       const t1 = setTimeout(() => {
         setResult(visualWin)
@@ -148,7 +166,7 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
       }, 2500)
       timeoutRefs.current.push(t2)
     }
-  }, [canAffordSpin, spinning, spinMode, onUseTicket, onDeductCoins, rotation, spinMultiplier, ticketCost, coinCost, totalSpins, clearPendingTimeouts])
+  }, [canAffordSpin, spinning, spinMode, onUseTicket, onDeductCoins, rotation, effectiveMultiplier, ticketCost, coinCost, totalSpins, clearPendingTimeouts])
 
   const handleClaim = useCallback(() => {
     if (!result) return
@@ -242,31 +260,33 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
                       color: spinMode === 'coin' ? '#EDC22E' : 'rgba(255,255,255,0.5)',
                     }}
                   >
-                    🪙 Coin Spin (150)
+                    🪙 Coin Spin (150/spin)
                   </button>
                 </div>
 
                 <p className="text-center text-xs mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>
                   {spinMode === 'ticket' ? (
-                    <>Tickets: <span style={{ color: '#EDC22E', fontWeight: 'bold' }}>{spinTickets}</span></>
+                    <>Tickets: <span style={{ color: '#EDC22E', fontWeight: 'bold' }}>{spinTickets}</span> • Available spins: <span style={{ color: '#00E676', fontWeight: 'bold' }}>{affordableTicketSpins}</span></>
                   ) : (
-                    <>Coins: <span style={{ color: '#EDC22E', fontWeight: 'bold' }}>{coins}</span></>
+                    <>Coins: <span style={{ color: '#EDC22E', fontWeight: 'bold' }}>{coins}</span> • Available spins: <span style={{ color: '#00E676', fontWeight: 'bold' }}>{affordableSpins}</span></>
                   )}
                 </p>
 
                 {/* Spin Multiplier Selector */}
                 {!hasResult && !spinning && (
-                  <div className="flex items-center justify-center gap-1.5 mb-3">
+                  <div className="flex items-center justify-center gap-2 mb-3">
                     {SPIN_COUNTS.map(count => {
-                      const isActive = spinMultiplier === count
+                      const isActive = effectiveMultiplier === count
                       const isBonus = count === 10
                       const canAfford = spinMode === 'ticket' ? spinTickets >= count : coins >= count * COIN_COST_PER_SPIN
-                      const costLabel = spinMode === 'ticket' ? `${count}🎫` : `${count * COIN_COST_PER_SPIN}🪙`
+                      const costLabel = spinMode === 'ticket'
+                        ? `${count}🎫`
+                        : count === 10 ? '1500🪙' : `${count * COIN_COST_PER_SPIN}🪙`
                       return (
                         <button
                           key={count}
                           onClick={() => canAfford && setSpinMultiplier(count)}
-                          className="relative flex flex-col items-center px-2 py-1 rounded-lg transition-all"
+                          className="relative flex flex-col items-center px-3 py-1.5 rounded-lg transition-all"
                           style={{
                             backgroundColor: isActive ? 'rgba(237,194,46,0.2)' : canAfford ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.02)',
                             border: isActive ? '1px solid rgba(237,194,46,0.5)' : canAfford ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.04)',
@@ -274,11 +294,13 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
                             transform: isActive ? 'scale(1.05)' : 'scale(1)',
                           }}
                         >
-                          <span className="text-[10px] font-extrabold" style={{ color: isActive ? '#EDC22E' : 'rgba(255,255,255,0.6)' }}>{count}x</span>
+                          <span className="text-[10px] font-extrabold" style={{ color: isActive ? '#EDC22E' : 'rgba(255,255,255,0.6)' }}>
+                            {isBonus ? '10+2' : `${count}`}x
+                          </span>
                           <span className="text-[7px]" style={{ color: isActive ? 'rgba(237,194,46,0.7)' : 'rgba(255,255,255,0.3)' }}>{costLabel}</span>
                           {isBonus && (
-                            <span className="absolute -top-1.5 -right-1 text-[6px] font-bold px-1 rounded-full" style={{ backgroundColor: '#F65E3B', color: '#FFFFFF' }}>
-                              +2
+                            <span className="absolute -top-1.5 -right-1 text-[6px] font-bold px-1 rounded-full" style={{ backgroundColor: '#00E676', color: '#FFFFFF' }}>
+                              FREE
                             </span>
                           )}
                         </button>
@@ -288,12 +310,20 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
                 )}
 
                 {/* Multi-spin info */}
-                {!hasResult && !spinning && spinMultiplier > 1 && (
+                {!hasResult && !spinning && effectiveMultiplier > 1 && (
                   <p className="text-center text-[10px] mb-2" style={{ color: '#00E676' }}>
                     {spinMode === 'ticket'
-                      ? (spinMultiplier === 10 ? '10 tickets = 12 spins! (+2 FREE)' : `${spinMultiplier} spins for ${spinMultiplier} tickets`)
-                      : (spinMultiplier === 10 ? `${coinCost} coins = 12 spins! (+2 FREE)` : `${spinMultiplier} spins for ${coinCost} coins`)
+                      ? (effectiveMultiplier === 10 ? '10 tickets = 12 spins! (+2 FREE 🎉)' : `${effectiveMultiplier} spins for ${effectiveMultiplier} tickets`)
+                      : (effectiveMultiplier === 10 ? '1,500 coins = 12 spins! (+2 FREE 🎉)' : `${effectiveMultiplier} spins for ${coinCost} coins`)
                     }
+                  </p>
+                )}
+
+                {/* Available spins info */}
+                {!hasResult && !spinning && spinMode === 'coin' && (
+                  <p className="text-center text-[9px] mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    Your coins can buy up to <span style={{ color: '#EDC22E', fontWeight: 'bold' }}>{affordableSpins}</span> spin{affordableSpins !== 1 ? 's' : ''}
+                    {affordableSpins >= 10 && <span style={{ color: '#00E676' }}> (10+2 FREE deal available!)</span>}
                   </p>
                 )}
 
@@ -432,7 +462,7 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
                     style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}
                   >
                     <Play className="w-4 h-4" />
-                    {spinning ? 'Spinning...' : `SPIN ${spinMultiplier > 1 ? `${totalSpins}x ` : ''}(${spinMode === 'ticket' ? `${ticketCost} 🎫` : `${coinCost} 🪙`})`}
+                    {spinning ? 'Spinning...' : `SPIN ${effectiveMultiplier > 1 ? `${totalSpins}x ` : ''}(${spinMode === 'ticket' ? `${ticketCost} 🎫` : `${coinCost} 🪙`})`}
                   </button>
                 )}
 

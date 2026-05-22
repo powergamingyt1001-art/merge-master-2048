@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { syncPlayerToFirebase, processReferral, processCommissionForReferrer, getReferrals, onReferralsUpdate, getCommissionNotifications, claimCommissionNotification, type FirebaseReferral } from '@/lib/firebase-service'
+import { syncPlayerToFirebase, processReferral, processCommissionForReferrer, getReferrals, onReferralsUpdate, getCommissionNotifications, claimCommissionNotification, type FirebaseReferral, joinMatchmaking, leaveMatchmaking, findMatch, onMatchmakingUpdate, cleanupStaleMatchmaking, createBattle, joinBattle, onBattleUpdate, updateBattleScore, finishBattle, leaveBattle as firebaseLeaveBattle, markMatched, type MatchmakingEntry, type FirebaseBattle } from '@/lib/firebase-service'
 
 export type Direction = 'up' | 'down' | 'left' | 'right'
 export type PowerUp = 'hammer' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x' | 'extraTime'
@@ -34,7 +34,7 @@ export interface Notification {
   id: string
   title: string
   message: string
-  type: 'reward' | 'rank' | 'invite' | 'commission' | 'system' | 'battle'
+  type: 'reward' | 'rank' | 'invite' | 'commission' | 'system' | 'battle' | 'friend_request'
   emoji: string
   timestamp: string
   read: boolean
@@ -145,7 +145,7 @@ export interface GameState {
   tournamentPoints: number
   tournamentCarryOver: number
   tournamentGamesPlayed: number
-  levelXP: number // Skill Points from tournament games (1 point per game, 3 points = 1 SP/levelXP)
+  levelXP: number // XP from SP conversion (3 SP = 1 XP), determines player level via calculateLevel
   // Game history
   gameHistory: GameHistoryEntry[]
   // Weekly bonus
@@ -169,6 +169,18 @@ export interface GameState {
   totalCoinsEarned: number
   // Room Card resource for Room Fight feature
   roomCardCount: number
+  // SP/XP Leveling System
+  skillPoints: number // Accumulated SP with decimal precision (e.g., 1.5, 3.0)
+  spRemainder: number // Fractional SP remainder after 3 SP → 1 XP conversion
+  // Timer ability tracking
+  timerAbilitiesUsed: number // Count of timer abilities used in current game
+  gameTimeElapsed: number // Seconds elapsed in current game (for timer ability cooldown)
+  // Real-time battle (Firebase matchmaking)
+  realTimeBattleId: string | null // Firebase battle ID when matched with real player
+  realTimePlayerField: 'player1' | 'player2' | null // Which player slot we are
+  realTimeOpponentScore: number // Opponent's live score from Firebase
+  realTimeOpponentFinished: boolean // Opponent finished the game
+  isRealTimeBattle: boolean // Whether this is a real-time battle vs real player
 }
 
 const BOT_NAMES = [
@@ -432,9 +444,12 @@ function generateFairBotScore(playerScore: number): number {
 
 // ============================================================
 // LEVEL SYSTEM - 1000 Levels, based on LEVEL XP (SP)
-// Score in tournament game = 1 point (regardless of score)
-// 3 points = 1 SP (Skill Point / Level Point)
-// So you need 3 tournament games to get 1 SP/level point
+// SP earning rate based on level:
+//   Lv 1-20:   Every 100 tournament score = 1 SP
+//   Lv 21-50:  Every 100 tournament score = 1.5 SP
+//   Lv 51-150: Every 100 tournament score = 2 SP
+//   Lv 150+:   Every 100 tournament score = 3 SP
+// Every 3 SP = 1 XP (levelXP), remainder carries over
 // levelXP never resets on weekly tournament reset
 // Every 5 levels: guaranteed coins + 2 random items from:
 //   boom, 100 coin, magnet, timer, hammer, undo, 500 coin, 250 coin
@@ -442,6 +457,14 @@ function generateFairBotScore(playerScore: number): number {
 // ============================================================
 
 export const MAX_LEVEL = 1000
+
+// SP earning rate per 100 tournament score based on player level
+export function getSPPerHundredScore(level: number): number {
+  if (level <= 20) return 1
+  if (level <= 50) return 1.5
+  if (level <= 150) return 2
+  return 3
+}
 
 // Original titles/icons/colors for levels 1-50 (backward compatible)
 const ORIGINAL_TITLES = [
@@ -758,6 +781,15 @@ export function useGame() {
       totalCoinsEarned: 0,
       roomCardCount: 0,
       streakWeek: 1,
+      skillPoints: 0,
+      spRemainder: 0,
+      timerAbilitiesUsed: 0,
+      gameTimeElapsed: 0,
+      realTimeBattleId: null,
+      realTimePlayerField: null,
+      realTimeOpponentScore: 0,
+      realTimeOpponentFinished: false,
+      isRealTimeBattle: false,
     }
 
     if (!saved) {
@@ -945,6 +977,15 @@ export function useGame() {
       totalCoinsEarned: saved.totalCoinsEarned ?? 0,
       roomCardCount: saved.roomCardCount ?? 0,
       streakWeek: saved.streakWeek ?? 1,
+      skillPoints: saved.skillPoints ?? 0,
+      spRemainder: saved.spRemainder ?? 0,
+      timerAbilitiesUsed: 0,
+      gameTimeElapsed: 0,
+      realTimeBattleId: null,
+      realTimePlayerField: null,
+      realTimeOpponentScore: 0,
+      realTimeOpponentFinished: false,
+      isRealTimeBattle: false,
     }
   })
 
@@ -1003,9 +1044,11 @@ export function useGame() {
       totalCoinsEarned: state.totalCoinsEarned,
       roomCardCount: state.roomCardCount,
       streakWeek: state.streakWeek,
+      skillPoints: state.skillPoints,
+      spRemainder: state.spRemainder,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount, state.userCode, state.totalCoinsEarned, state.roomCardCount, state.streakWeek])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount, state.userCode, state.totalCoinsEarned, state.roomCardCount, state.streakWeek, state.skillPoints, state.spRemainder])
 
   // ============================================================
   // FIREBASE SYNC - Sync player data to Firebase RTDB
@@ -1286,41 +1329,53 @@ export function useGame() {
       let botOpponent = prev.botOpponent // Will be updated with final score at game end
 
       // Bot battle check - generate fair bot score at game end
-      if (prev.gameMode === 'bot' && prev.botOpponent && !botBattleResult) {
-        if (isGameOver) {
+      // For real-time battles, score comparison is handled by Firebase listener
+      if (!prev.isRealTimeBattle) {
+        if (prev.gameMode === 'bot' && prev.botOpponent && !botBattleResult) {
+          if (isGameOver) {
+            const botFinalScore = generateFairBotScore(newScore)
+            botBattleResult = newScore > botFinalScore ? 'win' : 'lose'
+            botOpponent = { ...prev.botOpponent, finalScore: botFinalScore }
+            totalBattlesPlayed++
+            if (botBattleResult === 'win') {
+              modBestScore = Math.max(modBestScore, newScore)
+              totalBattlesWon++
+            }
+          }
+        }
+
+        // Coin game mode check - generate fair bot score at game end
+        if (prev.gameMode === 'coins' && isGameOver) {
+          const botFinalScore = generateFairBotScore(newScore)
+          coinGameWon = newScore > botFinalScore ? true : false
+          botBattleResult = coinGameWon ? 'win' : 'lose'
+          botOpponent = prev.botOpponent ? { ...prev.botOpponent, finalScore: botFinalScore } : null
+          totalBattlesPlayed++
+          if (coinGameWon) {
+            modBestScore = Math.max(modBestScore, newScore)
+            totalBattlesWon++
+          }
+        }
+
+        // Tournament mode check - generate fair bot score at game end
+        if (prev.gameMode === 'tournament' && isGameOver) {
           const botFinalScore = generateFairBotScore(newScore)
           botBattleResult = newScore > botFinalScore ? 'win' : 'lose'
-          botOpponent = { ...prev.botOpponent, finalScore: botFinalScore }
+          botOpponent = prev.botOpponent ? { ...prev.botOpponent, finalScore: botFinalScore } : null
           totalBattlesPlayed++
           if (botBattleResult === 'win') {
             modBestScore = Math.max(modBestScore, newScore)
             totalBattlesWon++
           }
         }
-      }
-
-      // Coin game mode check - generate fair bot score at game end
-      if (prev.gameMode === 'coins' && isGameOver) {
-        const botFinalScore = generateFairBotScore(newScore)
-        coinGameWon = newScore > botFinalScore ? true : false
-        botBattleResult = coinGameWon ? 'win' : 'lose'
-        botOpponent = prev.botOpponent ? { ...prev.botOpponent, finalScore: botFinalScore } : null
-        totalBattlesPlayed++
-        if (coinGameWon) {
-          modBestScore = Math.max(modBestScore, newScore)
-          totalBattlesWon++
-        }
-      }
-
-      // Tournament mode check - generate fair bot score at game end
-      if (prev.gameMode === 'tournament' && isGameOver) {
-        const botFinalScore = generateFairBotScore(newScore)
-        botBattleResult = newScore > botFinalScore ? 'win' : 'lose'
-        botOpponent = prev.botOpponent ? { ...prev.botOpponent, finalScore: botFinalScore } : null
-        totalBattlesPlayed++
-        if (botBattleResult === 'win') {
-          modBestScore = Math.max(modBestScore, newScore)
-          totalBattlesWon++
+      } else {
+        // Real-time battle: when game is over, finish the battle in Firebase
+        // The actual result will come from the Firebase listener
+        if (isGameOver && prev.realTimeBattleId) {
+          const opponentField = prev.realTimePlayerField === 'player1' ? 'player2' : 'player1'
+          const winnerId = newScore > prev.realTimeOpponentScore ? prev.playerId : 'opponent'
+          finishBattle(prev.realTimeBattleId, winnerId).catch(() => {/* silent */})
+          botOpponent = prev.botOpponent ? { ...prev.botOpponent, finalScore: prev.realTimeOpponentScore } : null
         }
       }
 
@@ -1356,7 +1411,53 @@ export function useGame() {
         totalBattlesWon,
       }
     })
+
+    // Sync score to Firebase in real-time battle (fire-and-forget, outside setState)
+    // We read the new score from the state update and push it asynchronously
+    // This is done via a separate effect that watches state.score when in real-time battle
+
+    return undefined as unknown as void
   }, [])
+
+  // Sync score to Firebase during real-time battle
+  useEffect(() => {
+    if (!state.isRealTimeBattle || !state.realTimeBattleId || !state.realTimePlayerField) return
+    if (state.score > 0 || state.gameOver) {
+      updateBattleScore(state.realTimeBattleId, state.realTimePlayerField, state.score, state.gameOver).catch(() => {/* silent */})
+    }
+  }, [state.score, state.gameOver, state.isRealTimeBattle, state.realTimeBattleId, state.realTimePlayerField])
+
+  // Listen for opponent's score in real-time battle
+  useEffect(() => {
+    if (!state.isRealTimeBattle || !state.realTimeBattleId || !state.realTimePlayerField) return
+    const opponentField = state.realTimePlayerField === 'player1' ? 'player2' : 'player1'
+    const unsubscribe = onBattleUpdate(state.realTimeBattleId, (battle) => {
+      if (!battle) return
+      const opponent = battle[opponentField]
+      if (opponent) {
+        updateRealTimeOpponentScore(opponent.score, opponent.finished)
+      }
+      // If battle is finished and we haven't set our result yet
+      if (battle.status === 'finished' && !state.botBattleResult) {
+        const winnerId = battle.winnerId
+        const isWin = winnerId === state.playerId
+        setState(prev => {
+          if (prev.botBattleResult) return prev // Already resolved
+          return {
+            ...prev,
+            botBattleResult: isWin ? 'win' : 'lose',
+            botOpponent: prev.botOpponent ? { ...prev.botOpponent, finalScore: prev.realTimeOpponentScore } : null,
+            coinGameWon: prev.gameMode === 'coins' ? isWin : null,
+            gameOver: true,
+            totalBattlesPlayed: prev.totalBattlesPlayed + 1,
+            totalBattlesWon: isWin ? prev.totalBattlesWon + 1 : prev.totalBattlesWon,
+            modBestScore: isWin ? Math.max(prev.modBestScore, prev.score) : prev.modBestScore,
+          }
+        })
+      }
+    })
+    return unsubscribe
+  }, [state.isRealTimeBattle, state.realTimeBattleId, state.realTimePlayerField, state.playerId, state.botBattleResult, updateRealTimeOpponentScore])
 
   const undo = useCallback(() => {
     setState(prev => {
@@ -1394,9 +1495,18 @@ export function useGame() {
         return { ...prev, activeMultiplier: 2.5, multiplierTimeLeft: 10, multiplier2_5xCount: prev.multiplier2_5xCount - 1, activePowerUp: null }
       }
       if (pu === 'extraTime') {
+        // Timer ability: only usable after 20 seconds have been spent in the game
+        if (prev.gameTimeElapsed < 20) return prev
         const isBattleMode = prev.gameMode === 'bot' || prev.gameMode === 'coins' || prev.gameMode === 'tournament'
-        if (!isBattleMode) return prev
-        return { ...prev, battleTimer: prev.battleTimer + 10, battleTimeLimit: prev.battleTimeLimit + 10, extraTimeCount: prev.extraTimeCount - 1, activePowerUp: null }
+        // In battle/tournament mode: max 2 timer abilities per game
+        if (isBattleMode && prev.timerAbilitiesUsed >= 2) return prev
+        if (!isBattleMode) {
+          // Classic mode: unlimited timer abilities (but no battle timer to extend)
+          // For classic mode, we still consume the item but it has no timer effect
+          // Actually, classic mode has no timer, so timer ability doesn't apply
+          return prev
+        }
+        return { ...prev, battleTimer: prev.battleTimer + 10, battleTimeLimit: prev.battleTimeLimit + 10, extraTimeCount: prev.extraTimeCount - 1, activePowerUp: null, timerAbilitiesUsed: prev.timerAbilitiesUsed + 1 }
       }
 
       if (pu === 'blast') {
@@ -1480,6 +1590,13 @@ export function useGame() {
       coinGameWon: null,
       activeMultiplier: 1,
       multiplierTimeLeft: 0,
+      timerAbilitiesUsed: 0,
+      gameTimeElapsed: 0,
+      realTimeBattleId: null,
+      realTimePlayerField: null,
+      realTimeOpponentScore: 0,
+      realTimeOpponentFinished: false,
+      isRealTimeBattle: false,
     }))
   }, [])
 
@@ -1519,6 +1636,13 @@ export function useGame() {
         coinGameWon: null,
         activeMultiplier: 1,
         multiplierTimeLeft: 0,
+        timerAbilitiesUsed: 0,
+        gameTimeElapsed: 0,
+        realTimeBattleId: null,
+        realTimePlayerField: null,
+        realTimeOpponentScore: 0,
+        realTimeOpponentFinished: false,
+        isRealTimeBattle: false,
       }
     })
   }, [])
@@ -1559,11 +1683,128 @@ export function useGame() {
         coinGameWon: null,
         activeMultiplier: 1,
         multiplierTimeLeft: 0,
+        timerAbilitiesUsed: 0,
+        gameTimeElapsed: 0,
         gamesPlayedToday: gamesToday + 1,
         lastPlayDate: today,
+        realTimeBattleId: null,
+        realTimePlayerField: null,
+        realTimeOpponentScore: 0,
+        realTimeOpponentFinished: false,
+        isRealTimeBattle: false,
       }
     })
   }, [])
+
+  // Start a real-time battle with a matched player (from Firebase matchmaking)
+  // board is the shared 4x4 grid from Firebase, battleId is the Firebase battle ID
+  const startRealTimeBattle = useCallback((
+    opponent: { id: string; name: string; avatar: string; level: number },
+    battleId: string,
+    playerField: 'player1' | 'player2',
+    board: number[][] | null,
+    gameMode: 'bot' | 'coins',
+    coinEntryFee: number = 0,
+    timeLimit: number = 120,
+  ) => {
+    prevState.current = null
+    setState(prev => {
+      const today = getTodayStr()
+      const gamesToday = prev.lastPlayDate === today ? prev.gamesPlayedToday : 0
+      if (gamesToday >= prev.maxGamesPerDay) return prev
+      if (gameMode === 'coins' && prev.coins < coinEntryFee) return prev
+
+      // Reconstruct tiles from shared board, or generate new ones if no board
+      let tiles: Tile[]
+      if (board) {
+        tileId = 0
+        tiles = []
+        for (let r = 0; r < 4; r++) {
+          for (let c = 0; c < 4; c++) {
+            const val = board[r]?.[c]
+            if (val && val > 0) {
+              tiles.push({ id: getNextId(), value: val, row: r, col: c, isNew: false, isMerged: false, flash: false })
+            }
+          }
+        }
+        // If board is empty or invalid, fall back to fresh tiles
+        if (tiles.length === 0) {
+          tiles = initTiles()
+        }
+      } else {
+        tiles = initTiles()
+      }
+
+      const opponentForState: BotOpponent = {
+        name: opponent.name,
+        avatar: opponent.avatar,
+        finalScore: 0,
+      }
+
+      return {
+        ...prev,
+        tiles,
+        score: 0,
+        gameOver: false,
+        won: false,
+        keepPlaying: false,
+        canUndo: false,
+        undoCount: 0,
+        lives: prev.maxLives,
+        activePowerUp: null,
+        gameMode: gameMode,
+        botOpponent: opponentForState,
+        botBattleResult: null,
+        battleTimer: timeLimit,
+        battleTimeLimit: timeLimit,
+        timerPaused: false,
+        countdownActive: true,
+        countdownSecondsLeft: 3,
+        consecutiveMerges: 0,
+        comboBonus: 0,
+        gamesPlayedToday: gamesToday + 1,
+        lastPlayDate: today,
+        coinEntryFee: coinEntryFee,
+        coinGameWon: null,
+        activeMultiplier: 1,
+        multiplierTimeLeft: 0,
+        timerAbilitiesUsed: 0,
+        gameTimeElapsed: 0,
+        coins: gameMode === 'coins' ? prev.coins - coinEntryFee : prev.coins,
+        // Real-time battle specific fields
+        realTimeBattleId: battleId,
+        realTimePlayerField: playerField,
+        realTimeOpponentScore: 0,
+        realTimeOpponentFinished: false,
+        isRealTimeBattle: true,
+      }
+    })
+  }, [])
+
+  // Update opponent's score from Firebase in real-time
+  const updateRealTimeOpponentScore = useCallback((score: number, finished: boolean) => {
+    setState(prev => {
+      if (!prev.isRealTimeBattle) return prev
+      return {
+        ...prev,
+        realTimeOpponentScore: score,
+        realTimeOpponentFinished: finished,
+      }
+    })
+  }, [])
+
+  // Sync current player's score to Firebase
+  const syncBattleScoreToFirebase = useCallback((score: number, finished: boolean) => {
+    if (!state.realTimeBattleId || !state.realTimePlayerField) return
+    updateBattleScore(state.realTimeBattleId, state.realTimePlayerField, score, finished).catch(() => {/* silent */})
+  }, [state.realTimeBattleId, state.realTimePlayerField])
+
+  // Leave real-time battle (disconnect / forfeit)
+  const leaveRealTimeBattle = useCallback(() => {
+    if (!state.realTimeBattleId || !state.realTimePlayerField) return
+    const opponentField = state.realTimePlayerField === 'player1' ? 'player2' : 'player1'
+    firebaseLeaveBattle(state.realTimeBattleId, state.realTimePlayerField, opponentField).catch(() => {/* silent */})
+  }, [state.realTimeBattleId, state.realTimePlayerField])
 
   // Tournament game: 90 seconds, point system
   const startTournamentGame = useCallback(() => {
@@ -1602,6 +1843,8 @@ export function useGame() {
         coinGameWon: null,
         activeMultiplier: 1,
         multiplierTimeLeft: 0,
+        timerAbilitiesUsed: 0,
+        gameTimeElapsed: 0,
         gamesPlayedToday: gamesToday + 1,
         lastPlayDate: today,
       }
@@ -1609,22 +1852,41 @@ export function useGame() {
   }, [])
 
   // Calculate and add tournament points after a game
-  // NEW: 1 point per tournament game (regardless of score)
-  // 3 points = 1 SP (levelXP), tournament points for leaderboard = points
+  // NEW SP/XP system: SP earned based on score and level, 3 SP = 1 XP (levelXP)
   const calculateTournamentPoints = useCallback((finalScore: number) => {
     setState(prev => {
       if (prev.gameMode !== 'tournament') return prev
-      const newPoints = 1 // 1 point per tournament game, regardless of score
-      const levelXPAdd = Math.floor(newPoints / 3) // 3 points = 1 SP/levelXP
-      const newLevelXP = prev.levelXP + levelXPAdd
-      const newTournamentPoints = prev.tournamentPoints + newPoints
+
+      // Calculate SP earned based on score and current level
+      const spRate = getSPPerHundredScore(prev.playerLevel)
+      const spEarned = (finalScore / 100) * spRate
+
+      // Add earned SP to accumulated skillPoints
+      let newSkillPoints = prev.skillPoints + spEarned
+
+      // Convert SP to XP: every 3 SP = 1 XP (levelXP)
+      let xpGained = 0
+      while (newSkillPoints >= 3) {
+        newSkillPoints -= 3
+        xpGained++
+      }
+
+      // Update levelXP and calculate new level
+      const newLevelXP = prev.levelXP + xpGained
+      const newSpRemainder = newSkillPoints // remainder after conversion (< 3)
+
+      // Tournament points for leaderboard = score-based (1 point per game for leaderboard tracking)
+      const newTournamentPoints = prev.tournamentPoints + 1
+
       return {
         ...prev,
         tournamentPoints: newTournamentPoints,
-        tournamentCarryOver: 0, // No carry over with fixed 1 point per game
+        tournamentCarryOver: 0,
         tournamentGamesPlayed: prev.tournamentGamesPlayed + 1,
         levelXP: newLevelXP,
         playerLevel: calculateLevel(newLevelXP),
+        skillPoints: newSkillPoints,
+        spRemainder: newSpRemainder,
       }
     })
   }, [])
@@ -1646,7 +1908,11 @@ export function useGame() {
     setState(prev => {
       if (prev.gameMode !== 'bot' && prev.gameMode !== 'coins' && prev.gameMode !== 'tournament') return prev
       if (prev.botBattleResult || prev.battleTimer <= 0 || prev.timerPaused) return prev
+
+      // Track game time elapsed
+      const newGameTimeElapsed = prev.gameTimeElapsed + 1
       const newTimer = prev.battleTimer - 1
+
       if (newTimer <= 0) {
         // Time's up - generate FAIR bot score based on player's actual score
         // This ensures 50/50 win chance - both have equal opportunity
@@ -1655,17 +1921,30 @@ export function useGame() {
         const newModBest = result === 'win' ? Math.max(prev.modBestScore, prev.score) : prev.modBestScore
         const coinGameWon = result === 'win' ? true : false
 
-        // Calculate tournament points if tournament mode
+        // Calculate tournament points if tournament mode (using new SP/XP system)
         let tournamentPoints = prev.tournamentPoints
         let tournamentCarryOver = prev.tournamentCarryOver
         let tournamentGamesPlayed = prev.tournamentGamesPlayed
         let levelXP = prev.levelXP
+        let skillPoints = prev.skillPoints
+        let spRemainder = prev.spRemainder
         if (prev.gameMode === 'tournament') {
-          const newPts = 1 // 1 point per tournament game, regardless of score
-          tournamentCarryOver = 0 // No carry over with fixed 1 point per game
-          const levelXPAdd = Math.floor(newPts / 3) // 3 points = 1 SP/levelXP
-          tournamentPoints += newPts
-          levelXP += levelXPAdd
+          // SP earned based on score and current level
+          const spRate = getSPPerHundredScore(prev.playerLevel)
+          const spEarned = (prev.score / 100) * spRate
+          skillPoints += spEarned
+
+          // Convert SP to XP: every 3 SP = 1 XP (levelXP)
+          let xpGained = 0
+          while (skillPoints >= 3) {
+            skillPoints -= 3
+            xpGained++
+          }
+          spRemainder = skillPoints
+          levelXP += xpGained
+
+          tournamentCarryOver = 0
+          tournamentPoints += 1
           tournamentGamesPlayed++
         }
 
@@ -1684,9 +1963,12 @@ export function useGame() {
           tournamentGamesPlayed,
           levelXP,
           playerLevel: calculateLevel(levelXP),
+          skillPoints,
+          spRemainder,
+          gameTimeElapsed: newGameTimeElapsed,
         }
       }
-      return { ...prev, battleTimer: newTimer }
+      return { ...prev, battleTimer: newTimer, gameTimeElapsed: newGameTimeElapsed }
     })
   }, [])
 
@@ -1727,6 +2009,29 @@ export function useGame() {
   const claimWelcome = useCallback(() => {
     setState(prev => {
       if (prev.welcomeClaimed) return prev
+
+      // Generate WELCOME60 discount coupon in admin coupons system
+      try {
+        const existingCoupons = JSON.parse(localStorage.getItem('adminDiscountCoupons') || '[]')
+        const userCode = prev.userCode || ''
+        const welcomeCouponExists = existingCoupons.some((c: { code: string }) => c.code === 'WELCOME60' && c.targetUserIds?.includes(userCode))
+        if (!welcomeCouponExists) {
+          existingCoupons.push({
+            code: 'WELCOME60',
+            discountPercent: 60,
+            minPurchase: 29,
+            maxUses: 1,
+            currentUses: 0,
+            oneTime: true,
+            targetUserIds: [userCode],
+            createdAt: Date.now(),
+            createdBy: 'system',
+            description: 'Welcome bonus: 60% off on ₹29+ purchases!',
+          })
+          localStorage.setItem('adminDiscountCoupons', JSON.stringify(existingCoupons))
+        }
+      } catch { /* ignore localStorage errors */ }
+
       return {
         ...prev,
         welcomeClaimed: true,
@@ -1734,8 +2039,12 @@ export function useGame() {
         magnetCount: prev.magnetCount + 5,
         blastCount: prev.blastCount + 5,
         undoTotal: prev.undoTotal + 5,
-        spinTickets: prev.spinTickets + 5,
+        spinTickets: prev.spinTickets + 10, // 10 Spin Tickets (up from 5)
         coins: prev.coins + 500, // Welcome bonus coins for new users
+        multiplier5xCount: prev.multiplier5xCount + 5, // 5x Ability × 5
+        multiplier2_5xCount: prev.multiplier2_5xCount + 5, // 2.5x Ability × 5
+        extraTimeCount: prev.extraTimeCount + 5, // Timer Ability × 5
+        roomCardCount: prev.roomCardCount + 2, // 2 FREE Room Cards
       }
     })
   }, [])
@@ -1872,6 +2181,13 @@ export function useGame() {
       coinGameWon: null,
       activeMultiplier: 1,
       multiplierTimeLeft: 0,
+      timerAbilitiesUsed: 0,
+      gameTimeElapsed: 0,
+      realTimeBattleId: null,
+      realTimePlayerField: null,
+      realTimeOpponentScore: 0,
+      realTimeOpponentFinished: false,
+      isRealTimeBattle: false,
     }))
   }, [])
 
@@ -2089,6 +2405,15 @@ export function useGame() {
       totalCoinsEarned: 0,
       roomCardCount: 0,
       streakWeek: 1,
+      skillPoints: 0,
+      spRemainder: 0,
+      timerAbilitiesUsed: 0,
+      gameTimeElapsed: 0,
+      realTimeBattleId: null,
+      realTimePlayerField: null,
+      realTimeOpponentScore: 0,
+      realTimeOpponentFinished: false,
+      isRealTimeBattle: false,
     })
   }, [])
 
