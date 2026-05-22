@@ -16,6 +16,7 @@ interface SpinWheelProps {
   isOnline: boolean
   coins: number
   onDeductCoins: (amount: number) => void
+  onAddSpinTickets: (count: number) => void
 }
 
 export interface SpinPrize {
@@ -55,7 +56,7 @@ function pickPrize(): { index: number; prize: SpinPrize } {
 
 const SPIN_COUNTS = [1, 5, 10]
 
-export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPrize, onWatchAdForSpin, isOnline, coins, onDeductCoins }: SpinWheelProps) {
+export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPrize, onWatchAdForSpin, isOnline, coins, onDeductCoins, onAddSpinTickets }: SpinWheelProps) {
   const [spinning, setSpinning] = useState(false)
   const [result, setResult] = useState<{ index: number; prize: SpinPrize } | null>(null)
   const [rotation, setRotation] = useState(0)
@@ -67,7 +68,30 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
   const spinCountRef = useRef(0)
   const timeoutRefs = useRef<ReturnType<typeof setTimeout>[]>([])
 
-  const COIN_COST_PER_SPIN = 150
+  // 2 free daily spins - track in localStorage
+  const FREE_DAILY_SPINS = 2
+  const FREE_SPINS_KEY = 'mergeMaster2048_freeSpinsClaimed'
+  const [freeSpinsClaimed, setFreeSpinsClaimed] = useState<{ date: string; count: number }>(() => {
+    try {
+      const data = localStorage.getItem(FREE_SPINS_KEY)
+      if (data) {
+        const parsed = JSON.parse(data)
+        // Reset if it's a new day
+        const today = new Date().toISOString().split('T')[0]
+        if (parsed.date === today) return parsed
+      }
+    } catch { /* ignore */ }
+    return { date: new Date().toISOString().split('T')[0], count: 0 }
+  })
+
+  // Persist free spins state
+  useEffect(() => {
+    localStorage.setItem(FREE_SPINS_KEY, JSON.stringify(freeSpinsClaimed))
+  }, [freeSpinsClaimed])
+
+  const remainingFreeSpins = Math.max(0, FREE_DAILY_SPINS - freeSpinsClaimed.count)
+
+  const COIN_COST_PER_SPIN = 500
   // How many single spins can user afford with current coins
   const affordableSpins = Math.floor(coins / COIN_COST_PER_SPIN)
   // How many ticket spins can user afford
@@ -88,7 +112,7 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
 
   const totalSpins = effectiveMultiplier === 10 ? 12 : effectiveMultiplier
   const ticketCost = effectiveMultiplier
-  const coinCost = effectiveMultiplier * COIN_COST_PER_SPIN
+  const coinCost = effectiveMultiplier === 10 ? 1500 : effectiveMultiplier * COIN_COST_PER_SPIN
   const canAffordSpin = spinMode === 'ticket' ? spinTickets >= ticketCost : coins >= coinCost
 
   // Clear pending timeouts to prevent stale state after close
@@ -96,6 +120,17 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
     timeoutRefs.current.forEach(t => clearTimeout(t))
     timeoutRefs.current = []
   }, [])
+
+  // Claim free daily spin tickets
+  const handleClaimFreeSpins = useCallback(() => {
+    if (remainingFreeSpins <= 0) return
+    const claimCount = remainingFreeSpins
+    onAddSpinTickets(claimCount)
+    setFreeSpinsClaimed(prev => ({
+      date: new Date().toISOString().split('T')[0],
+      count: FREE_DAILY_SPINS
+    }))
+  }, [remainingFreeSpins, onAddSpinTickets])
 
   const handleSpin = useCallback(() => {
     if (!canAffordSpin || spinning) return
@@ -238,6 +273,26 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
               </div>
 
               <div className="px-4 pb-5">
+                {/* Free Daily Spins Claim */}
+                {remainingFreeSpins > 0 && !hasResult && !spinning && (
+                  <div className="mb-3">
+                    <button
+                      onClick={handleClaimFreeSpins}
+                      className="w-full py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                      style={{
+                        background: 'linear-gradient(135deg, #00E676, #00C853)',
+                        color: '#FFFFFF',
+                        boxShadow: '0 2px 8px rgba(0,230,118,0.3)',
+                      }}
+                    >
+                      🎁 Claim {remainingFreeSpins} Free Spin{remainingFreeSpins > 1 ? 's' : ''}!
+                    </button>
+                    <p className="text-center text-[8px] mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      2 free spins daily • Resets at midnight
+                    </p>
+                  </div>
+                )}
+
                 {/* Spin Mode Toggle */}
                 <div className="flex items-center gap-2 mb-3">
                   <button
@@ -260,7 +315,7 @@ export function SpinWheel({ isOpen, onClose, spinTickets, onUseTicket, onWinPriz
                       color: spinMode === 'coin' ? '#EDC22E' : 'rgba(255,255,255,0.5)',
                     }}
                   >
-                    🪙 Coin Spin (150/spin)
+                    🪙 Coin Spin (500/spin)
                   </button>
                 </div>
 

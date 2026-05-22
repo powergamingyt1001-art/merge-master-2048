@@ -1068,12 +1068,15 @@ export function useGame() {
         tournamentPoints: state.tournamentPoints,
         levelXP: state.levelXP,
         bestScore: state.bestScore,
+        modBestScore: state.modBestScore,
         coins: state.coins,
         level: state.playerLevel,
+        totalBattlesPlayed: state.totalBattlesPlayed,
+        totalBattlesWon: state.totalBattlesWon,
       }).catch(() => {/* silent fail */})
     }, 2000) // 2 second debounce
     return () => clearTimeout(timer)
-  }, [state.playerId, state.playerName, state.playerAvatar, state.inviteCode, state.tournamentPoints, state.levelXP, state.bestScore, state.coins, state.playerLevel])
+  }, [state.playerId, state.playerName, state.playerAvatar, state.inviteCode, state.tournamentPoints, state.levelXP, state.bestScore, state.modBestScore, state.coins, state.playerLevel, state.totalBattlesPlayed, state.totalBattlesWon])
 
   // Listen to referrals in real-time (people who used MY invite code)
   useEffect(() => {
@@ -1597,17 +1600,22 @@ export function useGame() {
         return { ...prev, activeMultiplier: 2.5, multiplierTimeLeft: 10, multiplier2_5xCount: prev.multiplier2_5xCount - 1, activePowerUp: null }
       }
       if (pu === 'extraTime') {
-        // Timer ability: only usable after 20 seconds have been spent in the game
+        // Timer ability: only usable after 20 seconds of game time have elapsed
         if (prev.gameTimeElapsed < 20) return prev
         const isBattleMode = prev.gameMode === 'bot' || prev.gameMode === 'coins' || prev.gameMode === 'tournament'
         // In battle/tournament mode: max 2 timer abilities per game
         if (isBattleMode && prev.timerAbilitiesUsed >= 2) return prev
+        // Classic mode: UNLIMITED timer abilities - gives +50 score bonus (no timer to extend)
         if (!isBattleMode) {
-          // Classic mode: unlimited timer abilities (but no battle timer to extend)
-          // For classic mode, we still consume the item but it has no timer effect
-          // Actually, classic mode has no timer, so timer ability doesn't apply
-          return prev
+          return {
+            ...prev,
+            score: prev.score + 50,
+            extraTimeCount: prev.extraTimeCount - 1,
+            activePowerUp: null,
+            timerAbilitiesUsed: prev.timerAbilitiesUsed + 1,
+          }
         }
+        // Battle mode: adds +10 seconds to timer
         return { ...prev, battleTimer: prev.battleTimer + 10, battleTimeLimit: prev.battleTimeLimit + 10, extraTimeCount: prev.extraTimeCount - 1, activePowerUp: null, timerAbilitiesUsed: prev.timerAbilitiesUsed + 1 }
       }
 
@@ -1702,104 +1710,9 @@ export function useGame() {
     }))
   }, [])
 
-  const startBotBattle = useCallback((timeLimit: number = 60) => {
-    const tiles = initTiles()
-    prevState.current = null
-    setState(prev => {
-      const today = getTodayStr()
-      const gamesToday = prev.lastPlayDate === today ? prev.gamesPlayedToday : 0
-      if (gamesToday >= prev.maxGamesPerDay) return prev
-
-      const opponent = generateBotOpponent()
-      return {
-        ...prev,
-        tiles,
-        score: 0,
-        gameOver: false,
-        won: false,
-        keepPlaying: false,
-        canUndo: false,
-        undoCount: 0,
-        lives: prev.maxLives,
-        activePowerUp: null,
-        gameMode: 'bot' as GameMode,
-        botOpponent: opponent,
-        botBattleResult: null,
-        battleTimer: timeLimit,
-        battleTimeLimit: timeLimit,
-        timerPaused: false,
-        countdownActive: true,
-        countdownSecondsLeft: 3,
-        consecutiveMerges: 0,
-        comboBonus: 0,
-        gamesPlayedToday: gamesToday + 1,
-        lastPlayDate: today,
-        coinEntryFee: 0,
-        coinGameWon: null,
-        activeMultiplier: 1,
-        multiplierTimeLeft: 0,
-        timerAbilitiesUsed: 0,
-        gameTimeElapsed: 0,
-        realTimeBattleId: null,
-        realTimePlayerField: null,
-        realTimeOpponentScore: 0,
-        realTimeOpponentFinished: false,
-        isRealTimeBattle: false,
-      }
-    })
-  }, [])
-
-  const startCoinGame = useCallback((entryFee: number) => {
-    const tiles = initTiles()
-    prevState.current = null
-    setState(prev => {
-      const today = getTodayStr()
-      const gamesToday = prev.lastPlayDate === today ? prev.gamesPlayedToday : 0
-      if (gamesToday >= prev.maxGamesPerDay) return prev
-      if (prev.coins < entryFee) return prev
-
-      const opponent = generateBotOpponent()
-      return {
-        ...prev,
-        tiles,
-        score: 0,
-        gameOver: false,
-        won: false,
-        keepPlaying: false,
-        canUndo: false,
-        undoCount: 0,
-        lives: prev.maxLives,
-        activePowerUp: null,
-        gameMode: 'coins' as GameMode,
-        botOpponent: opponent,
-        botBattleResult: null,
-        battleTimer: 120, // 2 minutes for coins game
-        battleTimeLimit: 120,
-        timerPaused: false,
-        countdownActive: true,
-        countdownSecondsLeft: 3,
-        consecutiveMerges: 0,
-        comboBonus: 0,
-        coins: prev.coins - entryFee,
-        coinEntryFee: entryFee,
-        coinGameWon: null,
-        activeMultiplier: 1,
-        multiplierTimeLeft: 0,
-        timerAbilitiesUsed: 0,
-        gameTimeElapsed: 0,
-        gamesPlayedToday: gamesToday + 1,
-        lastPlayDate: today,
-        realTimeBattleId: null,
-        realTimePlayerField: null,
-        realTimeOpponentScore: 0,
-        realTimeOpponentFinished: false,
-        isRealTimeBattle: false,
-      }
-    })
-  }, [])
-
   // Start a real-time battle with a matched player (from Firebase matchmaking)
   // board is the shared 4x4 grid from Firebase, battleId is the Firebase battle ID
+  // MUST be defined before startBotBattle and startCoinGame which reference it
   const startRealTimeBattle = useCallback((
     opponent: { id: string; name: string; avatar: string; level: number },
     battleId: string,
@@ -1882,6 +1795,347 @@ export function useGame() {
       }
     })
   }, [])
+
+  // Start a bot battle with Firebase matchmaking for real players
+  // Uses coinAmount=0 for free battle mode matchmaking
+  const startBotBattle = useCallback(async (timeLimit: number = 60) => {
+    const today = getTodayStr()
+    // Validate locally first
+    const currentGamesToday = new Promise<number>(resolve => {
+      setState(prev => {
+        resolve(prev.lastPlayDate === today ? prev.gamesPlayedToday : 0)
+        return prev
+      })
+    })
+    const gamesToday = await currentGamesToday
+    if (gamesToday >= 20) return
+
+    // Try Firebase matchmaking with coinAmount=0 for free battle mode
+    let matched = false
+    const matchmakingKey = `battle_${timeLimit}` // Key by time limit
+    try {
+      // Clean up stale entries
+      await cleanupStaleMatchmaking(0)
+
+      const match = await findMatch(0, state.playerId)
+      if (match) {
+        const tiles = initTiles()
+        const board: number[][] = Array.from({ length: 4 }, () => Array(4).fill(0))
+        for (const tile of tiles) {
+          board[tile.row][tile.col] = tile.value
+        }
+
+        const battleId = await createBattle(
+          { id: match.playerId, name: match.data.name, avatar: match.data.avatar, level: match.data.level },
+          0,
+          timeLimit,
+          board
+        )
+
+        if (battleId) {
+          const battle = await joinBattle(battleId, {
+            id: state.playerId,
+            name: state.playerName,
+            avatar: state.playerAvatar,
+            level: state.playerLevel,
+          })
+
+          if (battle) {
+            await markMatched(match.playerId, 0, battleId)
+            await markMatched(state.playerId, 0, battleId)
+
+            startRealTimeBattle(
+              { id: match.playerId, name: match.data.name, avatar: match.data.avatar, level: match.data.level },
+              battleId,
+              'player2',
+              board,
+              'bot',
+              0,
+              timeLimit
+            )
+            matched = true
+          }
+        }
+      } else {
+        // No match found → join the matchmaking queue and wait briefly
+        await joinMatchmaking(state.playerId, state.playerName, state.playerAvatar, 0, state.playerLevel)
+
+        const waitResult = await new Promise<{ playerId: string; data: MatchmakingEntry } | null>((resolve) => {
+          const timeout = setTimeout(() => resolve(null), 5000)
+          const unsubscribe = onMatchmakingUpdate(state.playerId, 0, (entry) => {
+            if (entry && entry.status === 'matched' && entry.battleId) {
+              clearTimeout(timeout)
+              unsubscribe()
+              joinBattle(entry.battleId, {
+                id: state.playerId,
+                name: state.playerName,
+                avatar: state.playerAvatar,
+                level: state.playerLevel,
+              }).then((battle) => {
+                if (battle && battle.player1 && battle.board) {
+                  resolve({ playerId: battle.player1.id, data: { name: battle.player1.name, avatar: battle.player1.avatar, level: battle.player1.level, joinedAt: 0, status: 'matched', battleId: entry.battleId } })
+                } else {
+                  resolve(null)
+                }
+              }).catch(() => resolve(null))
+            }
+          })
+        })
+
+        await leaveMatchmaking(state.playerId, 0)
+
+        if (waitResult) {
+          const { getBattle: getBattleFB } = await import('@/lib/firebase-service')
+          const battle = await getBattleFB(waitResult.data.battleId || '')
+          if (battle && battle.player1) {
+            startRealTimeBattle(
+              { id: battle.player1.id, name: battle.player1.name, avatar: battle.player1.avatar, level: battle.player1.level },
+              waitResult.data.battleId || '',
+              'player2',
+              battle.board,
+              'bot',
+              0,
+              timeLimit
+            )
+            matched = true
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Firebase matchmaking failed, falling back to bot:', err)
+      await leaveMatchmaking(state.playerId, 0).catch(() => {})
+    }
+
+    // Fall back to bot if no real player matched
+    if (!matched) {
+      const tiles = initTiles()
+      prevState.current = null
+      setState(prev => {
+        const t = getTodayStr()
+        const gt = prev.lastPlayDate === t ? prev.gamesPlayedToday : 0
+        if (gt >= prev.maxGamesPerDay) return prev
+
+        const opponent = generateBotOpponent()
+        return {
+          ...prev,
+          tiles,
+          score: 0,
+          gameOver: false,
+          won: false,
+          keepPlaying: false,
+          canUndo: false,
+          undoCount: 0,
+          lives: prev.maxLives,
+          activePowerUp: null,
+          gameMode: 'bot' as GameMode,
+          botOpponent: opponent,
+          botBattleResult: null,
+          battleTimer: timeLimit,
+          battleTimeLimit: timeLimit,
+          timerPaused: false,
+          countdownActive: true,
+          countdownSecondsLeft: 3,
+          consecutiveMerges: 0,
+          comboBonus: 0,
+          gamesPlayedToday: gt + 1,
+          lastPlayDate: t,
+          coinEntryFee: 0,
+          coinGameWon: null,
+          activeMultiplier: 1,
+          multiplierTimeLeft: 0,
+          timerAbilitiesUsed: 0,
+          gameTimeElapsed: 0,
+          realTimeBattleId: null,
+          realTimePlayerField: null,
+          realTimeOpponentScore: 0,
+          realTimeOpponentFinished: false,
+          isRealTimeBattle: false,
+        }
+      })
+    }
+  }, [state.playerId, state.playerName, state.playerAvatar, state.playerLevel, startRealTimeBattle])
+
+  // Start a coin game with Firebase matchmaking
+  // 1. Join matchmaking queue
+  // 2. Try to find a waiting opponent
+  // 3a. If match found → createBattle with shared board → startRealTimeBattle
+  // 3b. If no match → fall back to bot opponent (local game)
+  const startCoinGame = useCallback(async (entryFee: number) => {
+    const today = getTodayStr()
+    // Validate locally first
+    const currentGamesToday = new Promise<number>(resolve => {
+      setState(prev => {
+        resolve(prev.lastPlayDate === today ? prev.gamesPlayedToday : 0)
+        return prev
+      })
+    })
+    const currentCoins = new Promise<number>(resolve => {
+      setState(prev => {
+        resolve(prev.coins)
+        return prev
+      })
+    })
+    const gamesToday = await currentGamesToday
+    const coins = await currentCoins
+    if (gamesToday >= 20 || coins < entryFee) return
+
+    // Try Firebase matchmaking
+    let matched = false
+    try {
+      // Clean up stale entries first
+      await cleanupStaleMatchmaking(entryFee)
+
+      // Try to find a waiting opponent
+      const match = await findMatch(entryFee, state.playerId)
+      if (match) {
+        // Found a waiting player → create battle with shared board and join as player2
+        const tiles = initTiles()
+        const board: number[][] = Array.from({ length: 4 }, () => Array(4).fill(0))
+        for (const tile of tiles) {
+          board[tile.row][tile.col] = tile.value
+        }
+
+        // Create battle with player1 being the matched player
+        const battleId = await createBattle(
+          { id: match.playerId, name: match.data.name, avatar: match.data.avatar, level: match.data.level },
+          entryFee,
+          120,
+          board
+        )
+
+        if (battleId) {
+          // Join as player2
+          const battle = await joinBattle(battleId, {
+            id: state.playerId,
+            name: state.playerName,
+            avatar: state.playerAvatar,
+            level: state.playerLevel,
+          })
+
+          if (battle) {
+            // Mark the other player as matched so they get notified
+            await markMatched(match.playerId, entryFee, battleId)
+            // Mark ourselves as matched too
+            await markMatched(state.playerId, entryFee, battleId)
+
+            // Start the real-time battle with shared board
+            startRealTimeBattle(
+              { id: match.playerId, name: match.data.name, avatar: match.data.avatar, level: match.data.level },
+              battleId,
+              'player2',
+              board,
+              'coins',
+              entryFee,
+              120
+            )
+            matched = true
+          }
+        }
+      } else {
+        // No match found → join the matchmaking queue and wait briefly
+        await joinMatchmaking(state.playerId, state.playerName, state.playerAvatar, entryFee, state.playerLevel)
+
+        // Wait up to 5 seconds for someone to match with us
+        const waitResult = await new Promise<{ playerId: string; data: MatchmakingEntry } | null>((resolve) => {
+          const timeout = setTimeout(() => resolve(null), 5000)
+          const unsubscribe = onMatchmakingUpdate(state.playerId, entryFee, (entry) => {
+            if (entry && entry.status === 'matched' && entry.battleId) {
+              clearTimeout(timeout)
+              unsubscribe()
+              // We got matched! The battle already exists (created by the other player)
+              // Join the battle
+              joinBattle(entry.battleId, {
+                id: state.playerId,
+                name: state.playerName,
+                avatar: state.playerAvatar,
+                level: state.playerLevel,
+              }).then((battle) => {
+                if (battle && battle.player1 && battle.board) {
+                  resolve({ playerId: battle.player1.id, data: { name: battle.player1.name, avatar: battle.player1.avatar, level: battle.player1.level, joinedAt: 0, status: 'matched', battleId: entry.battleId } })
+                } else {
+                  resolve(null)
+                }
+              }).catch(() => resolve(null))
+            }
+          })
+        })
+
+        // Leave matchmaking queue regardless of result
+        await leaveMatchmaking(state.playerId, entryFee)
+
+        if (waitResult) {
+          // Get the battle from Firebase to read the board
+          const { getBattle: getBattleFB } = await import('@/lib/firebase-service')
+          const battle = await getBattleFB(waitResult.data.battleId || '')
+          if (battle && battle.player1) {
+            startRealTimeBattle(
+              { id: battle.player1.id, name: battle.player1.name, avatar: battle.player1.avatar, level: battle.player1.level },
+              waitResult.data.battleId || '',
+              'player2',
+              battle.board,
+              'coins',
+              entryFee,
+              120
+            )
+            matched = true
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Firebase matchmaking failed, falling back to bot:', err)
+      await leaveMatchmaking(state.playerId, entryFee).catch(() => {})
+    }
+
+    // Fall back to bot if no real player matched
+    if (!matched) {
+      const tiles = initTiles()
+      prevState.current = null
+      setState(prev => {
+        const t = getTodayStr()
+        const gt = prev.lastPlayDate === t ? prev.gamesPlayedToday : 0
+        if (gt >= prev.maxGamesPerDay) return prev
+        if (prev.coins < entryFee) return prev
+
+        const opponent = generateBotOpponent()
+        return {
+          ...prev,
+          tiles,
+          score: 0,
+          gameOver: false,
+          won: false,
+          keepPlaying: false,
+          canUndo: false,
+          undoCount: 0,
+          lives: prev.maxLives,
+          activePowerUp: null,
+          gameMode: 'coins' as GameMode,
+          botOpponent: opponent,
+          botBattleResult: null,
+          battleTimer: 120,
+          battleTimeLimit: 120,
+          timerPaused: false,
+          countdownActive: true,
+          countdownSecondsLeft: 3,
+          consecutiveMerges: 0,
+          comboBonus: 0,
+          coins: prev.coins - entryFee,
+          coinEntryFee: entryFee,
+          coinGameWon: null,
+          activeMultiplier: 1,
+          multiplierTimeLeft: 0,
+          timerAbilitiesUsed: 0,
+          gameTimeElapsed: 0,
+          gamesPlayedToday: gt + 1,
+          lastPlayDate: t,
+          realTimeBattleId: null,
+          realTimePlayerField: null,
+          realTimeOpponentScore: 0,
+          realTimeOpponentFinished: false,
+          isRealTimeBattle: false,
+        }
+      })
+    }
+  }, [state.playerId, state.playerName, state.playerAvatar, state.playerLevel, startRealTimeBattle])
 
   // Sync current player's score to Firebase
   const syncBattleScoreToFirebase = useCallback((score: number, finished: boolean) => {
@@ -2059,6 +2313,14 @@ export function useGame() {
         }
       }
       return { ...prev, battleTimer: newTimer, gameTimeElapsed: newGameTimeElapsed }
+    })
+  }, [])
+
+  // Tick game time elapsed for classic mode (no battle timer, just tracking elapsed time)
+  const tickGameTimeElapsed = useCallback(() => {
+    setState(prev => {
+      if (prev.gameMode !== 'classic' || prev.gameOver) return prev
+      return { ...prev, gameTimeElapsed: prev.gameTimeElapsed + 1 }
     })
   }, [])
 
@@ -2544,10 +2806,13 @@ export function useGame() {
     addUndos,
     startBotBattle,
     startCoinGame,
+    startRealTimeBattle,
+    leaveRealTimeBattle,
     startTournamentGame,
     calculateTournamentPoints,
     joinTournament,
     tickBattleTimer,
+    tickGameTimeElapsed,
     tickCountdown,
     goBackToDashboard,
     claimInviteReward,

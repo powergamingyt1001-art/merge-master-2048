@@ -818,11 +818,8 @@ export function CouponCode({
         })
         .catch(() => { /* silent */ })
         .finally(() => setUserStatsLoading(false))
-      // Compute revenue and pending count from orders
-      const orders = loadStoreOrders()
-      const approvedRevenue = orders.filter(o => o.status === 'approved').reduce((sum, o) => sum + o.price, 0)
-      setTotalRevenue(approvedRevenue)
-      setPendingOrderCount(orders.filter(o => o.status === 'pending').length)
+      // Revenue and pending count are computed from Firebase orders via the real-time listener
+      // (onOrdersUpdate useEffect), not from localStorage
       // Also reload day code settings
       try {
         const dcData = localStorage.getItem('adminDayCodeSettings')
@@ -836,11 +833,12 @@ export function CouponCode({
     }
   }, [showAdminPanel])
 
-  // Reload store orders when switching to payments/history tabs
+  // When switching to payments/history tabs, orders come from Firebase real-time listener
+  // No need to reload from localStorage - Firebase is the source of truth for admin panel
+  // We still reload localStorage storeOrders as fallback for unsynced orders
   useEffect(() => {
     if (showAdminPanel && (adminTab === 'payments' || adminTab === 'history')) {
-      setStoreOrders(loadStoreOrders())
-      setPurchaseHistory(loadPurchaseHistory())
+      setStoreOrders(loadStoreOrders()) // Fallback data for unsynced orders only
     }
   }, [adminTab, showAdminPanel])
 
@@ -1507,47 +1505,49 @@ export function CouponCode({
     }
   }
 
-  // Merge purchaseHistory, storeOrders, AND Firebase orders for display
+  // Admin panel: Firebase orders are the PRIMARY source for cross-device access.
+  // localStorage storeOrders are only used as fallback for orders that haven't synced to Firebase yet.
+  // purchaseHistory (local coupon claims) is NOT included in admin view - admin only sees store orders.
   const mergedAllPurchases: PurchaseHistoryEntry[] = [
-    ...purchaseHistory,
-    ...storeOrders.map(order => {
-      const isInrAbility = order.item.includes('5x') || order.item.includes('2.5x')
+    // Firebase orders first (cross-device, real-time, source of truth)
+    ...firebaseOrders.map(fo => {
+      const itemStr = fo.items.map(i => `${i.name} x${i.quantity}`).join(', ')
+      const isInrAbility = itemStr.includes('5x') || itemStr.includes('2.5x')
       return {
-        id: `store_${order.id}`,
-        date: order.date,
-        item: order.item,
-        amount: `₹${order.price}`,
-        status: (order.status === 'pending' ? 'Pending' : order.status === 'approved' ? 'Delivered' : 'Denied') as 'Pending' | 'Delivered' | 'Denied',
+        id: `store_${fo.id}`,
+        date: fo.date,
+        item: itemStr,
+        amount: `₹${fo.finalAmount}`,
+        status: (fo.status === 'pending' ? 'Pending' : fo.status === 'approved' ? 'Delivered' : 'Denied') as 'Pending' | 'Delivered' | 'Denied',
         type: (isInrAbility ? 'inr_ability' : 'coins') as 'coins' | 'ability' | 'inr_ability',
-        transactionId: order.transactionId,
-        whatsappNumber: order.whatsappNumber,
-        buyerName: order.name,
-        screenshotDataUrl: order.proofBase64,
-        coinAmount: isInrAbility ? undefined : order.quantity,
-        abilityType: isInrAbility ? (order.item.includes('5x') ? '5x' : '2.5x') : undefined,
-        abilityCount: isInrAbility ? order.quantity : undefined,
+        transactionId: fo.transactionId,
+        whatsappNumber: fo.whatsappNumber,
+        buyerName: fo.name,
+        screenshotDataUrl: fo.proofBase64,
+        coinAmount: isInrAbility ? undefined : fo.items.reduce((s, i) => s + i.quantity, 0),
+        abilityType: isInrAbility ? (itemStr.includes('5x') ? '5x' : '2.5x') : undefined,
+        abilityCount: isInrAbility ? fo.items.reduce((s, i) => s + i.quantity, 0) : undefined,
       }
     }),
-    // Also add Firebase-only orders (not in localStorage)
-    ...firebaseOrders
-      .filter(fo => !storeOrders.some(o => o.id === fo.id))
-      .map(fo => {
-        const itemStr = fo.items.map(i => `${i.name} x${i.quantity}`).join(', ')
-        const isInrAbility = itemStr.includes('5x') || itemStr.includes('2.5x')
+    // Fallback: localStorage storeOrders that haven't synced to Firebase yet
+    ...storeOrders
+      .filter(o => !firebaseOrders.some(fo => fo.id === o.id))
+      .map(order => {
+        const isInrAbility = order.item.includes('5x') || order.item.includes('2.5x')
         return {
-          id: `store_${fo.id}`,
-          date: fo.date,
-          item: itemStr,
-          amount: `₹${fo.finalAmount}`,
-          status: (fo.status === 'pending' ? 'Pending' : fo.status === 'approved' ? 'Delivered' : 'Denied') as 'Pending' | 'Delivered' | 'Denied',
+          id: `store_${order.id}`,
+          date: order.date,
+          item: order.item,
+          amount: `₹${order.price}`,
+          status: (order.status === 'pending' ? 'Pending' : order.status === 'approved' ? 'Delivered' : 'Denied') as 'Pending' | 'Delivered' | 'Denied',
           type: (isInrAbility ? 'inr_ability' : 'coins') as 'coins' | 'ability' | 'inr_ability',
-          transactionId: fo.transactionId,
-          whatsappNumber: fo.whatsappNumber,
-          buyerName: fo.name,
-          screenshotDataUrl: fo.proofBase64,
-          coinAmount: isInrAbility ? undefined : fo.items.reduce((s, i) => s + i.quantity, 0),
-          abilityType: isInrAbility ? (itemStr.includes('5x') ? '5x' : '2.5x') : undefined,
-          abilityCount: isInrAbility ? fo.items.reduce((s, i) => s + i.quantity, 0) : undefined,
+          transactionId: order.transactionId,
+          whatsappNumber: order.whatsappNumber,
+          buyerName: order.name,
+          screenshotDataUrl: order.proofBase64,
+          coinAmount: isInrAbility ? undefined : order.quantity,
+          abilityType: isInrAbility ? (order.item.includes('5x') ? '5x' : '2.5x') : undefined,
+          abilityCount: isInrAbility ? order.quantity : undefined,
         }
       }),
   ]

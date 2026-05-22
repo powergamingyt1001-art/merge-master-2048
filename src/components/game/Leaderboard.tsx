@@ -466,14 +466,14 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
                         </span>
                       </div>
 
-                      {/* Battle Score */}
+                      {/* Battle Best Score */}
                       <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(246,94,59,0.06)', border: '1px solid rgba(246,94,59,0.12)' }}>
                         <div className="flex items-center justify-center gap-1 mb-1">
                           <Swords className="w-3 h-3" style={{ color: '#F65E3B' }} />
-                          <span className="text-[7px] font-bold" style={{ color: '#F65E3B' }}>Battle Score</span>
+                          <span className="text-[7px] font-bold" style={{ color: '#F65E3B' }}>Battle Best</span>
                         </div>
                         <span className="text-sm font-extrabold" style={{ color: '#F65E3B' }}>
-                          {selectedPlayer.value.toLocaleString()}
+                          {(selectedFirebasePlayer?.modBestScore || 0).toLocaleString()}
                         </span>
                       </div>
 
@@ -488,13 +488,37 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
                         </span>
                       </div>
 
-                      {/* Level XP */}
+                      {/* Total Battles */}
                       <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.12)' }}>
                         <div className="flex items-center justify-center gap-1 mb-1">
-                          <Zap className="w-3 h-3" style={{ color: '#00E676' }} />
-                          <span className="text-[7px] font-bold" style={{ color: '#00E676' }}>Level XP</span>
+                          <Swords className="w-3 h-3" style={{ color: '#00E676' }} />
+                          <span className="text-[7px] font-bold" style={{ color: '#00E676' }}>Total Battles</span>
                         </div>
                         <span className="text-sm font-extrabold" style={{ color: '#00E676' }}>
+                          {(selectedFirebasePlayer?.totalBattlesPlayed || 0).toLocaleString()}
+                        </span>
+                      </div>
+
+                      {/* Win Rate */}
+                      <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(224,64,251,0.06)', border: '1px solid rgba(224,64,251,0.12)' }}>
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                          <Zap className="w-3 h-3" style={{ color: '#E040FB' }} />
+                          <span className="text-[7px] font-bold" style={{ color: '#E040FB' }}>Win Rate</span>
+                        </div>
+                        <span className="text-sm font-extrabold" style={{ color: '#E040FB' }}>
+                          {selectedFirebasePlayer?.totalBattlesPlayed
+                            ? `${Math.round((selectedFirebasePlayer.totalBattlesWon / selectedFirebasePlayer.totalBattlesPlayed) * 100)}%`
+                            : '0%'}
+                        </span>
+                      </div>
+
+                      {/* Level XP */}
+                      <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(0,188,212,0.06)', border: '1px solid rgba(0,188,212,0.12)' }}>
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                          <Zap className="w-3 h-3" style={{ color: '#00BCD4' }} />
+                          <span className="text-[7px] font-bold" style={{ color: '#00BCD4' }}>Level XP</span>
+                        </div>
+                        <span className="text-sm font-extrabold" style={{ color: '#00BCD4' }}>
                           {(selectedFirebasePlayer?.levelXP || 0).toLocaleString()}
                         </span>
                       </div>

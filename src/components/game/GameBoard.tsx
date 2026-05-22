@@ -84,7 +84,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     tournamentPoints, tournamentCarryOver,
     countdownActive, countdownSecondsLeft, timerPaused,
     handleMove, newGame, continueGame, undo, activatePowerUp, handleTileClick,
-    reviveWithAd, restartAfterStuck, tickBattleTimer, tickCountdown, addCoins, addNotification,
+    reviveWithAd, restartAfterStuck, tickBattleTimer, tickGameTimeElapsed, tickCountdown, addCoins, addNotification,
     goBackToDashboard, calculateTournamentPoints, addGameToHistory,
   } = game
 
@@ -122,6 +122,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   const [gameOverDismissed, setGameOverDismissed] = useState(false)
   const [waitingForReturn, setWaitingForReturn] = useState(false) // User visiting ad site
   const [showWelcomeBack, setShowWelcomeBack] = useState(false) // Show welcome back overlay
+  const [timerMessage, setTimerMessage] = useState<string | null>(null) // Timer ability feedback message
   // showCoupon state removed - CODE button removed
 
   // Determine game type
@@ -170,6 +171,13 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     const interval = setInterval(() => { tickBattleTimer() }, 1000)
     return () => clearInterval(interval)
   }, [isBattleMode, botBattleResult, battleTimer, tickBattleTimer, countdownOverlay, timerPaused])
+
+  // Classic mode: tick game time elapsed (for timer ability 20-second cooldown)
+  useEffect(() => {
+    if (!isClassic || gameOver) return
+    const interval = setInterval(() => { tickGameTimeElapsed() }, 1000)
+    return () => clearInterval(interval)
+  }, [isClassic, gameOver, tickGameTimeElapsed])
 
   // Multiplier countdown tick - 1 second interval (TIME-based, not move-based)
   useEffect(() => {
@@ -240,6 +248,23 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     onMove(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'))
     touchStart.current = null
   }, [onMove, activePowerUp, handleTileClick, cellSize, gap])
+
+  // Timer ability click handler with feedback messages
+  const handleTimerPowerUp = useCallback(() => {
+    if (game.extraTimeCount <= 0) return
+    if (game.gameTimeElapsed < 20) {
+      setTimerMessage('Timer available after 20s')
+      setTimeout(() => setTimerMessage(null), 2000)
+      return
+    }
+    const battleMode = game.gameMode === 'bot' || game.gameMode === 'coins' || game.gameMode === 'tournament'
+    if (battleMode && game.timerAbilitiesUsed >= 2) {
+      setTimerMessage('Max timers used (2/2)')
+      setTimeout(() => setTimerMessage(null), 2000)
+      return
+    }
+    activatePowerUp('extraTime')
+  }, [game.extraTimeCount, game.gameTimeElapsed, game.gameMode, game.timerAbilitiesUsed, activatePowerUp])
 
   const handlePowerUp = useCallback((pu: PowerUp) => { activatePowerUp(pu) }, [activatePowerUp])
   const handleStuckContinue = useCallback(() => { restartAfterStuck() }, [restartAfterStuck])
@@ -789,7 +814,16 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
         <OvalAbilitySlot icon="↩️" count={undoTotal - undoCount} active={false} onClick={undo} label="Undo" disabled={!canUndo || undoCount >= undoTotal} />
         <OvalAbilitySlot icon="⚡" count={game.multiplier5xCount} active={game.activeMultiplier === 5} onClick={() => handlePowerUp('multiplier5x')} label="5x" accentColor="#FF4D4D" />
         <OvalAbilitySlot icon="🔥" count={game.multiplier2_5xCount} active={game.activeMultiplier === 2.5} onClick={() => handlePowerUp('multiplier2_5x')} label="2.5x" accentColor="#FF7A00" />
-        <OvalAbilitySlot icon="⏱️" count={game.extraTimeCount} active={false} onClick={() => handlePowerUp('extraTime')} label="+10s" accentColor="#00E676" />
+        <OvalAbilitySlot
+          icon="⏱️"
+          count={game.extraTimeCount}
+          active={false}
+          onClick={handleTimerPowerUp}
+          label={isClassic ? '+50pts' : '+10s'}
+          accentColor="#00E676"
+          disabled={game.extraTimeCount > 0 && (game.gameTimeElapsed < 20 || (isBattleMode && game.timerAbilitiesUsed >= 2))}
+          subtitle={isBattleMode ? `${game.timerAbilitiesUsed}/2` : game.gameTimeElapsed < 20 ? '20s' : undefined}
+        />
       </div>
 
       {/* Multiplier countdown indicator */}
@@ -817,6 +851,24 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
             >
               {game.multiplierTimeLeft}s
             </motion.span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Timer ability feedback message */}
+      <AnimatePresence>
+        {timerMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.9 }}
+            className="px-3 py-1 rounded-full text-[9px] font-bold flex items-center gap-1.5 flex-shrink-0"
+            style={{
+              backgroundColor: 'rgba(0,230,118,0.15)',
+              color: '#00E676',
+              border: '1px solid rgba(0,230,118,0.25)',
+            }}>
+            <span>⏱️</span> {timerMessage}
           </motion.div>
         )}
       </AnimatePresence>
@@ -965,8 +1017,8 @@ const ABILITY_GLOW_MAP: Record<string, string> = {
 }
 
 // Capsule-shaped ability slot with glow and press effects
-function OvalAbilitySlot({ icon, count, active, onClick, label, disabled, accentColor }: {
-  icon: string; count: number; active: boolean; onClick: () => void; label: string; disabled?: boolean; accentColor?: string
+function OvalAbilitySlot({ icon, count, active, onClick, label, disabled, accentColor, subtitle }: {
+  icon: string; count: number; active: boolean; onClick: () => void; label: string; disabled?: boolean; accentColor?: string; subtitle?: string
 }) {
   // Determine glow color: accentColor prop > label-based mapping > default
   const glowColor = accentColor || ABILITY_GLOW_MAP[label] || (active ? '#EDC22E' : 'rgba(255,255,255,0.3)')
@@ -1048,6 +1100,20 @@ function OvalAbilitySlot({ icon, count, active, onClick, label, disabled, accent
       >
         {formatAbilityCount(count)}
       </span>
+      {subtitle && (
+        <span
+          className="absolute font-bold"
+          style={{
+            fontSize: 6,
+            bottom: -4,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            color: 'rgba(255,255,255,0.5)',
+            whiteSpace: 'nowrap',
+          }}>
+          {subtitle}
+        </span>
+      )}
     </motion.button>
   )
 }

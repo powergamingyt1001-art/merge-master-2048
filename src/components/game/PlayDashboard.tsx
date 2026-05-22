@@ -217,39 +217,31 @@ export function PlayDashboard({
       onAddNotification('Not Enough Coins', `You need ${fee} coins to play. You have ${coins}.`, 'system', '💰')
       return
     }
+    // Show searching animation, then call onStartCoinGame (which handles matchmaking internally)
     if (isOnline) {
-      // Show searching animation for online mode
       setSearching({ active: true, type: 'coins', coinFee: fee })
     } else {
       onStartCoinGame(fee)
     }
   }, [isGameLimitReached, coins, onStartCoinGame, onAddNotification, maxGamesPerDay, isOnline])
 
-  // Searching animation effect - simulate finding opponent
+  // Searching animation effect - start the game (which includes matchmaking)
+  // The game start functions are async and handle Firebase matchmaking + fallback to bot
   useEffect(() => {
     if (!searching?.active) return
-    const BOT_NAMES = [
-      { name: 'Aero 4', avatar: '🦅' }, { name: 'Blaze 7', avatar: '🔥' },
-      { name: 'Viper 9', avatar: '🐍' }, { name: 'Nova 3', avatar: '💫' },
-      { name: 'Storm 6', avatar: '⚡' }, { name: 'Raze 2', avatar: '💥' },
-      { name: 'Fang 8', avatar: '🐺' }, { name: 'Drift 5', avatar: '🌪️' },
-      { name: 'Apex 1', avatar: '🏆' }, { name: 'Volt 11', avatar: '⚡' },
-    ]
-    const opponent = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]
-    // Show searching for 2-4 seconds then reveal opponent
-    const searchTime = 2000 + Math.random() * 2000
-    searchTimerRef.current = setTimeout(() => {
-      setSearching(prev => prev ? { ...prev, opponent } : null)
-      // After showing opponent for 1.5s, start the game
-      searchTimerRef.current = setTimeout(() => {
-        if (searching?.type === 'battle' && searching.timeLimit) {
-          onStartBotBattle(searching.timeLimit)
-        } else if (searching?.type === 'coins' && searching.coinFee) {
-          onStartCoinGame(searching.coinFee)
-        }
-        setSearching(null)
-      }, 1500)
-    }, searchTime)
+    // Call the game start function immediately - it will search for a real player
+    // and fall back to a bot if no match found within 5 seconds
+    // The searching overlay shows while this async operation runs
+    if (searching.type === 'battle' && searching.timeLimit) {
+      onStartBotBattle(searching.timeLimit)
+      // Dismiss searching overlay after a short delay to allow matchmaking
+      const timer = setTimeout(() => setSearching(null), 6000)
+      searchTimerRef.current = timer
+    } else if (searching.type === 'coins' && searching.coinFee) {
+      onStartCoinGame(searching.coinFee)
+      const timer = setTimeout(() => setSearching(null), 6000)
+      searchTimerRef.current = timer
+    }
     return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current) }
   }, [searching?.active])
 
@@ -757,7 +749,7 @@ export function PlayDashboard({
 
       {/* Modals */}
       <SpinWheel isOpen={showSpin} onClose={() => setShowSpin(false)} spinTickets={spinTickets}
-        onUseTicket={onUseSpinTicket} onWinPrize={handleSpinPrize} onWatchAdForSpin={() => { onAddSpinTickets(1) }} isOnline={isOnline} coins={coins} onDeductCoins={onDeductCoins} />
+        onUseTicket={onUseSpinTicket} onWinPrize={handleSpinPrize} onWatchAdForSpin={() => { onAddSpinTickets(1) }} isOnline={isOnline} coins={coins} onDeductCoins={onDeductCoins} onAddSpinTickets={onAddSpinTickets} />
       <LoginStreak isOpen={showStreak} onClose={() => setShowStreak(false)} streakDay={streakDay}
         streakClaimed={streakClaimed} onClaim={onClaimStreakDay} streakWeek={streakWeek} />
       <WelcomeGift isOpen={showWelcome} onClose={() => setShowWelcome(false)} onClaim={() => { onClaimWelcome(); setShowWelcome(false) }} />

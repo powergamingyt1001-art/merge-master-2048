@@ -28,10 +28,13 @@ export interface FirebasePlayer {
   tournamentPoints: number
   levelXP: number
   bestScore: number
+  modBestScore: number
   coins: number
   level: number
   lastActive: number
   joinedAt: number
+  totalBattlesPlayed: number
+  totalBattlesWon: number
 }
 
 export interface FirebaseReferral {
@@ -55,8 +58,11 @@ export async function syncPlayerToFirebase(playerData: {
   tournamentPoints: number
   levelXP: number
   bestScore: number
+  modBestScore: number
   coins: number
   level: number
+  totalBattlesPlayed: number
+  totalBattlesWon: number
 }): Promise<void> {
   try {
     const playerRef = ref(db, `players/${playerData.id}`)
@@ -845,7 +851,7 @@ export async function findMatch(
     if (!snapshot.exists()) return null
 
     const now = Date.now()
-    const staleThreshold = 15000 // 15 seconds - remove stale entries
+    const staleThreshold = 30000 // 30 seconds - remove stale entries
 
     let bestMatch: { playerId: string; data: MatchmakingEntry } | null = null
 
@@ -920,7 +926,7 @@ export async function cleanupStaleMatchmaking(coinAmount: number): Promise<void>
     if (!snapshot.exists()) return
 
     const now = Date.now()
-    const staleThreshold = 15000
+    const staleThreshold = 30000
 
     const staleIds: string[] = []
     snapshot.forEach((child) => {
