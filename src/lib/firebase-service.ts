@@ -12,6 +12,7 @@ import {
   off,
   query,
   orderByChild,
+  equalTo,
   limitToLast,
   serverTimestamp,
 } from 'firebase/database'
@@ -467,18 +468,34 @@ export interface FriendRequestData {
   status: 'pending' | 'accepted' | 'declined'
 }
 
-// Search for a player by their inviteCode using Firebase orderByChild
+// Search for a player by their inviteCode using Firebase orderByChild + equalTo for exact match
 export async function searchPlayerByInviteCode(inviteCode: string): Promise<FirebasePlayer | null> {
   try {
+    // Use Firebase equalTo() for exact match on inviteCode
     const playersRef = query(
       ref(db, 'players'),
       orderByChild('inviteCode'),
-      limitToLast(10)
+      equalTo(inviteCode.toUpperCase()),
+      limitToLast(1)
     )
     const snapshot = await get(playersRef)
     if (snapshot.exists()) {
       let found: FirebasePlayer | null = null
       snapshot.forEach((child) => {
+        found = { id: child.key!, ...child.val() }
+      })
+      return found
+    }
+    // Fallback: try case-insensitive search by loading limited results
+    const fallbackRef = query(
+      ref(db, 'players'),
+      orderByChild('inviteCode'),
+      limitToLast(50)
+    )
+    const fallbackSnapshot = await get(fallbackRef)
+    if (fallbackSnapshot.exists()) {
+      let found: FirebasePlayer | null = null
+      fallbackSnapshot.forEach((child) => {
         const data = child.val()
         if (data.inviteCode && data.inviteCode.toUpperCase() === inviteCode.toUpperCase()) {
           found = { id: child.key!, ...data }
@@ -1090,5 +1107,289 @@ export async function getBattle(battleId: string): Promise<FirebaseBattle | null
   } catch (err) {
     console.warn('Firebase getBattle failed:', err)
     return null
+  }
+}
+
+// ============================================================
+// ORDER SYSTEM - Store orders synced via Firebase
+// ============================================================
+
+export interface FirebaseStoreOrder {
+  id: string
+  date: string
+  playerId: string
+  playerName: string
+  userCode: string
+  items: Array<{ name: string; quantity: number; price: number }>
+  totalAmount: number
+  discountCoupon: string
+  discountAmount: number
+  finalAmount: number
+  whatsappNumber: string
+  name: string
+  transactionId: string
+  utrNumber: string
+  proofBase64?: string
+  status: 'pending' | 'approved' | 'rejected'
+  upiId: string
+  createdAt: number
+  approvedAt: number | null
+}
+
+// Place a new order in Firebase
+export async function placeOrder(order: Omit<FirebaseStoreOrder, 'createdAt' | 'approvedAt'>): Promise<void> {
+  try {
+    const orderRef = ref(db, `orders/${order.id}`)
+    await set(orderRef, {
+      ...order,
+      createdAt: Date.now(),
+      approvedAt: null,
+    })
+  } catch (err) {
+    console.warn('Firebase placeOrder failed:', err)
+  }
+}
+
+// Listen for all orders (for admin panel)
+export function onOrdersUpdate(callback: (orders: FirebaseStoreOrder[]) => void): () => void {
+  try {
+    const ordersRef = ref(db, 'orders')
+    const handler = onValue(ordersRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const orders: FirebaseStoreOrder[] = []
+        snapshot.forEach((child) => {
+          orders.push({ id: child.key!, ...child.val() })
+        })
+        callback(orders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)))
+      } else {
+        callback([])
+      }
+    })
+    return () => off(ordersRef, 'value', handler)
+  } catch (err) {
+    console.warn('Firebase onOrdersUpdate failed:', err)
+    callback([])
+    return () => {}
+  }
+}
+
+// Update order status (approve/reject)
+export async function updateOrderStatus(orderId: string, status: 'approved' | 'rejected'): Promise<void> {
+  try {
+    const orderRef = ref(db, `orders/${orderId}`)
+    const updates: Record<string, unknown> = { status }
+    if (status === 'approved') {
+      updates.approvedAt = Date.now()
+    }
+    await update(orderRef, updates)
+  } catch (err) {
+    console.warn('Firebase updateOrderStatus failed:', err)
+  }
+}
+
+// Get orders for a specific user
+export function onUserOrdersUpdate(playerId: string, callback: (orders: FirebaseStoreOrder[]) => void): () => void {
+  try {
+    const ordersRef = ref(db, 'orders')
+    const handler = onValue(ordersRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const orders: FirebaseStoreOrder[] = []
+        snapshot.forEach((child) => {
+          const data = child.val()
+          if (data.playerId === playerId) {
+            orders.push({ id: child.key!, ...data })
+          }
+        })
+        callback(orders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)))
+      } else {
+        callback([])
+      }
+    })
+    return () => off(ordersRef, 'value', handler)
+  } catch (err) {
+    console.warn('Firebase onUserOrdersUpdate failed:', err)
+    callback([])
+    return () => {}
+  }
+}
+
+// Deliver items to user after approval - creates a notification in Firebase
+export async function deliverOrderItems(
+  orderId: string,
+  playerId: string,
+  items: {
+    coins?: number
+    abilities?: Array<{ type: string; count: number }>
+    roomCards?: number
+    spinTickets?: number
+  }
+): Promise<void> {
+  try {
+    const notifRef = push(ref(db, `userNotifications/${playerId}`))
+    await set(notifRef, {
+      type: 'order_delivery',
+      orderId,
+      items,
+      deliveredAt: Date.now(),
+      delivered: false, // will be marked true after user's client processes it
+    })
+  } catch (err) {
+    console.warn('Firebase deliverOrderItems failed:', err)
+  }
+}
+
+// Listen for user item delivery notifications
+export function onUserNotificationsUpdate(
+  playerId: string,
+  callback: (notifications: Array<{ id: string; type: string; orderId?: string; items?: any; deliveredAt: number; delivered: boolean }>) => void
+): () => void {
+  try {
+    const notifRef = ref(db, `userNotifications/${playerId}`)
+    const handler = onValue(notifRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const notifs: Array<{ id: string; type: string; orderId?: string; items?: any; deliveredAt: number; delivered: boolean }> = []
+        snapshot.forEach((child) => {
+          notifs.push({ id: child.key!, ...child.val() })
+        })
+        callback(notifs.sort((a, b) => b.deliveredAt - a.deliveredAt))
+      } else {
+        callback([])
+      }
+    })
+    return () => off(notifRef, 'value', handler)
+  } catch (err) {
+    console.warn('Firebase onUserNotificationsUpdate failed:', err)
+    callback([])
+    return () => {}
+  }
+}
+
+// Mark a user notification as delivered
+export async function markNotificationDelivered(playerId: string, notifId: string): Promise<void> {
+  try {
+    await update(ref(db, `userNotifications/${playerId}/${notifId}`), { delivered: true })
+  } catch (err) {
+    console.warn('Firebase markNotificationDelivered failed:', err)
+  }
+}
+
+// ============================================================
+// ADMIN CONFIG - Configurable admin password, partner passwords
+// ============================================================
+
+export interface PartnerData {
+  name: string
+  password: string
+  permissions: string[] // view_orders, approve_orders, manage_coupons, manage_prices, view_users, ban_users
+  createdAt: number
+  lastUsedAt: number | null
+  active: boolean
+}
+
+// Get the admin password from Firebase (default: "ADMIN.IN")
+export async function getAdminPassword(): Promise<string> {
+  try {
+    const ref_ = ref(db, 'adminConfig/adminPassword')
+    const snapshot = await get(ref_)
+    if (snapshot.exists()) {
+      return snapshot.val()
+    }
+    // Set default if not exists
+    await set(ref_, 'ADMIN.IN')
+    return 'ADMIN.IN'
+  } catch (err) {
+    console.warn('Firebase getAdminPassword failed:', err)
+    return 'ADMIN.IN'
+  }
+}
+
+// Change the admin password
+export async function setAdminPassword(newPassword: string): Promise<void> {
+  try {
+    await set(ref(db, 'adminConfig/adminPassword'), newPassword)
+  } catch (err) {
+    console.warn('Firebase setAdminPassword failed:', err)
+  }
+}
+
+// Get all partners
+export async function getPartners(): Promise<Array<{ id: string } & PartnerData>> {
+  try {
+    const ref_ = ref(db, 'adminConfig/partners')
+    const snapshot = await get(ref_)
+    if (snapshot.exists()) {
+      const partners: Array<{ id: string } & PartnerData> = []
+      snapshot.forEach((child) => {
+        partners.push({ id: child.key!, ...child.val() })
+      })
+      return partners.sort((a, b) => b.createdAt - a.createdAt)
+    }
+    return []
+  } catch (err) {
+    console.warn('Firebase getPartners failed:', err)
+    return []
+  }
+}
+
+// Create or update a partner
+export async function savePartner(partnerId: string, data: PartnerData): Promise<void> {
+  try {
+    await set(ref(db, `adminConfig/partners/${partnerId}`), data)
+  } catch (err) {
+    console.warn('Firebase savePartner failed:', err)
+  }
+}
+
+// Delete a partner
+export async function deletePartner(partnerId: string): Promise<void> {
+  try {
+    await set(ref(db, `adminConfig/partners/${partnerId}`), null)
+  } catch (err) {
+    console.warn('Firebase deletePartner failed:', err)
+  }
+}
+
+// Authenticate as a partner (check password)
+export async function authenticatePartner(password: string): Promise<{ id: string; data: PartnerData } | null> {
+  try {
+    const ref_ = ref(db, 'adminConfig/partners')
+    const snapshot = await get(ref_)
+    if (snapshot.exists()) {
+      let found: { id: string; data: PartnerData } | null = null
+      snapshot.forEach((child) => {
+        const data = child.val() as Omit<PartnerData, never> & Record<string, unknown>
+        const partnerData: PartnerData = {
+          name: data.name as string,
+          password: data.password as string,
+          permissions: data.permissions as string[],
+          createdAt: data.createdAt as number,
+          lastUsedAt: data.lastUsedAt as number | null,
+          active: data.active as boolean,
+        }
+        if (partnerData.password === password && partnerData.active) {
+          found = { id: child.key as string, data: partnerData }
+        }
+      })
+      // Update lastUsedAt if found
+      if (found) {
+        await update(ref(db, `adminConfig/partners/${found.id}`), { lastUsedAt: Date.now() })
+      }
+      return found
+    }
+    return null
+  } catch (err) {
+    console.warn('Firebase authenticatePartner failed:', err)
+    return null
+  }
+}
+
+// Check admin password (for login)
+export async function checkAdminPassword(password: string): Promise<boolean> {
+  try {
+    const adminPwd = await getAdminPassword()
+    return password === adminPwd
+  } catch (err) {
+    console.warn('Firebase checkAdminPassword failed:', err)
+    return false
   }
 }

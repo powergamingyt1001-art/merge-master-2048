@@ -2,8 +2,8 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon, Copy, Percent, Package, TrendingUp, DollarSign, Send } from 'lucide-react'
-import { getTotalUserCount, getOnlineUserCount, getTotalReferralsCount } from '@/lib/firebase-service'
+import { X, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon, Copy, Percent, Package, TrendingUp, DollarSign, Send, Lock, UserCheck } from 'lucide-react'
+import { getTotalUserCount, getOnlineUserCount, getTotalReferralsCount, checkAdminPassword, setAdminPassword as firebaseSetAdminPassword, authenticatePartner, getPartners as firebaseGetPartners, savePartner as firebaseSavePartner, deletePartner as firebaseDeletePartner, onOrdersUpdate, updateOrderStatus as firebaseUpdateOrderStatus, deliverOrderItems, type FirebaseStoreOrder, type PartnerData } from '@/lib/firebase-service'
 
 interface CouponCodeProps {
   isOpen: boolean
@@ -61,8 +61,8 @@ const BUILT_IN_ADMIN_CODES: Record<string, AdminCodeDef> = {
 const MAX_COINS_PER_COUPON = 500
 const MAX_MULTIPLIER_COUNT = 2
 
-// Secret admin access code - NEVER displayed in UI
-const ADMIN_ACCESS_CODE = 'ADMIN.IN'
+// Admin access code is now stored in Firebase at adminConfig/adminPassword
+// Default password: 'ADMIN.IN' - can be changed by admin
 
 function getTodayStr(): string {
   return new Date().toISOString().split('T')[0]
@@ -333,7 +333,7 @@ function getCoinAmountFromItem(item: string): number {
   return 500
 }
 
-type AdminTab = 'dashboard' | 'payments' | 'coupons' | 'prices' | 'history' | 'users' | 'partner'
+type AdminTab = 'dashboard' | 'payments' | 'coupons' | 'prices' | 'history' | 'users' | 'partner' | 'security'
 
 // Custom price overrides stored in localStorage
 interface CustomPriceOverride {
@@ -658,6 +658,21 @@ export function CouponCode({
   const [selectedHistoryIds, setSelectedHistoryIds] = useState<Set<string>>(new Set())
   const [lockDuration, setLockDuration] = useState<number>(() => loadLockDuration())
 
+  // Admin role & partner state
+  const [adminRole, setAdminRole] = useState<'admin' | 'partner'>('admin')
+  const [partnerPermissions, setPartnerPermissions] = useState<string[]>([])
+  const [partnerName, setPartnerName] = useState('')
+  // Firebase orders (synced across devices)
+  const [firebaseOrders, setFirebaseOrders] = useState<FirebaseStoreOrder[]>([])
+  // Admin password change
+  const [newAdminPassword, setNewAdminPassword] = useState('')
+  const [adminPasswordMsg, setAdminPasswordMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  // Partner management
+  const [partnerList, setPartnerList] = useState<Array<{ id: string } & PartnerData>>([])
+  const [newPartnerName, setNewPartnerName] = useState('')
+  const [newPartnerPassword, setNewPartnerPassword] = useState('')
+  const [newPartnerPermissions, setNewPartnerPermissions] = useState<string[]>(['view_orders'])
+
   // New coupon form state
   const [newCodeInput, setNewCodeInput] = useState('')
   const [newCodeRewardType, setNewCodeRewardType] = useState<RewardType>('coins')
@@ -791,6 +806,8 @@ export function CouponCode({
       setSelectedHistoryIds(new Set())
       setBannedUsers(loadBannedUsers())
       setDiscountCoupons(loadDiscountCoupons())
+      // Load partners from Firebase
+      firebaseGetPartners().then(p => setPartnerList(p)).catch(() => {})
       // Load user stats from Firebase
       setUserStatsLoading(true)
       Promise.all([getTotalUserCount(), getOnlineUserCount(), getTotalReferralsCount()])
@@ -826,6 +843,19 @@ export function CouponCode({
       setPurchaseHistory(loadPurchaseHistory())
     }
   }, [adminTab, showAdminPanel])
+
+  // Listen for Firebase orders in real-time when admin panel is open
+  useEffect(() => {
+    if (!showAdminPanel) return
+    const unsubscribe = onOrdersUpdate((orders) => {
+      setFirebaseOrders(orders)
+      // Compute revenue and pending count from Firebase orders
+      const approvedRevenue = orders.filter(o => o.status === 'approved').reduce((sum, o) => sum + o.finalAmount, 0)
+      setTotalRevenue(approvedRevenue)
+      setPendingOrderCount(orders.filter(o => o.status === 'pending').length)
+    })
+    return unsubscribe
+  }, [showAdminPanel])
 
   // Pick a random reward based on weights
   const pickRandomReward = useCallback((): RewardOption => {
@@ -963,19 +993,53 @@ export function CouponCode({
   }, [onAddCoins, onAddPowerUp, onAddSpinTickets, onAddNotification])
 
   // Handle claim
-  const handleClaim = useCallback(() => {
+  const handleClaim = useCallback(async () => {
     const code = codeInput.trim().toUpperCase()
     if (!code) {
       setStatusMessage({ text: 'Please enter a coupon code', type: 'error' })
       return
     }
 
-    // Check for admin access code FIRST (before any other check)
-    if (code === ADMIN_ACCESS_CODE) {
-      setShowAdminPanel(true)
-      setCodeInput('')
-      setStatusMessage(null)
-      return
+      // Check for admin access code FIRST (before any other check)
+    // Check against Firebase admin password and partner passwords
+    if (code.length >= 4) {
+      // Try admin password check
+      try {
+        const isAdmin = await checkAdminPassword(code)
+        if (isAdmin) {
+          setAdminRole('admin')
+          setShowAdminPanel(true)
+          setCodeInput('')
+          setStatusMessage(null)
+          return
+        }
+      } catch { /* ignore */ }
+
+      // Try partner password check
+      try {
+        const partner = await authenticatePartner(code)
+        if (partner) {
+          setAdminRole('partner')
+          setPartnerPermissions(partner.data.permissions)
+          setPartnerName(partner.data.name)
+          // Set the correct tab based on permissions
+          if (partner.data.permissions.includes('approve_orders') || partner.data.permissions.includes('view_orders')) {
+            setAdminTab('payments')
+          } else if (partner.data.permissions.includes('manage_coupons')) {
+            setAdminTab('coupons')
+          } else if (partner.data.permissions.includes('manage_prices')) {
+            setAdminTab('prices')
+          } else if (partner.data.permissions.includes('view_users') || partner.data.permissions.includes('ban_users')) {
+            setAdminTab('users')
+          } else {
+            setAdminTab('dashboard')
+          }
+          setShowAdminPanel(true)
+          setCodeInput('')
+          setStatusMessage(null)
+          return
+        }
+      } catch { /* ignore */ }
     }
 
     // Check built-in admin codes
@@ -1150,12 +1214,31 @@ export function CouponCode({
         onAddNotification('Order Approved! ✅', `${entry.item} delivered! ${coinAmount} coins added${bonusText}`, 'reward', '📦')
       }
 
-      // Update store order status
+      // Update store order status locally
       const updatedOrders = storeOrders.map(o =>
         o.id === storeOrderId ? { ...o, status: 'approved' as const } : o
       )
       setStoreOrders(updatedOrders)
       saveStoreOrders(updatedOrders)
+
+      // Update order in Firebase
+      firebaseUpdateOrderStatus(storeOrderId, 'approved').catch(() => {})
+
+      // Deliver items to user via Firebase notification
+      const fbOrder = firebaseOrders.find(o => o.id === storeOrderId)
+      if (fbOrder) {
+        const deliveryItems: { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number } = {}
+        if (entry.item.includes('5x')) {
+          deliveryItems.abilities = [{ type: 'multiplier5x', count: entry.abilityCount || 5 }]
+        } else if (entry.item.includes('2.5x')) {
+          deliveryItems.abilities = [{ type: 'multiplier2_5x', count: entry.abilityCount || 5 }]
+        } else {
+          let coinAmt = entry.coinAmount || getCoinAmountFromItem(entry.item)
+          if (isDelayed) coinAmt = Math.floor(coinAmt * 2)
+          deliveryItems.coins = coinAmt
+        }
+        deliverOrderItems(storeOrderId, fbOrder.playerId, deliveryItems).catch(() => {})
+      }
     } else if (entry.type === 'inr_ability') {
       // INR ability purchase (5x/2.5x) - add the actual ability
       if (entry.item.includes('5x')) {
@@ -1188,7 +1271,7 @@ export function CouponCode({
       const bonusText = isDelayed ? ` (2x bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
       onAddNotification('Order Approved! ✅', `${entry.item} delivered! ${coinAmount} coins added${bonusText}`, 'reward', '📦')
     }
-  }, [purchaseHistory, storeOrders, onAddCoins, onAddPowerUp, onAddNotification])
+  }, [purchaseHistory, storeOrders, onAddCoins, onAddPowerUp, onAddNotification, firebaseOrders])
 
   // Deny a purchase (works with both purchaseHistory and storeOrders)
   const handleDenyPurchase = useCallback((entry: PurchaseHistoryEntry) => {
@@ -1201,6 +1284,8 @@ export function CouponCode({
       )
       setStoreOrders(updatedOrders)
       saveStoreOrders(updatedOrders)
+      // Update in Firebase
+      firebaseUpdateOrderStatus(storeOrderId, 'rejected').catch(() => {})
     } else {
       const updated = purchaseHistory.map(p =>
         p.id === entry.id ? { ...p, status: 'Denied' as const } : p
@@ -1224,6 +1309,8 @@ export function CouponCode({
       )
       setStoreOrders(updatedOrders)
       saveStoreOrders(updatedOrders)
+      // Update in Firebase
+      firebaseUpdateOrderStatus(storeOrderId, 'rejected').catch(() => {})
     } else {
       const updated = purchaseHistory.map(p =>
         p.id === entry.id ? { ...p, status: 'Denied' as const } : p
@@ -1420,7 +1507,7 @@ export function CouponCode({
     }
   }
 
-  // Merge purchaseHistory and storeOrders for display
+  // Merge purchaseHistory, storeOrders, AND Firebase orders for display
   const mergedAllPurchases: PurchaseHistoryEntry[] = [
     ...purchaseHistory,
     ...storeOrders.map(order => {
@@ -1441,27 +1528,69 @@ export function CouponCode({
         abilityCount: isInrAbility ? order.quantity : undefined,
       }
     }),
+    // Also add Firebase-only orders (not in localStorage)
+    ...firebaseOrders
+      .filter(fo => !storeOrders.some(o => o.id === fo.id))
+      .map(fo => {
+        const itemStr = fo.items.map(i => `${i.name} x${i.quantity}`).join(', ')
+        const isInrAbility = itemStr.includes('5x') || itemStr.includes('2.5x')
+        return {
+          id: `store_${fo.id}`,
+          date: fo.date,
+          item: itemStr,
+          amount: `₹${fo.finalAmount}`,
+          status: (fo.status === 'pending' ? 'Pending' : fo.status === 'approved' ? 'Delivered' : 'Denied') as 'Pending' | 'Delivered' | 'Denied',
+          type: (isInrAbility ? 'inr_ability' : 'coins') as 'coins' | 'ability' | 'inr_ability',
+          transactionId: fo.transactionId,
+          whatsappNumber: fo.whatsappNumber,
+          buyerName: fo.name,
+          screenshotDataUrl: fo.proofBase64,
+          coinAmount: isInrAbility ? undefined : fo.items.reduce((s, i) => s + i.quantity, 0),
+          abilityType: isInrAbility ? (itemStr.includes('5x') ? '5x' : '2.5x') : undefined,
+          abilityCount: isInrAbility ? fo.items.reduce((s, i) => s + i.quantity, 0) : undefined,
+        }
+      }),
   ]
 
   const pendingPurchases = mergedAllPurchases.filter(p => p.status === 'Pending')
   const allPurchases = mergedAllPurchases
 
-  // Approve a store order
+  // Approve a store order (from Firebase)
   const handleApproveStoreOrder = useCallback((order: StoreOrder) => {
     const updated = storeOrders.map(o =>
       o.id === order.id ? { ...o, status: 'approved' as const } : o
     )
     setStoreOrders(updated)
     saveStoreOrders(updated)
-  }, [storeOrders])
+    // Update in Firebase
+    firebaseUpdateOrderStatus(order.id, 'approved').catch(() => {})
+    // Deliver items via Firebase notification
+    const fbOrder = firebaseOrders.find(o => o.id === order.id)
+    if (fbOrder) {
+      const isInrAbility = order.item.includes('5x') || order.item.includes('2.5x')
+      const deliveryItems: { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number } = {}
+      if (isInrAbility) {
+        if (order.item.includes('5x')) {
+          deliveryItems.abilities = [{ type: 'multiplier5x', count: order.quantity }]
+        } else {
+          deliveryItems.abilities = [{ type: 'multiplier2_5x', count: order.quantity }]
+        }
+      } else {
+        deliveryItems.coins = order.quantity
+      }
+      deliverOrderItems(order.id, fbOrder.playerId, deliveryItems).catch(() => {})
+    }
+  }, [storeOrders, firebaseOrders])
 
-  // Deny a store order
+  // Deny a store order (from Firebase)
   const handleDenyStoreOrder = useCallback((order: StoreOrder) => {
     const updated = storeOrders.map(o =>
       o.id === order.id ? { ...o, status: 'rejected' as const } : o
     )
     setStoreOrders(updated)
     saveStoreOrders(updated)
+    // Update in Firebase
+    firebaseUpdateOrderStatus(order.id, 'rejected').catch(() => {})
   }, [storeOrders])
 
   // Delete selected history items
@@ -1852,7 +1981,7 @@ export function CouponCode({
                         <div className="p-2.5 rounded-lg"
                           style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                           <p className="text-[9px] font-bold mb-2" style={{ color: 'rgba(255,255,255,0.5)' }}>Quick Actions</p>
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-4 gap-2">
                             <button onClick={() => setAdminTab('payments')}
                               className="p-2 rounded-lg text-center transition-transform active:scale-95"
                               style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)' }}>
@@ -1860,7 +1989,7 @@ export function CouponCode({
                               <p className="text-[7px] font-bold mt-1" style={{ color: '#F65E3B' }}>Payments</p>
                               {pendingOrderCount > 0 && (
                                 <span className="text-[6px] px-1.5 py-0.5 rounded-full mt-0.5 inline-block" style={{ backgroundColor: '#F65E3B', color: '#FFFFFF' }}>
-                                  {pendingOrderCount} pending
+                                  {pendingOrderCount}
                                 </span>
                               )}
                             </button>
@@ -1869,18 +1998,18 @@ export function CouponCode({
                               style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
                               <span className="text-lg block">🎟️</span>
                               <p className="text-[7px] font-bold mt-1" style={{ color: '#EDC22E' }}>Coupons</p>
-                              <span className="text-[6px] mt-0.5 inline-block" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                                {customCodes.length + discountCoupons.length} active
-                              </span>
                             </button>
                             <button onClick={() => setAdminTab('users')}
                               className="p-2 rounded-lg text-center transition-transform active:scale-95"
                               style={{ backgroundColor: 'rgba(124,77,255,0.08)', border: '1px solid rgba(124,77,255,0.15)' }}>
                               <span className="text-lg block">👥</span>
                               <p className="text-[7px] font-bold mt-1" style={{ color: '#7C4DFF' }}>Users</p>
-                              <span className="text-[6px] mt-0.5 inline-block" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                                {bannedUsers.length} banned
-                              </span>
+                            </button>
+                            <button onClick={() => setAdminTab('security')}
+                              className="p-2 rounded-lg text-center transition-transform active:scale-95"
+                              style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
+                              <span className="text-lg block">🔐</span>
+                              <p className="text-[7px] font-bold mt-1" style={{ color: '#00E676' }}>Security</p>
                             </button>
                           </div>
                         </div>
@@ -3527,6 +3656,179 @@ export function CouponCode({
                         <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Partner management is only available to the owner</p>
                       </div>
                     )}
+
+                    {/* ====== SECURITY TAB (Admin only) ====== */}
+                    {adminTab === 'security' && adminRole === 'admin' && (
+                      <div className="space-y-3">
+                        {/* Change Admin Password */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Lock className="w-3 h-3" style={{ color: '#00E676' }} />
+                            <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>Change Admin Password</p>
+                          </div>
+                          <p className="text-[7px] mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                            Change the secret password used to access the admin panel. Current users will need the new password.
+                          </p>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <input
+                              type="text"
+                              value={newAdminPassword}
+                              onChange={(e) => setNewAdminPassword(e.target.value)}
+                              placeholder="Enter new admin password..."
+                              className="flex-1 px-2 py-1.5 rounded-lg text-[8px] font-semibold outline-none"
+                              style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                            />
+                            <button
+                              onClick={async () => {
+                                if (!newAdminPassword.trim() || newAdminPassword.trim().length < 4) {
+                                  setAdminPasswordMsg({ text: 'Password must be at least 4 characters', type: 'error' })
+                                  return
+                                }
+                                await firebaseSetAdminPassword(newAdminPassword.trim())
+                                setAdminPasswordMsg({ text: 'Password updated successfully!', type: 'success' })
+                                setNewAdminPassword('')
+                                setTimeout(() => setAdminPasswordMsg(null), 3000)
+                              }}
+                              className="px-3 py-1.5 rounded-lg text-[8px] font-bold transition-transform active:scale-95"
+                              style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF' }}
+                            >
+                              SAVE
+                            </button>
+                          </div>
+                          {adminPasswordMsg && (
+                            <p className="text-[7px] font-bold" style={{ color: adminPasswordMsg.type === 'success' ? '#00E676' : '#F65E3B' }}>
+                              {adminPasswordMsg.text}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Partner Passwords */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(124,77,255,0.06)', border: '1px solid rgba(124,77,255,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <UserCheck className="w-3 h-3" style={{ color: '#7C4DFF' }} />
+                            <p className="text-[9px] font-bold" style={{ color: '#7C4DFF' }}>Partner Passwords</p>
+                          </div>
+                          <p className="text-[7px] mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                            Partners can enter their password in the coupon code field to access specific admin features.
+                          </p>
+                          {/* Add new partner */}
+                          <div className="space-y-1.5 mb-3 p-2 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                            <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Add New Partner</p>
+                            <input
+                              type="text"
+                              value={newPartnerName}
+                              onChange={(e) => setNewPartnerName(e.target.value)}
+                              placeholder="Partner name..."
+                              className="w-full px-2 py-1 rounded-lg text-[8px] outline-none"
+                              style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                            />
+                            <input
+                              type="text"
+                              value={newPartnerPassword}
+                              onChange={(e) => setNewPartnerPassword(e.target.value)}
+                              placeholder="Password (min 4 chars)..."
+                              className="w-full px-2 py-1 rounded-lg text-[8px] outline-none"
+                              style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                            />
+                            <div className="flex flex-wrap gap-1">
+                              {['view_orders', 'approve_orders', 'manage_coupons', 'manage_prices', 'view_users', 'ban_users'].map(perm => (
+                                <button key={perm}
+                                  onClick={() => {
+                                    setNewPartnerPermissions(prev =>
+                                      prev.includes(perm) ? prev.filter(p => p !== perm) : [...prev, perm]
+                                    )
+                                  }}
+                                  className="text-[6px] font-bold px-1.5 py-0.5 rounded transition-transform active:scale-95"
+                                  style={{
+                                    backgroundColor: newPartnerPermissions.includes(perm) ? 'rgba(124,77,255,0.2)' : 'rgba(255,255,255,0.04)',
+                                    border: newPartnerPermissions.includes(perm) ? '1px solid rgba(124,77,255,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                                    color: newPartnerPermissions.includes(perm) ? '#7C4DFF' : 'rgba(255,255,255,0.4)',
+                                  }}
+                                >
+                                  {perm.replace(/_/g, ' ')}
+                                </button>
+                              ))}
+                            </div>
+                            <button
+                              onClick={async () => {
+                                if (!newPartnerName.trim() || newPartnerPassword.trim().length < 4) return
+                                const id = `partner_${Date.now()}`
+                                await firebaseSavePartner(id, {
+                                  name: newPartnerName.trim(),
+                                  password: newPartnerPassword.trim(),
+                                  permissions: newPartnerPermissions,
+                                  createdAt: Date.now(),
+                                  lastUsedAt: null,
+                                  active: true,
+                                })
+                                setPartnerList(await firebaseGetPartners())
+                                setNewPartnerName('')
+                                setNewPartnerPassword('')
+                                setNewPartnerPermissions(['view_orders'])
+                              }}
+                              className="w-full py-1.5 rounded-lg text-[8px] font-bold transition-transform active:scale-95"
+                              style={{ background: 'linear-gradient(135deg, #7C4DFF, #536DFE)', color: '#FFFFFF' }}
+                            >
+                              ADD PARTNER
+                            </button>
+                          </div>
+                          {/* Existing partners */}
+                          <div className="space-y-1">
+                            {partnerList.map(partner => (
+                              <div key={partner.id} className="flex items-center justify-between p-2 rounded-lg"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[9px] font-bold" style={{ color: '#FFFFFF' }}>{partner.name}</p>
+                                  <div className="flex flex-wrap gap-0.5 mt-0.5">
+                                    {partner.permissions.map(p => (
+                                      <span key={p} className="text-[5px] px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(124,77,255,0.1)', color: '#7C4DFF' }}>
+                                        {p.replace(/_/g, ' ')}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <p className="text-[6px] mt-0.5" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                                    Password: {'•'.repeat(Math.min(partner.password.length, 8))} • {partner.active ? '✅ Active' : '❌ Inactive'}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    onClick={async () => {
+                                      await firebaseSavePartner(partner.id, { ...partner, active: !partner.active })
+                                      setPartnerList(await firebaseGetPartners())
+                                    }}
+                                    className="text-[7px] font-bold px-2 py-1 rounded"
+                                    style={{ backgroundColor: partner.active ? 'rgba(246,94,59,0.1)' : 'rgba(0,230,118,0.1)', color: partner.active ? '#F65E3B' : '#00E676' }}
+                                  >
+                                    {partner.active ? 'Disable' : 'Enable'}
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      await firebaseDeletePartner(partner.id)
+                                      setPartnerList(await firebaseGetPartners())
+                                    }}
+                                    className="text-[7px] font-bold px-2 py-1 rounded"
+                                    style={{ backgroundColor: 'rgba(246,94,59,0.1)', color: '#F65E3B' }}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                            {partnerList.length === 0 && (
+                              <p className="text-[8px] text-center py-2" style={{ color: 'rgba(255,255,255,0.3)' }}>No partners yet</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {adminTab === 'security' && adminRole === 'partner' && (
+                      <div className="text-center py-4">
+                        <span className="text-2xl block mb-1">🔒</span>
+                        <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Security settings are only available to the main admin</p>
+                      </div>
+                    )}
             </div>
 
             {/* Admin Footer Navigation */}
@@ -3544,11 +3846,27 @@ export function CouponCode({
                 { key: 'history' as AdminTab, icon: '📜', label: 'History' },
                 { key: 'users' as AdminTab, icon: '👥', label: 'Users' },
                 { key: 'partner' as AdminTab, icon: '🤝', label: 'Partner' },
+                { key: 'security' as AdminTab, icon: '🔐', label: 'Security' },
               ].filter(t => {
-                if (!partnerMode) return true
-                if (partnerRole?.startsWith('PAY')) return t.key === 'payments' || t.key === 'dashboard'
-                if (partnerRole?.startsWith('SKILL')) return t.key === 'prices' || t.key === 'dashboard'
-                if (partnerRole?.startsWith('COUPON')) return t.key === 'coupons' || t.key === 'dashboard'
+                if (adminRole === 'admin' && !partnerMode) return true
+                if (adminRole === 'admin' && partnerMode) return true
+                // Partner role - filter based on permissions
+                if (adminRole === 'partner') {
+                  if (t.key === 'dashboard') return true
+                  if (t.key === 'payments' && partnerPermissions.includes('view_orders')) return true
+                  if (t.key === 'payments' && partnerPermissions.includes('approve_orders')) return true
+                  if (t.key === 'coupons' && partnerPermissions.includes('manage_coupons')) return true
+                  if (t.key === 'prices' && partnerPermissions.includes('manage_prices')) return true
+                  if (t.key === 'users' && (partnerPermissions.includes('view_users') || partnerPermissions.includes('ban_users'))) return true
+                  if (t.key === 'security') return false // Partners never see security
+                  return false
+                }
+                // Legacy partner mode (URL-based)
+                if (partnerMode) {
+                  if (partnerRole?.startsWith('PAY')) return t.key === 'payments' || t.key === 'dashboard'
+                  if (partnerRole?.startsWith('SKILL')) return t.key === 'prices' || t.key === 'dashboard'
+                  if (partnerRole?.startsWith('COUPON')) return t.key === 'coupons' || t.key === 'dashboard'
+                }
                 return false
               }).map((t) => (
                 <button

@@ -1,75 +1,76 @@
 ---
-Task ID: 3
+Task ID: 5
 Agent: Main Agent
-Task: Fix SpinWheel component and update Leaderboard component
+Task: Fix Friends/Invite System + Store Cart System
 
 Work Log:
 
-## Part A: SpinWheel Fixes
+## Part A: Fix Friends/Invite System
 
 ### Issues fixed:
-1. **Dead 500 coin spin**: Removed the broken `SPIN_COUNTS = [1, 2, 3, 5, 10]` which created odd pricing (300, 450 coins). Changed to `[1, 5, 10]` with clean pricing: 1 spin=150 coins, 5 spins=750 coins, 10 spins=1500 coins.
+1. **Real-time Firebase search using equalTo()**: The `searchPlayerByInviteCode` function in `firebase-service.ts` was loading all players (`limitToLast(10)`) and filtering client-side. This didn't work because Firebase returns the last 10 by inviteCode sort, not matching a specific code. Changed to use `equalTo(inviteCode.toUpperCase())` for exact match with `limitToLast(1)`, plus a fallback that does client-side filtering on a larger set.
 
-2. **Free spins logic**: 10 spins for 1500 coins now gives 12 spins total (2 FREE). The "10+2" label is shown in the selector with a green "FREE" badge. Info text clearly shows "+2 FREE 🎉" for both ticket and coin modes.
+2. **Real-time search as user types**: Added debounced search (500ms) in InvitePanel.tsx. When the user types 3+ characters, the search fires automatically after they stop typing. The manual search button still works for immediate search. Added `searchAttempted` state to properly show "No player found" only after a search completes, not while typing.
 
-3. **Show available spins based on coin balance**: 
-   - Added `affordableSpins = Math.floor(coins / 150)` calculation
-   - Balance display now shows "Available spins: X" count
-   - Added "Your coins can buy up to X spins" info text in coin mode
-   - Shows "(10+2 FREE deal available!)" when user can afford 10+ spins
+3. **No dummy/mock friends**: Verified the InvitePanel uses only Firebase real-time data (`onFriendsUpdate`, `onFriendRequestsUpdate`). No hardcoded friend arrays exist.
 
-4. **Smart affordability fallback**: Used `useMemo` to compute `effectiveMultiplier` - if user's selected spin count is unaffordable, automatically falls back to the highest affordable option. Avoided `useEffect` + `setState` pattern that violates React hooks rules.
-
-5. **Kept all existing functionality**: 
-   - Free spin button for watching ads (📺 Watch Ad for Free Spin)
-   - Adsterra ad integration at bottom
-   - SpinWheelAd overlay for ad watching
-   - All prize pool logic, wheel animation, claim flow unchanged
+4. **Friend request system already working**: The existing implementation already had:
+   - Three tabs: Refer | Friends | Requests
+   - Search by UID with found player card showing avatar, name, level, online status
+   - Send friend request with Plus (+) icon
+   - Accept/Decline buttons on requests
+   - Real-time listeners for friend requests and friends list
+   - All Firebase functions: `sendFriendRequest`, `acceptFriendRequest`, `declineFriendRequest`, `onFriendRequestsUpdate`, `onFriendsUpdate`, `removeFriend`
 
 ### Technical changes:
-- Changed `useEffect` import to `useMemo` for the effective multiplier computation
-- `spinMultiplier` state remains as user's selected value
-- `effectiveMultiplier` is computed via `useMemo` as the actual usable multiplier
-- All UI and logic references updated to use `effectiveMultiplier`
-- Removed unused `actualSpins` variable
-- Cost labels: 10x now shows "1500🪙" instead of "1500🪙" (same but explicit)
+- `firebase-service.ts`: Added `equalTo` import from `firebase/database`
+- `firebase-service.ts`: Rewrote `searchPlayerByInviteCode` to use `equalTo()` with fallback
+- `InvitePanel.tsx`: Added `useRef` import for timeout ref
+- `InvitePanel.tsx`: Added `searchAttempted` state and `searchTimeoutRef` ref
+- `InvitePanel.tsx`: Added `useEffect` for debounced real-time search on `searchCode` change
+- `InvitePanel.tsx`: Updated "No Result" condition to use `searchAttempted` instead of `searchCode.length >= 3`
+- `InvitePanel.tsx`: Added searching indicator in UID hint text
 
-## Part B: Leaderboard Updates
+## Part B: Store Cart System
 
 ### Changes made:
-1. **Renamed "Weekly" tab to "Battle"**: Changed the first tab label from "Weekly" to "Battle" with ⚔️ icon emphasis. Updated the reset indicator to say "⚔️ Battle Mode — Resets every Monday" instead of "🔄 Resets every Monday".
+1. **Quantity selector on store items**: Each `AbilityCard` now receives `cartQuantity`, `onAddToCart`, and `onUpdateCartQuantity` props. When an item is in the cart, it shows +/- buttons with quantity count instead of the Buy/Add button. For INR items, the button says "Add 🛒" which adds to cart. For coin items, it still says "BUY" and buys immediately.
 
-2. **Enhanced player profile popup**: Complete redesign of the profile overlay from a basic 4-line display to a full read-only profile:
-   - Avatar with level badge (colored ring based on level)
-   - Player name with "(You)" indicator for current player
-   - Level title capsule (Lv.X + title + icon) using `getLevelInfo`
-   - Online/Offline status indicator ("Online Now" / "Offline")
-   - 2x2 stats grid: Classic Best, Battle Score, Coins, Level XP
-   - Tournament Points bar
-   - Level progress bar with XP thresholds
-   - Like button (❤️ heart) with toggle state
+2. **Cart session state only**: Removed localStorage persistence for cart. Changed `useState<CartItem[]>(() => { ... localStorage ... })` to `useState<CartItem[]>([])` and removed the `useEffect` that wrote to localStorage. Cart now persists only during the component session.
 
-3. **Online indicator on PodiumSlot**: Added green/gray dot overlay on avatar for top-3 podium players showing online status.
+3. **Coupon validation for adminDiscountCoupons**: The `applyCoupon` function now checks both `adminDiscountCoupons` key (where WELCOME60 and admin-created discount coupons are stored) and the legacy `adminCoupons` key. Added validation for `disabled`, `maxUses`, `currentUses` fields from the discount coupon schema.
 
-4. **Online indicator on RankRow**: Already existed, kept with minor improvement (current player shows gold dot instead of red when offline).
+4. **Welcome bonus verification**: Verified `useGame.ts` `claimWelcome` already has correct values:
+   - 5x Ability × 5 (multiplier5xCount: +5) ✅
+   - 2.5x Ability × 5 (multiplier2_5xCount: +5) ✅
+   - Timer Ability × 5 (extraTimeCount: +5) ✅
+   - 2 FREE Room Cards (roomCardCount: +2) ✅
+   - 10 Spin Tickets (spinTickets: +10) ✅
+   - WELCOME60 coupon: 60% off, ₹29+ only, one-time use ✅
 
-5. **Profile overlay is READ-ONLY**: No edit name/avatar, no Create Room, no Theme toggle, no Reset button - just stats display and Like button.
+5. **All Part B UI elements verified present**:
+   - "15 per 2 weeks" subtitle on ABILITIES (COINS) heading ✅
+   - Daily Streak section replacing old DAILY FREE section ✅
+   - Room tab with room card packs + coin room card ✅
+   - History tab with order list ✅
+   - Cart slide-in panel from right with coupon field ✅
+   - UPI QR code in payment modal ✅
+   - Place Order button ✅
+   - Adsterra ads ✅
+   - Admin price override system ✅
+   - Daily streak system ✅
 
 ### Technical changes:
-- Added imports: `Zap`, `Shield` from lucide-react, `getLevelInfo`, `getLevelThreshold` from useGame
-- Added `selectedFirebasePlayer` lookup from `firebasePlayers` array using `selectedPlayer.playerId`
-- Added `selectedLevel`, `selectedLevelInfo`, `onlineStatus` computed values
-- Profile overlay width increased from `w-64` to `w-72` for better stats display
-- Added `max-h-[80vh] overflow-y-auto` for scrollable profile on small screens
-- Added `hover:bg-white/5` transition on RankRow for better UX
-- Kept all Firebase real-time listeners (`onLeaderboardUpdate`)
-- Kept deduplication logic in `buildModesLeaderboard` and `buildCoinsLeaderboard`
+- `Store.tsx`: Removed `CART_KEY` constant, added `ADMIN_DISCOUNT_COUPONS_KEY`
+- `Store.tsx`: Changed cart state from localStorage-backed to session-only
+- `Store.tsx`: Removed localStorage persist effect for cart
+- `Store.tsx`: Simplified `addToCart` to only accept `AbilityItem` (not union type)
+- `Store.tsx`: Updated `AbilityCard` with new props: `cartQuantity`, `onAddToCart`, `onUpdateCartQuantity`
+- `Store.tsx`: Updated `AbilityTab` and `RoomTab` signatures to include cart props
+- `Store.tsx`: Updated all `AbilityCard` usage in AbilityTab (5x, 2.5x, regular) and RoomTab to pass cart props
+- `Store.tsx`: Updated `applyCoupon` to check `adminDiscountCoupons` first, then legacy `adminCoupons`
+- `Store.tsx`: INR items show "Add 🛒" button, coin items still show "BUY"
 
 ## Lint Results
 - 0 errors, 0 warnings after all changes
-- Fixed React hooks `set-state-in-effect` error by switching from `useEffect` to `useMemo` for affordability computation
-
-Stage Summary:
-- SpinWheel: Clean pricing (150/750/1500), 10+2 FREE spins deal, affordable spins display
-- Leaderboard: "Battle" tab, rich read-only player profiles, online indicators everywhere
-- All existing functionality preserved (ads, Firebase, prizes, etc.)
+- Pre-existing TypeScript errors in `firebase-service.ts` (numChildren, id) and `CouponCode.tsx` (await in non-async) are NOT from this task's changes

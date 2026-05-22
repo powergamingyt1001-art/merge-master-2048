@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Coins, Zap, Clock, AlertCircle, Copy, Check, Upload, FileText, ImageIcon, Trash2, ShoppingCart, Minus, Plus, Tag } from 'lucide-react'
 import { getRandomLink } from '@/components/ads/AdOverlay'
+import { placeOrder as firebasePlaceOrder, onUserOrdersUpdate, type FirebaseStoreOrder } from '@/lib/firebase-service'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -11,6 +12,8 @@ interface StoreProps {
   isOpen: boolean
   onClose: () => void
   playerId: string
+  playerName: string
+  userCode: string
   coins: number
   onAddNotification: (title: string, message: string, type: string, emoji: string) => void
   onDeductCoins: (amount: number) => void
@@ -76,11 +79,11 @@ interface Coupon {
   used: boolean
 }
 
-const CART_KEY = 'mergeMaster2048_cart'
 const USED_COUPONS_KEY = 'mergeMaster2048_usedCoupons'
 
 // Admin coupons stored in localStorage
 const ADMIN_COUPONS_KEY = 'adminCoupons'
+const ADMIN_DISCOUNT_COUPONS_KEY = 'adminDiscountCoupons'
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -122,7 +125,7 @@ const ROOM_CARD_PACKS: AbilityItem[] = [
 ]
 
 const UPI_ID = '9897186065@fam'
-const ORDERS_KEY = 'mergeMaster2048_orders'
+const ORDERS_KEY = 'mergeMaster2048_orders' // Legacy localStorage key - still used for local cache
 const PURCHASE_LIMIT_KEY = 'mergeMaster2048_abilityPurchaseLimits'
 const MAX_ABILITY_PER_2WEEKS = 15
 const PAYMENT_DETAILS_KEY = 'mergeMaster2048_paymentDetails'
@@ -307,6 +310,30 @@ function loadOrders(): StoreOrder[] {
 function saveOrders(orders: StoreOrder[]) {
   if (typeof window === 'undefined') return
   localStorage.setItem(ORDERS_KEY, JSON.stringify(orders))
+}
+
+// Convert StoreOrder to FirebaseStoreOrder format
+function toFirebaseOrder(order: StoreOrder, playerName: string, userCode: string): Omit<FirebaseStoreOrder, 'createdAt' | 'approvedAt'> {
+  const isCoinPack = !order.item.includes('5x') && !order.item.includes('2.5x') && !order.item.includes('Room') && !order.item.includes('🃏')
+  return {
+    id: order.id,
+    date: order.date,
+    playerId: order.playerId,
+    playerName,
+    userCode,
+    items: [{ name: order.item, quantity: order.quantity, price: order.price }],
+    totalAmount: order.price,
+    discountCoupon: '',
+    discountAmount: 0,
+    finalAmount: order.price,
+    whatsappNumber: order.whatsappNumber,
+    name: order.name,
+    transactionId: order.transactionId,
+    utrNumber: order.utrNumber,
+    proofBase64: order.proofBase64,
+    status: order.status,
+    upiId: order.upiId,
+  }
 }
 
 // ─── General Helpers ─────────────────────────────────────────────────────────
@@ -598,7 +625,7 @@ function UPIPaymentModal({
     reader.readAsDataURL(file)
   }, [])
 
-  const handleBookOrder = useCallback(() => {
+  const handleBookOrder = useCallback(async () => {
     if (!whatsappNumber.trim() || !name.trim() || !transactionId.trim()) return
 
     setSubmitting(true)
@@ -627,7 +654,7 @@ function UPIPaymentModal({
     // Consume discount coupon if used (only when order is actually placed)
     if (discountCouponCode && discountAmount && discountAmount > 0) {
       try {
-        const { consumeDiscountCoupon } = require('@/components/game/CouponCode')
+        const { consumeDiscountCoupon } = await import('@/components/game/CouponCode')
         consumeDiscountCoupon(discountCouponCode)
       } catch { /* ignore */ }
     }
@@ -638,7 +665,7 @@ function UPIPaymentModal({
     setProofBase64(undefined)
     setProofFileName(null)
     setSubmitting(false)
-  }, [whatsappNumber, name, transactionId, utrNumber, proofBase64, itemName, itemPrice, itemQuantity, playerId, onOrderPlaced])
+  }, [whatsappNumber, name, transactionId, utrNumber, proofBase64, itemName, itemPrice, itemQuantity, playerId, onOrderPlaced, discountCouponCode, discountAmount])
 
   const isFormValid = whatsappNumber.trim() && name.trim() && transactionId.trim()
 
@@ -966,11 +993,17 @@ function AbilityCard({
   onBuy,
   onCoinBuy,
   coins,
+  cartQuantity,
+  onAddToCart,
+  onUpdateCartQuantity,
 }: {
   item: AbilityItem
   onBuy: (item: string, price: number, quantity: number) => void
   onCoinBuy: (item: AbilityItem) => void
   coins: number
+  cartQuantity: number
+  onAddToCart: (item: AbilityItem) => void
+  onUpdateCartQuantity: (id: string, delta: number) => void
 }) {
   const isCoinCurrency = item.currency === 'coin'
   const remaining = isCoinCurrency && item.abilityType ? getRemainingPurchase(item.abilityType) : null
@@ -1017,19 +1050,37 @@ function AbilityCard({
         <span className="text-xs font-bold" style={{ color: isCoinCurrency ? '#EDC22E' : 'rgba(255,255,255,0.6)' }}>
           {isCoinCurrency ? `💰 ${formatNumber(item.price)}` : `₹${item.price}`}
         </span>
-        <button
-          onClick={() => isCoinCurrency ? onCoinBuy(item) : onBuy(`${item.emoji} ${item.name} x${item.quantity}`, item.price, item.quantity)}
-          disabled={isCoinCurrency && (!canAfford || isLimitReached)}
-          className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{
-            background: isCoinCurrency
-              ? 'linear-gradient(135deg, #EDC22E, #FFB300)'
-              : 'linear-gradient(135deg, #EDC22E, #FF7A00)',
-            color: '#FFFFFF',
-          }}
-        >
-          {isCoinCurrency ? 'BUY' : 'BUY ₹'}
-        </button>
+        {cartQuantity > 0 ? (
+          <div className="flex items-center gap-1">
+            <button onClick={() => onUpdateCartQuantity(item.id, -1)} className="w-6 h-6 rounded flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+              <Minus className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
+            </button>
+            <span className="text-[10px] font-bold w-5 text-center" style={{ color: '#EDC22E' }}>{cartQuantity}</span>
+            <button onClick={() => onUpdateCartQuantity(item.id, 1)} className="w-6 h-6 rounded flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+              <Plus className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => {
+              if (isCoinCurrency) {
+                onCoinBuy(item)
+              } else {
+                onAddToCart(item)
+              }
+            }}
+            disabled={isCoinCurrency && (!canAfford || isLimitReached)}
+            className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{
+              background: isCoinCurrency
+                ? 'linear-gradient(135deg, #EDC22E, #FFB300)'
+                : 'linear-gradient(135deg, #EDC22E, #FF7A00)',
+              color: '#FFFFFF',
+            }}
+          >
+            {isCoinCurrency ? 'BUY' : 'Add 🛒'}
+          </button>
+        )}
       </div>
     </motion.div>
   )
@@ -1037,7 +1088,7 @@ function AbilityCard({
 
 // ─── Ability Tab ─────────────────────────────────────────────────────────────
 
-function AbilityTab({ onBuy, onCoinBuy, coins, onClaimFreeRoomCard, consecutiveVisits, freeRoomCardAvailable, onAddRoomCards, onAddNotification, onDeductCoins }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number; onClaimFreeRoomCard?: () => void; consecutiveVisits: number; freeRoomCardAvailable: boolean; onAddRoomCards?: (count: number) => void; onAddNotification: (title: string, message: string, type: string, emoji: string) => void; onDeductCoins: (amount: number) => void }) {
+function AbilityTab({ onBuy, onCoinBuy, coins, onClaimFreeRoomCard, consecutiveVisits, freeRoomCardAvailable, onAddRoomCards, onAddNotification, onDeductCoins, cart, onAddToCart, onUpdateCartQuantity }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number; onClaimFreeRoomCard?: () => void; consecutiveVisits: number; freeRoomCardAvailable: boolean; onAddRoomCards?: (count: number) => void; onAddNotification: (title: string, message: string, type: string, emoji: string) => void; onDeductCoins: (amount: number) => void; cart: CartItem[]; onAddToCart: (item: AbilityItem) => void; onUpdateCartQuantity: (id: string, delta: number) => void }) {
   const [freeRoomCardPending, setFreeRoomCardPending] = useState(false)
   const freeRoomCardOpenedRef = useRef(false)
 
@@ -1139,7 +1190,7 @@ function AbilityTab({ onBuy, onCoinBuy, coins, onClaimFreeRoomCard, consecutiveV
         </div>
         <div className="space-y-2">
           {getEffectiveMultiplierItems(MULTIPLIER_5X, '5x').map((item) => (
-            <AbilityCard key={item.id} item={item} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} />
+            <AbilityCard key={item.id} item={item} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} cartQuantity={cart.find(c => c.id === item.id)?.quantity || 0} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} />
           ))}
         </div>
       </div>
@@ -1157,7 +1208,7 @@ function AbilityTab({ onBuy, onCoinBuy, coins, onClaimFreeRoomCard, consecutiveV
         </div>
         <div className="space-y-2">
           {getEffectiveMultiplierItems(MULTIPLIER_2_5X, '2.5x').map((item) => (
-            <AbilityCard key={item.id} item={item} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} />
+            <AbilityCard key={item.id} item={item} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} cartQuantity={cart.find(c => c.id === item.id)?.quantity || 0} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} />
           ))}
         </div>
       </div>
@@ -1175,7 +1226,7 @@ function AbilityTab({ onBuy, onCoinBuy, coins, onClaimFreeRoomCard, consecutiveV
         </div>
         <div className="space-y-2">
           {getEffectiveRegularAbilities().map((item) => (
-            <AbilityCard key={item.id} item={item} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} />
+            <AbilityCard key={item.id} item={item} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} cartQuantity={cart.find(c => c.id === item.id)?.quantity || 0} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} />
           ))}
         </div>
       </div>
@@ -1185,7 +1236,7 @@ function AbilityTab({ onBuy, onCoinBuy, coins, onClaimFreeRoomCard, consecutiveV
 
 // ─── Room Tab ─────────────────────────────────────────────────────────────
 
-function RoomTab({ onBuy, onCoinBuy, coins, onAddRoomCards, onAddNotification, onDeductCoins, onClaimFreeRoomCard, consecutiveVisits, freeRoomCardAvailable }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number; onAddRoomCards?: (count: number) => void; onAddNotification: (title: string, message: string, type: string, emoji: string) => void; onDeductCoins: (amount: number) => void; onClaimFreeRoomCard?: () => void; consecutiveVisits: number; freeRoomCardAvailable: boolean }) {
+function RoomTab({ onBuy, onCoinBuy, coins, onAddRoomCards, onAddNotification, onDeductCoins, onClaimFreeRoomCard, consecutiveVisits, freeRoomCardAvailable, cart, onAddToCart, onUpdateCartQuantity }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number; onAddRoomCards?: (count: number) => void; onAddNotification: (title: string, message: string, type: string, emoji: string) => void; onDeductCoins: (amount: number) => void; onClaimFreeRoomCard?: () => void; consecutiveVisits: number; freeRoomCardAvailable: boolean; cart: CartItem[]; onAddToCart: (item: AbilityItem) => void; onUpdateCartQuantity: (id: string, delta: number) => void }) {
   const [freeRoomCardPending, setFreeRoomCardPending] = useState(false)
   const freeRoomCardOpenedRef = useRef(false)
 
@@ -1281,7 +1332,7 @@ function RoomTab({ onBuy, onCoinBuy, coins, onAddRoomCards, onAddNotification, o
         </div>
         <div className="space-y-2">
           {ROOM_CARD_PACKS.map(item => (
-            <AbilityCard key={item.id} item={item as any} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} />
+            <AbilityCard key={item.id} item={item as any} onBuy={onBuy} onCoinBuy={onCoinBuy} coins={coins} cartQuantity={cart.find(c => c.id === item.id)?.quantity || 0} onAddToCart={onAddToCart} onUpdateCartQuantity={onUpdateCartQuantity} />
           ))}
         </div>
       </div>
@@ -1487,7 +1538,7 @@ function HistoryTab({ orders, onDeleteAll, onDeleteSelected }: { orders: StoreOr
 
 // ─── Main Store Component ────────────────────────────────────────────────────
 
-export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos, onAddRoomCards }: StoreProps) {
+export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos, onAddRoomCards }: StoreProps) {
   const [activeTab, setActiveTab] = useState<TabId>('coins')
   const [orders, setOrders] = useState<StoreOrder[]>(() => loadOrders())
   const [consecutiveVisits, setConsecutiveVisits] = useState(0)
@@ -1498,6 +1549,38 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
     itemPrice: 0,
     itemQuantity: 0,
   })
+
+  // Listen for Firebase order status updates in real-time
+  useEffect(() => {
+    if (!playerId) return
+    const unsubscribe = onUserOrdersUpdate(playerId, (firebaseOrders) => {
+      // Merge Firebase order status into local orders
+      setOrders(prev => {
+        let updated = [...prev]
+        let changed = false
+        for (const fbOrder of firebaseOrders) {
+          const idx = updated.findIndex(o => o.id === fbOrder.id)
+          if (idx !== -1) {
+            if (updated[idx].status !== fbOrder.status) {
+              updated[idx] = { ...updated[idx], status: fbOrder.status }
+              changed = true
+              // Show notification for status changes
+              if (fbOrder.status === 'approved') {
+                onAddNotification('Order Approved! ✅', `Your order "${fbOrder.items.map(i => i.name).join(', ')}" has been approved!`, 'reward', '📦')
+              } else if (fbOrder.status === 'rejected') {
+                onAddNotification('Order Rejected ❌', `Your order "${fbOrder.items.map(i => i.name).join(', ')}" was rejected. Contact support.`, 'system', '⚠️')
+              }
+            }
+          }
+        }
+        if (changed) {
+          saveOrders(updated)
+        }
+        return changed ? updated : prev
+      })
+    })
+    return unsubscribe
+  }, [playerId, onAddNotification])
 
   // Track store visit for daily free room card
   useEffect(() => {
@@ -1581,8 +1664,14 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
     (order: StoreOrder) => {
       const newOrders = [order, ...orders].slice(0, 50)
       setOrders(newOrders)
-      saveOrders(newOrders)
+      saveOrders(newOrders) // Save to localStorage as local cache
       setPaymentModal({ open: false, itemName: '', itemPrice: 0, itemQuantity: 0 })
+
+      // Also place order in Firebase for cross-device sync
+      firebasePlaceOrder(toFirebaseOrder(order, playerName, userCode)).catch(() => {
+        // Silent fail - order is still saved locally
+        console.warn('Firebase placeOrder failed - order saved locally only')
+      })
 
       // Record daily streak purchase
       const streakResult = recordDailyStreakPurchase(order.price)
@@ -1605,7 +1694,7 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
         )
       }
     },
-    [orders, onAddNotification, onAddRoomCards]
+    [orders, onAddNotification, onAddRoomCards, playerName, userCode]
   )
 
   const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
@@ -1616,13 +1705,7 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
   ]
 
   // ─── Cart State ────────────────────────────────────────────────────────
-  const [cart, setCart] = useState<CartItem[]>(() => {
-    if (typeof window === 'undefined') return []
-    try {
-      const data = localStorage.getItem(CART_KEY)
-      return data ? JSON.parse(data) : []
-    } catch { return [] }
-  })
+  const [cart, setCart] = useState<CartItem[]>([])
   const [showCart, setShowCart] = useState(false)
   const [couponCode, setCouponCode] = useState('')
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null)
@@ -1632,25 +1715,14 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
   const cartTotalINR = cart.filter(i => i.currency === 'inr').reduce((sum, item) => sum + item.price * item.quantity, 0)
   const cartTotalCoins = cart.filter(i => i.currency === 'coin').reduce((sum, item) => sum + item.price * item.quantity, 0)
 
-  // Persist cart to localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(CART_KEY, JSON.stringify(cart))
-    }
-  }, [cart])
 
-  const addToCart = useCallback((item: AbilityItem | CoinPack, type: 'ability' | 'coinPack') => {
+  const addToCart = useCallback((item: AbilityItem) => {
     setCart(prev => {
-      const existing = prev.find(c => c.id === (type === 'coinPack' ? (item as CoinPack).id : (item as AbilityItem).id))
+      const existing = prev.find(c => c.id === item.id)
       if (existing) {
         return prev.map(c => c.id === existing.id ? { ...c, quantity: c.quantity + 1 } : c)
       }
-      if (type === 'coinPack') {
-        const pack = item as CoinPack
-        return [...prev, { id: pack.id, emoji: '💰', name: `${formatNumber(pack.amount)} Coins`, price: pack.price, quantity: 1, currency: 'inr' }]
-      }
-      const ability = item as AbilityItem
-      return [...prev, { id: ability.id, emoji: ability.emoji, name: ability.name, price: ability.price, quantity: 1, currency: ability.currency, abilityType: ability.abilityType, section: ability.section }]
+      return [...prev, { id: item.id, emoji: item.emoji, name: item.name, price: item.price, quantity: 1, currency: item.currency, abilityType: item.abilityType, section: item.section }]
     })
   }, [])
 
@@ -1684,7 +1756,35 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
       }
     } catch { /* ignore */ }
 
-    // Check admin coupons
+    // Check admin discount coupons (adminDiscountCoupons key - used by WELCOME60 etc.)
+    try {
+      const discountCoupons: Array<{ code: string; discountPercent: number; minPurchase?: number; maxUses?: number; currentUses?: number; oneTime?: boolean; oneTimePerUser?: boolean; targetUserIds?: string[]; disabled?: boolean }> = JSON.parse(localStorage.getItem(ADMIN_DISCOUNT_COUPONS_KEY) || '[]')
+      const found = discountCoupons.find(c => c.code.toUpperCase() === couponCode.trim().toUpperCase())
+      if (found) {
+        if (found.disabled) {
+          setCouponError('This coupon has been disabled')
+          return
+        }
+        if (found.maxUses && found.currentUses !== undefined && found.currentUses >= found.maxUses) {
+          setCouponError('This coupon has reached its max uses')
+          return
+        }
+        const minPurchase = found.minPurchase || 0
+        if (minPurchase > 0 && cartTotalINR < minPurchase) {
+          setCouponError(`Minimum ₹${minPurchase} purchase required`)
+          return
+        }
+        setAppliedCoupon({
+          code: found.code,
+          discountPercent: found.discountPercent || 10,
+          minPurchase: minPurchase,
+          used: false,
+        })
+        return
+      }
+    } catch { /* ignore */ }
+
+    // Check admin coupons (legacy key)
     try {
       const adminCoupons: Array<{ code: string; discount: number; minPurchase?: number; oneTime?: boolean }> = JSON.parse(localStorage.getItem(ADMIN_COUPONS_KEY) || '[]')
       const found = adminCoupons.find(c => c.code.toUpperCase() === couponCode.trim().toUpperCase())
@@ -1982,7 +2082,7 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <AbilityTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onClaimFreeRoomCard={handleClaimFreeRoomCard} consecutiveVisits={consecutiveVisits} freeRoomCardAvailable={freeRoomCardAvailable} onAddRoomCards={onAddRoomCards} onAddNotification={onAddNotification} onDeductCoins={onDeductCoins} />
+                    <AbilityTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onClaimFreeRoomCard={handleClaimFreeRoomCard} consecutiveVisits={consecutiveVisits} freeRoomCardAvailable={freeRoomCardAvailable} onAddRoomCards={onAddRoomCards} onAddNotification={onAddNotification} onDeductCoins={onDeductCoins} cart={cart} onAddToCart={addToCart} onUpdateCartQuantity={updateCartQuantity} />
                   </motion.div>
                 )}
                 {activeTab === 'room' && (
@@ -1993,7 +2093,7 @@ export function Store({ isOpen, onClose, playerId, coins, onAddNotification, onD
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <RoomTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onAddRoomCards={onAddRoomCards} onAddNotification={onAddNotification} onDeductCoins={onDeductCoins} onClaimFreeRoomCard={handleClaimFreeRoomCard} consecutiveVisits={consecutiveVisits} freeRoomCardAvailable={freeRoomCardAvailable} />
+                    <RoomTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onAddRoomCards={onAddRoomCards} onAddNotification={onAddNotification} onDeductCoins={onDeductCoins} onClaimFreeRoomCard={handleClaimFreeRoomCard} consecutiveVisits={consecutiveVisits} freeRoomCardAvailable={freeRoomCardAvailable} cart={cart} onAddToCart={addToCart} onUpdateCartQuantity={updateCartQuantity} />
                   </motion.div>
                 )}
                 {activeTab === 'history' && (

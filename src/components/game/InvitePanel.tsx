@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Copy, Share2, Users, Coins, Check, ToggleLeft, ToggleRight, Gift, Search, Heart, Swords, UserPlus, MessageCircle, Bell, UserCheck, UserX, Plus } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
@@ -72,6 +72,8 @@ export function InvitePanel({
   const [searching, setSearching] = useState(false)
   const [sendingRequest, setSendingRequest] = useState(false)
   const [requestSent, setRequestSent] = useState<string | null>(null)
+  const [searchAttempted, setSearchAttempted] = useState(false)
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Friends state
   const [friends, setFriends] = useState<FriendWithOnline[]>([])
@@ -141,11 +143,51 @@ export function InvitePanel({
     }
   }, [firebaseCommissionPending, onClaimFirebaseCommission, onClaimCommission])
 
-  // Search for friend by invite code via Firebase
+  // Real-time debounced search as user types
+  useEffect(() => {
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+
+    // Reset if search code is too short
+    if (!searchCode || searchCode.length < 3) {
+      setFoundPlayer(null)
+      setSearching(false)
+      setSearchAttempted(false)
+      return
+    }
+
+    // Debounce: wait 500ms after user stops typing
+    setSearching(true)
+    setSearchAttempted(false)
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const result = await searchPlayerByInviteCode(searchCode)
+        setFoundPlayer(result)
+      } catch {
+        setFoundPlayer(null)
+      }
+      setSearching(false)
+      setSearchAttempted(true)
+    }, 500)
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
+    }
+  }, [searchCode])
+
+  // Manual search button (still available for immediate search)
   const handleSearchFriend = useCallback(async () => {
     if (!searchCode || searchCode.length < 3) return
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
     setSearching(true)
     setFoundPlayer(null)
+    setSearchAttempted(false)
     try {
       const result = await searchPlayerByInviteCode(searchCode)
       setFoundPlayer(result)
@@ -153,6 +195,7 @@ export function InvitePanel({
       setFoundPlayer(null)
     }
     setSearching(false)
+    setSearchAttempted(true)
   }, [searchCode])
 
   // Send friend request
@@ -472,6 +515,7 @@ export function InvitePanel({
                   </div>
                   <p className="text-[7px] mt-1.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
                     Your UID: <span className="font-mono font-bold" style={{ color: '#EDC22E' }}>{userCode || 'N/A'}</span>
+                    {searchCode.length >= 3 && searching && <span style={{ color: '#EDC22E' }}> • Searching...</span>}
                   </p>
                 </div>
 
@@ -600,7 +644,7 @@ export function InvitePanel({
                 )}
 
                 {/* No Result */}
-                {!foundPlayer && !searching && searchCode.length >= 3 && (
+                {searchAttempted && !foundPlayer && !searching && (
                   <div className="text-center py-4">
                     <Search className="w-8 h-8 mx-auto mb-2" style={{ color: 'rgba(255,255,255,0.15)' }} />
                     <p className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>No player found</p>
@@ -609,7 +653,7 @@ export function InvitePanel({
                 )}
 
                 {/* Initial State */}
-                {!foundPlayer && !searching && searchCode.length < 3 && (
+                {!foundPlayer && !searching && !searchAttempted && searchCode.length < 3 && (
                   <div className="p-4 rounded-xl text-center" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
                     <span className="text-3xl block mb-2">👥</span>
                     <p className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Find Game Friends</p>

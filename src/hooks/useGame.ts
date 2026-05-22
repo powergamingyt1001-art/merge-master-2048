@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { syncPlayerToFirebase, processReferral, processCommissionForReferrer, getReferrals, onReferralsUpdate, getCommissionNotifications, claimCommissionNotification, type FirebaseReferral, joinMatchmaking, leaveMatchmaking, findMatch, onMatchmakingUpdate, cleanupStaleMatchmaking, createBattle, joinBattle, onBattleUpdate, updateBattleScore, finishBattle, leaveBattle as firebaseLeaveBattle, markMatched, type MatchmakingEntry, type FirebaseBattle } from '@/lib/firebase-service'
+import { syncPlayerToFirebase, processReferral, processCommissionForReferrer, getReferrals, onReferralsUpdate, getCommissionNotifications, claimCommissionNotification, type FirebaseReferral, joinMatchmaking, leaveMatchmaking, findMatch, onMatchmakingUpdate, cleanupStaleMatchmaking, createBattle, joinBattle, onBattleUpdate, updateBattleScore, finishBattle, leaveBattle as firebaseLeaveBattle, markMatched, type MatchmakingEntry, type FirebaseBattle, onUserNotificationsUpdate, markNotificationDelivered } from '@/lib/firebase-service'
 
 export type Direction = 'up' | 'down' | 'left' | 'right'
 export type PowerUp = 'hammer' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x' | 'extraTime'
@@ -1149,6 +1149,96 @@ export function useGame() {
       .catch(() => {/* silent fail */})
   }, [state.invitedBy, state.playerId, state.playerName, state.playerAvatar, addNotification])
 
+  // ============================================================
+  // REAL-TIME ITEM DELIVERY - Listen for order approval notifications
+  // When admin approves an order, items are delivered via Firebase
+  // ============================================================
+  const deliveryProcessedRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (!state.playerId) return
+    const unsubscribe = onUserNotificationsUpdate(state.playerId, (notifications) => {
+      for (const notif of notifications) {
+        // Skip already delivered or already processed
+        if (notif.delivered || deliveryProcessedRef.current.has(notif.id)) continue
+        if (notif.type !== 'order_delivery' || !notif.items) continue
+
+        // Mark as processed to avoid double delivery
+        deliveryProcessedRef.current.add(notif.id)
+
+        // Deliver items to user
+        const items = notif.items as { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number }
+
+        setState(prev => {
+          let newState = { ...prev }
+          let deliveryMsg: string[] = []
+
+          // Add coins
+          if (items.coins && items.coins > 0) {
+            newState.coins = prev.coins + items.coins
+            newState.totalCoinsEarned = prev.totalCoinsEarned + items.coins
+            deliveryMsg.push(`💰 ${items.coins} coins`)
+          }
+
+          // Add abilities
+          if (items.abilities) {
+            for (const ability of items.abilities) {
+              switch (ability.type) {
+                case 'multiplier5x':
+                  newState.multiplier5xCount = prev.multiplier5xCount + ability.count
+                  deliveryMsg.push(`⚡ ${ability.count}x 5x Multiplier`)
+                  break
+                case 'multiplier2_5x':
+                  newState.multiplier2_5xCount = prev.multiplier2_5xCount + ability.count
+                  deliveryMsg.push(`🔥 ${ability.count}x 2.5x Multiplier`)
+                  break
+                case 'hammer':
+                  newState.hammerCount = prev.hammerCount + ability.count
+                  deliveryMsg.push(`🔨 ${ability.count}x Hammer`)
+                  break
+                case 'magnet':
+                  newState.magnetCount = prev.magnetCount + ability.count
+                  deliveryMsg.push(`🧲 ${ability.count}x Magnet`)
+                  break
+                case 'blast':
+                  newState.blastCount = prev.blastCount + ability.count
+                  deliveryMsg.push(`💣 ${ability.count}x Bomb`)
+                  break
+                case 'extraTime':
+                  newState.extraTimeCount = prev.extraTimeCount + ability.count
+                  deliveryMsg.push(`⏱️ ${ability.count}x Timer`)
+                  break
+              }
+            }
+          }
+
+          // Add room cards
+          if (items.roomCards && items.roomCards > 0) {
+            newState.roomCardCount = prev.roomCardCount + items.roomCards
+            deliveryMsg.push(`🃏 ${items.roomCards} Room Card${items.roomCards > 1 ? 's' : ''}`)
+          }
+
+          // Add spin tickets
+          if (items.spinTickets && items.spinTickets > 0) {
+            newState.spinTickets = prev.spinTickets + items.spinTickets
+            deliveryMsg.push(`🎫 ${items.spinTickets} Spin Ticket${items.spinTickets > 1 ? 's' : ''}`)
+          }
+
+          // Show notification
+          if (deliveryMsg.length > 0) {
+            const msg = deliveryMsg.join(', ')
+            addNotification('📦 Items Delivered!', `Your order has been approved! Received: ${msg}`, 'reward', '🎁')
+          }
+
+          return newState
+        })
+
+        // Mark as delivered in Firebase
+        markNotificationDelivered(state.playerId, notif.id).catch(() => {})
+      }
+    })
+    return unsubscribe
+  }, [state.playerId, addNotification])
+
   // Check ban status on game load
   const banCheckRef = useRef(false)
   useEffect(() => {
@@ -1417,6 +1507,18 @@ export function useGame() {
     // This is done via a separate effect that watches state.score when in real-time battle
 
     return undefined as unknown as void
+  }, [])
+
+  // Update opponent's score from Firebase in real-time (must be declared before useEffect that uses it)
+  const updateRealTimeOpponentScore = useCallback((score: number, finished: boolean) => {
+    setState(prev => {
+      if (!prev.isRealTimeBattle) return prev
+      return {
+        ...prev,
+        realTimeOpponentScore: score,
+        realTimeOpponentFinished: finished,
+      }
+    })
   }, [])
 
   // Sync score to Firebase during real-time battle
@@ -1777,18 +1879,6 @@ export function useGame() {
         realTimeOpponentScore: 0,
         realTimeOpponentFinished: false,
         isRealTimeBattle: true,
-      }
-    })
-  }, [])
-
-  // Update opponent's score from Firebase in real-time
-  const updateRealTimeOpponentScore = useCallback((score: number, finished: boolean) => {
-    setState(prev => {
-      if (!prev.isRealTimeBattle) return prev
-      return {
-        ...prev,
-        realTimeOpponentScore: score,
-        realTimeOpponentFinished: finished,
       }
     })
   }, [])
