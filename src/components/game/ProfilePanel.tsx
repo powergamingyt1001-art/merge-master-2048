@@ -426,7 +426,15 @@ export function ProfilePanel({
                       <Copy className="w-2.5 h-2.5" style={{ color: copiedCode ? '#00E676' : 'rgba(255,255,255,0.5)' }} />
                     </button>
                   </div>
-                  {!isOwnProfile && (
+                  {isOwnProfile ? (
+                    <button
+                      onClick={handleCopyCode}
+                      className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold transition-transform active:scale-90"
+                      style={{ backgroundColor: 'rgba(0,230,118,0.15)', border: '1px solid rgba(0,230,118,0.3)', color: '#00E676' }}>
+                      <UserPlus className="w-2.5 h-2.5" />
+                      {copiedCode ? 'Copied!' : 'Invite'}
+                    </button>
+                  ) : (
                     <button
                       onClick={handleInviteFriend}
                       className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[8px] font-bold transition-transform active:scale-90"

@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon, Copy, Percent, Package, TrendingUp, DollarSign, Send, Lock, UserCheck } from 'lucide-react'
-import { getTotalUserCount, getOnlineUserCount, getTotalReferralsCount, checkAdminPassword, setAdminPassword as firebaseSetAdminPassword, authenticatePartner, getPartners as firebaseGetPartners, savePartner as firebaseSavePartner, deletePartner as firebaseDeletePartner, onOrdersUpdate, updateOrderStatus as firebaseUpdateOrderStatus, deliverOrderItems, type FirebaseStoreOrder, type PartnerData } from '@/lib/firebase-service'
+import { getTotalUserCount, getOnlineUserCount, getTotalReferralsCount, checkAdminPassword, setAdminPassword as firebaseSetAdminPassword, authenticatePartner, getPartners as firebaseGetPartners, savePartner as firebaseSavePartner, deletePartner as firebaseDeletePartner, onOrdersUpdate, updateOrderStatus as firebaseUpdateOrderStatus, deliverOrderItems, broadcastCoupon as firebaseBroadcastCoupon, broadcastDailyTask as firebaseBroadcastDailyTask, onCouponBroadcast, type FirebaseStoreOrder, type PartnerData } from '@/lib/firebase-service'
 
 interface CouponCodeProps {
   isOpen: boolean
@@ -759,6 +759,9 @@ export function CouponCode({
   const [newTaskRewardAmount, setNewTaskRewardAmount] = useState(50)
   const [newTaskActive, setNewTaskActive] = useState(true)
 
+  // Firebase broadcast coupons (real-time from Firebase)
+  const [firebaseCoupons, setFirebaseCoupons] = useState<any[]>([])
+
   // Total revenue tracker
   const [totalRevenue, setTotalRevenue] = useState<number>(0)
   const [pendingOrderCount, setPendingOrderCount] = useState<number>(0)
@@ -832,6 +835,14 @@ export function CouponCode({
       setCustomCodes(loadCustomCouponCodes())
     }
   }, [isOpen])
+
+  // Listen for Firebase coupon broadcasts (user-side, real-time)
+  useEffect(() => {
+    const unsubscribe = onCouponBroadcast((coupons) => {
+      setFirebaseCoupons(coupons.filter(c => c.sentAt > Date.now() - 24 * 60 * 60 * 1000)) // Last 24h only
+    })
+    return unsubscribe
+  }, [])
 
   // Refresh admin data when panel opens
   useEffect(() => {
@@ -1130,6 +1141,44 @@ export function CouponCode({
       return
     }
 
+    // Check Firebase broadcast coupons (real-time from admin)
+    const fbCoupon = firebaseCoupons.find(c => c.code.toUpperCase() === code)
+    if (fbCoupon) {
+      // Check if already claimed
+      const today = getTodayStr()
+      const alreadyClaimed = claimHistory.some(c => c.code === code && c.date === today)
+      if (alreadyClaimed) {
+        setStatusMessage({ text: 'You already claimed this code today!', type: 'error' })
+        return
+      }
+      // Apply reward based on Firebase coupon type
+      const rewardType = fbCoupon.rewardType as RewardType
+      const rewardAmount = fbCoupon.rewardAmount || 0
+      switch (rewardType) {
+        case 'coins': onAddCoins(rewardAmount); break
+        case 'spins': onAddSpinTickets(rewardAmount); break
+        case 'magnets': onAddPowerUp('magnet', rewardAmount); break
+        case 'bombs': onAddPowerUp('blast', rewardAmount); break
+        case 'hammers': onAddPowerUp('hammer', rewardAmount); break
+        case '5x': onAddCoins(rewardAmount); break
+        case '2.5x': onAddCoins(rewardAmount); break
+      }
+      const newClaim: ClaimedCoupon = {
+        code,
+        date: today,
+        reward: `${fbCoupon.emoji} ${fbCoupon.reward}`,
+        timestamp: Date.now(),
+      }
+      const updatedHistory = [newClaim, ...claimHistory].slice(0, 50)
+      setClaimHistory(updatedHistory)
+      saveClaimedCoupons(updatedHistory)
+      setShowReward({ label: fbCoupon.reward, emoji: fbCoupon.emoji })
+      setStatusMessage({ text: `Code redeemed! ${fbCoupon.emoji} ${fbCoupon.reward}`, type: 'success' })
+      onAddNotification('Coupon Reward! 🎉', `You received ${fbCoupon.emoji} ${fbCoupon.reward}!`, 'reward', '🎁')
+      setCodeInput('')
+      return
+    }
+
     // Check daily codes
     const validCodes = getTodayValidCodes()
     if (!validCodes.includes(code)) {
@@ -1251,7 +1300,7 @@ export function CouponCode({
     setShowReward({ label: reward.label, emoji: reward.emoji })
     setStatusMessage({ text: `Code redeemed! ${reward.emoji} ${reward.label}`, type: 'success' })
     setCodeInput('')
-  }, [codeInput, claimHistory, customCodes, pickRandomReward, applyReward, applyAdminReward, applyCustomReward, dayCodeSettings, nightCodeSettings, onAddCoins, onAddPowerUp, onAddSpinTickets, onAddNotification])
+  }, [codeInput, claimHistory, customCodes, firebaseCoupons, pickRandomReward, applyReward, applyAdminReward, applyCustomReward, dayCodeSettings, nightCodeSettings, onAddCoins, onAddPowerUp, onAddSpinTickets, onAddNotification])
 
   // ===== ADMIN PANEL HANDLERS =====
 
@@ -1428,6 +1477,16 @@ export function CouponCode({
     const updated = [...customCodes, newCode]
     setCustomCodes(updated)
     saveCustomCouponCodes(updated)
+
+    // Broadcast to Firebase so all users receive the coupon in real-time
+    firebaseBroadcastCoupon({
+      code,
+      reward: labelMap[newCodeRewardType],
+      rewardType: newCodeRewardType,
+      rewardAmount: newCodeRewardAmount,
+      emoji: emojiMap[newCodeRewardType],
+      maxUses: newCodeMaxUses,
+    }).catch(() => {})
 
     // Reset form
     setNewCodeInput('')
@@ -4054,6 +4113,15 @@ export function CouponCode({
                               const updated = [...adminDailyTasks, newTask]
                               setAdminDailyTasks(updated)
                               saveAdminDailyTasks(updated)
+                              // Broadcast to Firebase so all users receive the task in real-time
+                              firebaseBroadcastDailyTask({
+                                name: newTask.name,
+                                description: newTask.description,
+                                action: newTask.action,
+                                requiredCount: newTask.requiredCount,
+                                rewardType: newTask.rewardType,
+                                rewardAmount: newTask.rewardAmount,
+                              }).catch(() => {})
                               setNewTaskName('')
                               setNewTaskDesc('')
                               setNewTaskAction('play_battle')

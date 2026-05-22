@@ -1515,14 +1515,13 @@ interface SpinPack {
 }
 
 const SPIN_INR_PACKS: SpinPack[] = [
-  { id: 'spin-9', spins: 9, price: 5, tag: { label: 'HOT', color: '#F65E3B' }, currency: 'inr' },
-  { id: 'spin-20', spins: 20, price: 9, tag: { label: 'POPULAR', color: '#00E676' }, currency: 'inr' },
-  { id: 'spin-33', spins: 33, price: 15, tag: { label: 'VERY HOT', color: '#F65E3B', fireStyling: true }, currency: 'inr' },
-  { id: 'spin-50', spins: 50, price: 25, tag: { label: 'BEST VALUE', color: '#EDC22E' }, currency: 'inr' },
+  { id: 'spin-9', spins: 9, price: 5, currency: 'inr' },
+  { id: 'spin-20', spins: 20, price: 9, tag: { label: 'HOT', color: '#F65E3B' }, currency: 'inr' },
+  { id: 'spin-33', spins: 33, price: 15, tag: { label: 'VERY HOT', color: '#FF1744', fireStyling: true }, currency: 'inr' },
+  { id: 'spin-50', spins: 50, price: 25, currency: 'inr' },
 ]
 
 const SPIN_COIN_PACKS: SpinPack[] = [
-  { id: 'spin-coin-1', spins: 1, price: 300, currency: 'coin' },
   { id: 'spin-coin-3', spins: 3, price: 900, currency: 'coin' },
   { id: 'spin-coin-5', spins: 5, price: 1500, currency: 'coin' },
   { id: 'spin-coin-10', spins: 10, price: 3000, tag: { label: '+2 FREE', color: '#00E676' }, currency: 'coin', bonusSpins: 2 },

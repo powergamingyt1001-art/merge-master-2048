@@ -1280,6 +1280,101 @@ export async function markNotificationDelivered(playerId: string, notifId: strin
 }
 
 // ============================================================
+// BROADCAST SYSTEM - Real-time coupon & daily task delivery
+// ============================================================
+
+// Broadcast a coupon to all users via Firebase
+export async function broadcastCoupon(coupon: {
+  code: string
+  reward: string
+  rewardType: string
+  rewardAmount: number
+  emoji: string
+  maxUses: number
+}): Promise<void> {
+  try {
+    const broadcastRef = push(ref(db, 'broadcasts/coupons'))
+    await set(broadcastRef, {
+      ...coupon,
+      sentAt: Date.now(),
+    })
+  } catch (err) {
+    console.warn('Firebase broadcastCoupon failed:', err)
+  }
+}
+
+// Listen for coupon broadcasts in real-time
+export function onCouponBroadcast(
+  callback: (coupons: Array<{ id: string; code: string; reward: string; rewardType: string; rewardAmount: number; emoji: string; maxUses: number; sentAt: number }>) => void
+): () => void {
+  try {
+    const broadcastRef = ref(db, 'broadcasts/coupons')
+    const handler = onValue(broadcastRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const coupons: Array<{ id: string; code: string; reward: string; rewardType: string; rewardAmount: number; emoji: string; maxUses: number; sentAt: number }> = []
+        snapshot.forEach((child) => {
+          coupons.push({ id: child.key!, ...child.val() })
+        })
+        callback(coupons.sort((a, b) => b.sentAt - a.sentAt))
+      } else {
+        callback([])
+      }
+    })
+    return () => off(broadcastRef, 'value', handler)
+  } catch (err) {
+    console.warn('Firebase onCouponBroadcast failed:', err)
+    callback([])
+    return () => {}
+  }
+}
+
+// Broadcast a daily task to all users via Firebase
+export async function broadcastDailyTask(task: {
+  name: string
+  description: string
+  action: string
+  requiredCount: number
+  rewardType: string
+  rewardAmount: number
+}): Promise<void> {
+  try {
+    const taskRef = push(ref(db, 'broadcasts/dailyTasks'))
+    await set(taskRef, {
+      ...task,
+      active: true,
+      createdAt: Date.now(),
+    })
+  } catch (err) {
+    console.warn('Firebase broadcastDailyTask failed:', err)
+  }
+}
+
+// Listen for daily task broadcasts in real-time
+export function onDailyTaskBroadcast(
+  callback: (tasks: any[]) => void
+): () => void {
+  try {
+    const taskRef = ref(db, 'broadcasts/dailyTasks')
+    const handler = onValue(taskRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const tasks: any[] = []
+        snapshot.forEach((child) => {
+          tasks.push({ id: child.key!, ...child.val() })
+        })
+        callback(tasks.sort((a, b) => b.createdAt - a.createdAt))
+      } else {
+        callback([])
+      }
+    })
+    return () => off(taskRef, 'value', handler)
+  } catch (err) {
+    console.warn('Firebase onDailyTaskBroadcast failed:', err)
+    callback([])
+    return () => {}
+  }
+}
+
+// ============================================================
 // ADMIN CONFIG - Configurable admin password, partner passwords
 // ============================================================
 

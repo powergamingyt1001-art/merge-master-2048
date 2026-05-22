@@ -12,7 +12,6 @@ import { useEffect, useRef } from 'react'
 //
 // AD CONDITIONS:
 // - Popunder: Always loads, 8s delay, once per 5 min, data-cfasync=false
-// - Social Bar: Always loads, 5s delay, data-cfasync=false
 // - Big banners (728x90, 300x250): Only ONE per page view (rotated)
 // - Small banners (320x50, 468x60): Always shown (small, non-intrusive)
 // ============================================================
@@ -92,45 +91,6 @@ export function AdsterraPopunder() {
         document.head.appendChild(retryScript)
       }
     }, 8000) // 8 second delay
-
-    return () => clearTimeout(timer)
-  }, [])
-
-  return null
-}
-
-// --- Social Bar Ad (Global - with conditions) ---
-// Always loads (100%), 5s delay, data-cfasync=false
-export function AdsterraSocialBar() {
-  useEffect(() => {
-    const existing = document.getElementById('adsterra-socialbar')
-    if (existing) return
-
-    // 5 second delay after page load
-    const timer = setTimeout(() => {
-      const script = document.createElement('script')
-      script.id = 'adsterra-socialbar'
-      script.src = 'https://pl29392035.profitablecpmratenetwork.com/b7/40/ba/b740ba65f24e56491e9bd88c482e6b7f.js'
-      script.async = true
-      script.setAttribute('data-cfasync', 'false')
-
-      // Fallback: try document.head if document.body append fails
-      try {
-        document.body.appendChild(script)
-      } catch {
-        document.head.appendChild(script)
-      }
-
-      // Error handling: if script fails to load, retry once with head append
-      script.onerror = () => {
-        const retryScript = document.createElement('script')
-        retryScript.id = 'adsterra-socialbar-retry'
-        retryScript.src = script.src
-        retryScript.async = true
-        retryScript.setAttribute('data-cfasync', 'false')
-        document.head.appendChild(retryScript)
-      }
-    }, 5000) // 5 second delay
 
     return () => clearTimeout(timer)
   }, [])

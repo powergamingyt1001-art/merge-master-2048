@@ -20,7 +20,7 @@ interface RoomFightProps {
   onStartRoomGame: (betAmount: number, abilities: string[]) => void
 }
 
-type RoomTab = 'create' | 'join' | 'info'
+type RoomTab = 'create' | 'join' | 'random' | 'info'
 type BetItem = { id: string; label: string; emoji: string; type: 'ability' | 'coins'; abilityType?: 'hammer' | 'magnet' | 'blast'; amount: number }
 
 const BET_ITEMS: BetItem[] = [
@@ -221,7 +221,7 @@ export function RoomFight({
             {/* Tab Switcher */}
             {!waitingForOpponent && !joinSearching && (
               <div className="mx-4 mb-3 flex items-center gap-1.5">
-                {(['create', 'join', 'info'] as RoomTab[]).map(tab => (
+                {(['create', 'join', 'random', 'info'] as RoomTab[]).map(tab => (
                   <button key={tab} onClick={() => setActiveTab(tab)}
                     className="flex-1 py-2 rounded-lg text-[10px] font-bold transition-all text-center"
                     style={{
@@ -229,7 +229,7 @@ export function RoomFight({
                       border: activeTab === tab ? '1px solid rgba(246,94,59,0.5)' : '1px solid rgba(255,255,255,0.1)',
                       color: activeTab === tab ? '#F65E3B' : 'rgba(255,255,255,0.5)',
                     }}>
-                    {tab === 'create' ? '🏠 Create' : tab === 'join' ? '🚪 Join' : 'ℹ️ Info'}
+                    {tab === 'create' ? '🏠 Create' : tab === 'join' ? '🚪 Join' : tab === 'random' ? '🎲 Random' : 'ℹ️ Info'}
                   </button>
                 ))}
               </div>
@@ -483,6 +483,100 @@ export function RoomFight({
                       <Check className="w-3.5 h-3.5" /> ACCEPT
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* ===== RANDOM MATCH TAB ===== */}
+              {activeTab === 'random' && (
+                <div className="space-y-3">
+                  <div className="flex flex-col items-center py-4">
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center mb-3"
+                      style={{ background: 'linear-gradient(135deg, #E040FB, #7C4DFF)', boxShadow: '0 0 20px rgba(224,64,251,0.4)' }}>
+                      <span className="text-2xl">🎲</span>
+                    </div>
+                    <p className="text-sm font-bold" style={{ color: '#FFFFFF' }}>Random Match</p>
+                    <p className="text-[9px] mt-1 text-center" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                      Get matched with a random opponent instantly!
+                    </p>
+                  </div>
+
+                  {/* Bet Selection for Random */}
+                  <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Zap className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                      <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>Your Bet</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {BET_ITEMS.map(item => {
+                        const isSelected = selectedBets.has(item.id)
+                        const canAfford = canAffordBet(item)
+                        return (
+                          <button key={item.id} onClick={() => canAfford && toggleBet(item.id)}
+                            className="flex flex-col items-center gap-0.5 py-1.5 px-1 rounded-lg transition-all"
+                            style={{
+                              backgroundColor: isSelected ? 'rgba(237,194,46,0.15)' : canAfford ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.01)',
+                              border: isSelected ? '1.5px solid rgba(237,194,46,0.5)' : canAfford ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(255,255,255,0.03)',
+                              opacity: canAfford ? 1 : 0.35,
+                            }}>
+                            <span className="text-sm">{item.emoji}</span>
+                            <span className="text-[8px] font-bold" style={{ color: isSelected ? '#EDC22E' : 'rgba(255,255,255,0.6)' }}>{item.label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      if (roomCardCount < 1) {
+                        onAddNotification('No Room Cards', 'You need at least 1 Room Card for Random Match.', 'system', '🃏')
+                        return
+                      }
+                      if (selectedBets.size < 1) {
+                        onAddNotification('Select Bet', 'Please select at least 1 item to bet.', 'system', '🎯')
+                        return
+                      }
+                      // Verify affordability
+                      for (const betId of selectedBets) {
+                        const item = BET_ITEMS.find(b => b.id === betId)
+                        if (item && !canAffordBet(item)) {
+                          onAddNotification('Not Enough', `You don't have enough ${item.label}.`, 'system', '❌')
+                          return
+                        }
+                      }
+                      // Start random match
+                      const abilities: string[] = []
+                      for (const betId of selectedBets) {
+                        const item = BET_ITEMS.find(b => b.id === betId)
+                        if (item) {
+                          if (item.type === 'ability' && item.abilityType) {
+                            onDeductAbility(item.abilityType, item.amount)
+                            abilities.push(item.abilityType)
+                          } else if (item.type === 'coins') {
+                            onDeductCoins(item.amount)
+                            abilities.push(`coins_${item.amount}`)
+                          }
+                        }
+                      }
+                      onUseRoomCard()
+                      onStartRoomGame(55, abilities)
+                      onAddNotification('🎲 Random Match!', 'Searching for a random opponent...', 'system', '🎲')
+                    }}
+                    className="w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
+                    style={{
+                      background: roomCardCount >= 1 && selectedBets.size >= 1
+                        ? 'linear-gradient(135deg, #E040FB, #7C4DFF)' : 'rgba(255,255,255,0.06)',
+                      color: roomCardCount >= 1 && selectedBets.size >= 1 ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
+                      boxShadow: roomCardCount >= 1 && selectedBets.size >= 1 ? '0 4px 15px rgba(224,64,251,0.3)' : 'none',
+                    }}>
+                    🎲 FIND RANDOM OPPONENT (1 🃏)
+                  </button>
+
+                  {roomCardCount < 1 && (
+                    <p className="text-center text-[8px]" style={{ color: '#F65E3B' }}>
+                      ⚠️ You need a Room Card. Get one from the Store!
+                    </p>
+                  )}
                 </div>
               )}
 

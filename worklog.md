@@ -339,3 +339,48 @@ Work Log:
 ### 6. Spin Delivery: INR via UPI order system, Coins instant (10-pack = 12 spins total)
 
 ### Lint: 0 errors, 0 warnings
+
+---
+Task ID: 1-a
+Agent: profile-store-update-agent
+Task: ProfilePanel Invite on Own Profile + Store Spin Pack Updates
+
+Work Log:
+
+## 1. ProfilePanel.tsx - Added "Invite Friends" button on OWN profile
+
+### Change:
+- Previously, the "Invite" button (UserPlus icon) only showed for non-own profiles (`!isOwnProfile`)
+- Now shows an "Invite" button next to the UID on BOTH own and other profiles, with different behavior:
+  - **Own profile**: "Invite" button copies the user's invite code (UID) to clipboard, shows "Copied!" feedback
+  - **Other profiles**: Keeps existing "Invite" button that sends a friend request via `handleInviteFriend`
+
+### Technical change:
+- Changed the conditional `{!isOwnProfile && (...)}` block to a ternary `{isOwnProfile ? (copy invite) : (send friend request)}`
+- Own profile button calls `handleCopyCode` (already existed), shows `{copiedCode ? 'Copied!' : 'Invite'}`
+- Other profile button keeps calling `handleInviteFriend` as before
+
+## 2. Store.tsx - Updated Spin Buy section pricing per spec
+
+### Changes to SPIN_INR_PACKS:
+- 9 spins = ₹5 (removed HOT tag)
+- 20 spins = ₹9 (tag changed from POPULAR/green to HOT/red #F65E3B)
+- 33 spins = ₹15 (VERY HOT tag color changed from #F65E3B to #FF1744 per spec, kept fireStyling)
+- 50 spins = ₹25 (removed BEST VALUE tag)
+
+### Changes to SPIN_COIN_PACKS:
+- Removed the 1-spin for 300 coins pack (spec only lists 3/5/10 packs)
+- Kept: 3 spins = 900 coins, 5 spins = 1500 coins, 10 spins = 3000 coins (+2 FREE = 12 total)
+
+### Note on Daily Free Room:
+- Already removed by previous agent (Task ID: 2, store-spins-room-agent)
+- No additional changes needed
+
+## 3. Leaderboard.tsx - Verified like count display
+- Like button at line 641 already shows `{liked ? 'Liked ❤️' : 'Like'} ({likeCount})`
+- likeCount initialized from localStorage via `getPlayerLikes()` on player select
+- Updated properly on like toggle via `setPlayerLikes()` and `setLikeCount()`
+- No changes needed
+
+## Lint Results
+- 0 errors, 0 warnings after all changes
