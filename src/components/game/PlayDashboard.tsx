@@ -751,7 +751,7 @@ export function PlayDashboard({
         streakClaimed={streakClaimed} onClaim={onClaimStreakDay} streakWeek={streakWeek} />
       <WelcomeGift isOpen={showWelcome} onClose={() => setShowWelcome(false)} onClaim={() => { onClaimWelcome(); setShowWelcome(false) }} />
       <Leaderboard isOpen={showLeaderboard} onClose={() => setShowLeaderboard(false)}
-        gamePoints={gamePoints} bestScore={bestScore} coins={coins}
+        gamePoints={gamePoints} bestScore={bestScore} coins={coins} totalCoinsEarned={totalCoinsEarned}
         playerName={playerName} playerAvatar={playerAvatar} playerId={playerId} tournamentPoints={tournamentPoints} />
       <Tournament isOpen={showTournament} onClose={() => setShowTournament(false)}
         coins={coins}

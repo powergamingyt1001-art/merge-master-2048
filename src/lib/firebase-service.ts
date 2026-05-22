@@ -25,11 +25,13 @@ export interface FirebasePlayer {
   name: string
   avatar: string
   inviteCode: string
+  userCode: string
   tournamentPoints: number
   levelXP: number
   bestScore: number
   modBestScore: number
   coins: number
+  totalCoinsEarned: number
   level: number
   lastActive: number
   joinedAt: number
@@ -55,11 +57,13 @@ export async function syncPlayerToFirebase(playerData: {
   name: string
   avatar: string
   inviteCode: string
+  userCode: string
   tournamentPoints: number
   levelXP: number
   bestScore: number
   modBestScore: number
   coins: number
+  totalCoinsEarned: number
   level: number
   totalBattlesPlayed: number
   totalBattlesWon: number
@@ -76,6 +80,14 @@ export async function syncPlayerToFirebase(playerData: {
       referrerId: playerData.id,
       referrerName: playerData.name,
     })
+    // Also store userCode mapping for UID search
+    if (playerData.userCode) {
+      const userCodeRef = ref(db, `userCodes/${playerData.userCode}`)
+      await set(userCodeRef, {
+        playerId: playerData.id,
+        playerName: playerData.name,
+      })
+    }
   } catch (err) {
     // Silent fail - don't break the game if Firebase is down
     console.warn('Firebase sync failed:', err)
@@ -472,6 +484,57 @@ export interface FriendRequestData {
   inviteCode: string
   requestedAt: number
   status: 'pending' | 'accepted' | 'declined'
+}
+
+// Search for a player by their userCode (UID) - the numeric code users share
+export async function searchPlayerByUserCode(userCode: string): Promise<FirebasePlayer | null> {
+  try {
+    // First, look up the userCode mapping for fast direct lookup
+    const mappingRef = ref(db, `userCodes/${userCode}`)
+    const mappingSnapshot = await get(mappingRef)
+    if (mappingSnapshot.exists()) {
+      const mapping = mappingSnapshot.val()
+      const player = await getPlayer(mapping.playerId)
+      if (player) return player
+    }
+
+    // Fallback: search by userCode field in players using orderByChild
+    const playersRef = query(
+      ref(db, 'players'),
+      orderByChild('userCode'),
+      equalTo(userCode),
+      limitToLast(1)
+    )
+    const snapshot = await get(playersRef)
+    if (snapshot.exists()) {
+      let found: FirebasePlayer | null = null
+      snapshot.forEach((child) => {
+        found = { id: child.key!, ...child.val() }
+      })
+      return found
+    }
+
+    // Second fallback: load all players and search client-side
+    const fallbackRef = query(
+      ref(db, 'players'),
+      limitToLast(200)
+    )
+    const fallbackSnapshot = await get(fallbackRef)
+    if (fallbackSnapshot.exists()) {
+      let found: FirebasePlayer | null = null
+      fallbackSnapshot.forEach((child) => {
+        const data = child.val()
+        if (data.userCode && String(data.userCode) === String(userCode)) {
+          found = { id: child.key!, ...data }
+        }
+      })
+      return found
+    }
+    return null
+  } catch (err) {
+    console.warn('Firebase searchPlayerByUserCode failed:', err)
+    return null
+  }
 }
 
 // Search for a player by their inviteCode using Firebase orderByChild + equalTo for exact match

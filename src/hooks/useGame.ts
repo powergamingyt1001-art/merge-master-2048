@@ -1166,18 +1166,20 @@ export function useGame() {
         name: state.playerName,
         avatar: state.playerAvatar,
         inviteCode: state.inviteCode,
+        userCode: state.userCode,
         tournamentPoints: state.tournamentPoints,
         levelXP: state.levelXP,
         bestScore: state.bestScore,
         modBestScore: state.modBestScore,
         coins: state.coins,
+        totalCoinsEarned: state.totalCoinsEarned,
         level: state.playerLevel,
         totalBattlesPlayed: state.totalBattlesPlayed,
         totalBattlesWon: state.totalBattlesWon,
       }).catch(() => {/* silent fail */})
     }, 2000) // 2 second debounce
     return () => clearTimeout(timer)
-  }, [state.playerId, state.playerName, state.playerAvatar, state.inviteCode, state.tournamentPoints, state.levelXP, state.bestScore, state.modBestScore, state.coins, state.playerLevel, state.totalBattlesPlayed, state.totalBattlesWon])
+  }, [state.playerId, state.playerName, state.playerAvatar, state.inviteCode, state.userCode, state.tournamentPoints, state.levelXP, state.bestScore, state.modBestScore, state.coins, state.totalCoinsEarned, state.playerLevel, state.totalBattlesPlayed, state.totalBattlesWon])
 
   // Listen to referrals in real-time (people who used MY invite code)
   useEffect(() => {

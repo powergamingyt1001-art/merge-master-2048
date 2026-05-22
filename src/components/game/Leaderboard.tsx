@@ -12,6 +12,7 @@ interface LeaderboardProps {
   gamePoints: number
   bestScore: number
   coins: number
+  totalCoinsEarned: number
   playerName: string
   playerAvatar: string
   playerId: string
@@ -128,7 +129,7 @@ function buildCoinsLeaderboard(playerCoins: number, playerName: string, playerAv
   if (firebasePlayers.length > 0) {
     firebasePlayers.forEach(p => {
       if (p.id !== playerId) {
-        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.coins || 0, isPlayer: false, lastActive: p.lastActive, playerId: p.id })
+        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.totalCoinsEarned || 0, isPlayer: false, lastActive: p.lastActive, playerId: p.id })
       }
     })
   }
@@ -182,7 +183,7 @@ function getOfflineRank(playerBestScore: number): { currentRank: number; nextTar
   }
 }
 
-export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, playerName, playerAvatar, playerId, tournamentPoints }: LeaderboardProps) {
+export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, totalCoinsEarned, playerName, playerAvatar, playerId, tournamentPoints }: LeaderboardProps) {
   const [tab, setTab] = useState<TabType>('modesScore')
   const [firebasePlayers, setFirebasePlayers] = useState<FirebasePlayer[]>([])
   const [selectedPlayer, setSelectedPlayerRaw] = useState<LeaderboardEntry | null>(null)
@@ -249,7 +250,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, pla
   }, [])
 
   const modesEntries = buildModesLeaderboard(bestScore, playerName, playerAvatar, firebasePlayers, playerId)
-  const coinsEntries = buildCoinsLeaderboard(coins, playerName, playerAvatar, firebasePlayers, playerId)
+  const coinsEntries = buildCoinsLeaderboard(totalCoinsEarned, playerName, playerAvatar, firebasePlayers, playerId)
   const { currentRank, nextTarget, beatenRanks } = getOfflineRank(bestScore)
 
   // Look up full FirebasePlayer data for the selected player

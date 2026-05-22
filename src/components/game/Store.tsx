@@ -607,8 +607,8 @@ function BuyButton({ onPress }: { onPress: () => void }) {
         boxShadow: '0 2px 12px rgba(237,194,46,0.3)',
       }}
     >
-      <Zap className="w-3.5 h-3.5" />
-      BUY ₹
+      <ShoppingCart className="w-3.5 h-3.5" />
+      Add 🛒
     </button>
   )
 }

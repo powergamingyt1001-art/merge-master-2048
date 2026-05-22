@@ -7,6 +7,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { InvitedUser } from '@/hooks/useGame'
 import type { FirebaseReferral, FirebasePlayer } from '@/lib/firebase-service'
 import {
+  searchPlayerByUserCode,
   searchPlayerByInviteCode,
   sendFriendRequest,
   acceptFriendRequest,
@@ -163,7 +164,7 @@ export function InvitePanel({
     setSearchAttempted(false)
     searchTimeoutRef.current = setTimeout(async () => {
       try {
-        const result = await searchPlayerByInviteCode(searchCode)
+        const result = await searchPlayerByUserCode(searchCode)
         setFoundPlayer(result)
       } catch {
         setFoundPlayer(null)
@@ -189,7 +190,7 @@ export function InvitePanel({
     setFoundPlayer(null)
     setSearchAttempted(false)
     try {
-      const result = await searchPlayerByInviteCode(searchCode)
+      const result = await searchPlayerByUserCode(searchCode)
       setFoundPlayer(result)
     } catch {
       setFoundPlayer(null)
@@ -499,7 +500,7 @@ export function InvitePanel({
                     <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>Find Player by UID</span>
                   </div>
                   <div className="flex gap-2">
-                    <input type="text" value={searchCode} onChange={e => setSearchCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))}
+                    <input type="text" value={searchCode} onChange={e => setSearchCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 8))}
                       placeholder="Enter player UID..."
                       className="flex-1 px-3 py-2.5 rounded-lg text-xs font-mono outline-none"
                       style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
@@ -571,7 +572,7 @@ export function InvitePanel({
                           </span>
                         </div>
                         <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                          Lv.{foundPlayer.level || 1} • UID: {foundPlayer.inviteCode || foundPlayer.id.slice(0, 8)}
+                          Lv.{foundPlayer.level || 1} • UID: {foundPlayer.userCode || foundPlayer.inviteCode || foundPlayer.id.slice(0, 8)}
                         </p>
                       </div>
                     </div>
