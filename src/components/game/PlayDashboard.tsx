@@ -315,12 +315,9 @@ export function PlayDashboard({
                 title={coins === 0 ? 'Buy coins!' : 'Open Store'}
               >
                 <Coins className="w-3 h-3" style={{ color: coins === 0 ? '#F65E3B' : '#EDC22E' }} />
-                <span className="text-[10px] font-extrabold" style={{ color: coins === 0 ? '#F65E3B' : '#EDC22E' }}>
-                  {coins === 0 ? 'BUY' : formatCoinCount(coins)}
+                <span className={`text-[10px] font-extrabold ${coins === 0 ? 'animate-pulse' : ''}`} style={{ color: coins === 0 ? '#F65E3B' : '#EDC22E' }}>
+                  {formatCoinCount(coins)}
                 </span>
-                {coins === 0 && (
-                  <span className="text-[7px] font-bold ml-0.5" style={{ color: '#F65E3B' }}>+</span>
-                )}
               </button>
             </div>
           </div>
