@@ -489,3 +489,82 @@ Work Log:
 
 ### Lint Results
 - 0 errors, 0 warnings
+
+---
+Task ID: 2
+Agent: general-purpose
+Task: Restructure Admin Panel Tabs
+
+Work Log:
+
+### Changes Made to `/home/z/my-project/src/components/game/CouponCode.tsx`:
+
+1. **Added `taskSubTab` state variable** (after `partnerSubTab` state, line ~801):
+   - `const [taskSubTab, setTaskSubTab] = useState<'daily' | 'tournament' | 'weekly'>('daily')`
+
+2. **Removed entire "Users" admin tab rendering block** (was ~210 lines):
+   - Removed the `{adminTab === 'users' && (` block containing User Stats, Refresh Stats, Ban User form, Banned Users list, and Clean Expired Bans button
+   - Kept the Ban User functionality by copying it into the Partner tab
+
+3. **Removed both "Security" admin tab rendering blocks** (was ~170 lines):
+   - Removed the `{adminTab === 'security' && adminRole === 'admin' && (` block containing Change Admin Password and Partner Passwords
+   - Removed the `{adminTab === 'security' && adminRole === 'partner' && (` block (restricted notice)
+   - Kept the Admin Password functionality by copying it into the Partner tab
+
+4. **Added Ban User + Admin Password sections to Partner tab**:
+   - Ban User section (with form, banned users list, clean expired bans) placed after Active Partners List
+   - Admin Password section (with input, save button, success/error message) placed after Ban User section
+
+5. **Moved Tournament Prizes and Weekly Bonus from Partner tab to Tasks tab**:
+   - Removed Tournament Prize Editor and Weekly Prize Editor from Partner tab
+   - Added them as sub-tabs in the Tasks tab
+
+6. **Added task sub-tab switcher to Tasks tab**:
+   - 3 sub-tabs: "📋 Daily Tasks", "🏆 Tournament", "🎁 Weekly"
+   - Uses same pattern as Coupon sub-tab switcher (rounded-xl overflow-hidden container with colored active states)
+   - Existing Daily Tasks content wrapped in `{taskSubTab === 'daily' && ( <> ... </> )}`
+   - Tournament Prizes wrapped in `{taskSubTab === 'tournament' && ( <> ... </> )}`
+   - Weekly Bonus wrapped in `{taskSubTab === 'weekly' && ( <> ... </> )}`
+
+7. **Updated AdminTab type definition** (line 370):
+   - Removed `'users'` and `'security'` from the union type
+   - Now: `'dashboard' | 'payments' | 'coupons' | 'prices' | 'history' | 'partner' | 'tasks'`
+
+8. **Fixed partner tab routing** (line ~1139):
+   - Changed `setAdminTab('users')` to `setAdminTab('partner')` for partners with view_users/ban_users permissions
+
+9. **Added Partner tab visibility for partners with user permissions** (line ~4368):
+   - Added condition: `if (t.key === 'partner' && (partnerPermissions.includes('view_users') || partnerPermissions.includes('ban_users'))) return true`
+
+### Structure Summary:
+- **Partner tab** now contains: Generate Partner Link → Active Partners List → Ban User → Banned Users List → Admin Password
+- **Tasks tab** now has 3 sub-tabs: Daily Tasks | Tournament | Weekly
+- **Users tab**: REMOVED (functionality moved to Partner tab)
+- **Security tab**: REMOVED (functionality moved to Partner tab)
+
+### TypeScript Check:
+- 0 errors in CouponCode.tsx
+---
+Task ID: 1-4
+Agent: Main Agent
+Task: Read codebase, restructure admin panel, fix ad redirects, verify features
+
+Work Log:
+- Read all key source files (CouponCode.tsx, Store.tsx, SpinWheel.tsx, AdOverlay.tsx, AdsterraAds.tsx, WelcomeGift.tsx, shared-cart.ts)
+- Verified existing features: ₹29+ 60% auto-apply, ₹200+ scratch card with 🤑 emoji rain, cart/coupon flow, auto-approve for coin purchases, admin history with INR/Coins switcher, welcome bonus
+- Removed "Users" and "Security" from mobile footer admin nav (7 tabs → 7 tabs but Users/Security replaced with clean Partner+Tasks)
+- Removed Users tab rendering block (moved Ban User to Partner tab)
+- Removed Security tab rendering blocks (moved Admin Password Change to Partner tab)
+- Moved Tournament Prizes + Weekly Bonus from Partner tab to Tasks tab with 3-sub-tab switcher (Daily/Tournament/Weekly)
+- Updated AdminTab type to remove 'users' and 'security'
+- Added taskSubTab state variable for Tasks tab
+- Fixed TypeScript error in useGame.ts (targetUserIds type annotation)
+- DISABLED Adsterra popunder script that caused random website redirects
+- Added 5-minute cooldown to direct ad links to prevent spam redirects
+- Updated handlePlayClick and handleVisitSponsor to handle null links (cooldown)
+- Lint check passes with no errors
+
+Stage Summary:
+- Admin panel restructured: Users tab removed, Security merged into Partner, Tournament+Weekly moved to Tasks
+- Ad redirect fix: Popunder disabled, direct links have 5-min cooldown
+- All TypeScript errors related to our changes fixed

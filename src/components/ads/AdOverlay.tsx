@@ -5,14 +5,29 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Play, Tv } from 'lucide-react'
 import { AdsterraBanner300x250, AdsterraBanner320x50 } from './AdsterraAds'
 
-// Direct link URLs for Adsterra revenue - alternating for max revenue
+// Direct link URLs for Adsterra revenue - LIMITED to prevent random redirects
+// Only used when user explicitly clicks "Visit Sponsor" or "Click to Play" buttons
+// These are now gated behind explicit user action only (no auto-redirect)
 const DIRECT_LINKS = [
   'https://www.profitablecpmratenetwork.com/cey4s5cn7?key=577edbd0b2800a03a6dbb64c38ecc8c5',
   'https://elementalconsessionconsession.com/nirgtdkxc?key=2fd2bb47ead53d3cc16693a72229e3fb',
 ]
 
+// Track last time a direct link was opened to limit frequency (5 min cooldown)
+const LAST_DIRECT_LINK_KEY = 'mergeMaster2048_lastDirectLink'
+const DIRECT_LINK_COOLDOWN = 5 * 60 * 1000 // 5 minutes
+
 // Pick a random direct link each time for balanced revenue distribution
-const getRandomLink = () => DIRECT_LINKS[Math.floor(Math.random() * DIRECT_LINKS.length)]
+// Only returns a link if cooldown has passed (prevents spam clicking)
+const getRandomLink = () => {
+  const lastTime = parseInt(localStorage.getItem(LAST_DIRECT_LINK_KEY) || '0', 10)
+  const now = Date.now()
+  if (now - lastTime < DIRECT_LINK_COOLDOWN) {
+    return null // Cooldown not passed, don't open link
+  }
+  localStorage.setItem(LAST_DIRECT_LINK_KEY, String(now))
+  return DIRECT_LINKS[Math.floor(Math.random() * DIRECT_LINKS.length)]
+}
 
 // Keep legacy constant for imports - now returns random link
 const ADSTERRA_DIRECT_LINK = DIRECT_LINKS[0]
@@ -92,16 +107,22 @@ function AdOverlayInner({ countdownSeconds, title, subtitle, canCloseHandler }: 
   }, [adOpened, canCloseHandler])
 
   const handlePlayClick = useCallback(() => {
-    // Open direct link
-    try {
-      window.open(getRandomLink(), '_blank')
-    } catch {
-      // Popup blocked - just close directly
+    // Open direct link (only if cooldown has passed)
+    const link = getRandomLink()
+    if (link) {
+      try {
+        window.open(link, '_blank')
+      } catch {
+        // Popup blocked - just close directly
+        canCloseHandler()
+        return
+      }
+      // Show "come back" message and wait for user return
+      setAdOpened(true)
+    } else {
+      // Cooldown active - just close the overlay directly
       canCloseHandler()
-      return
     }
-    // Show "come back" message and wait for user return
-    setAdOpened(true)
   }, [canCloseHandler])
 
   return (
@@ -355,11 +376,15 @@ function DashboardReturnOverlayInner({ onClose }: { onClose: () => void }) {
   }, [timeLeft, onClose])
 
   const handleVisitSponsor = useCallback(() => {
-    try {
-      window.open(getRandomLink(), '_blank')
-    } catch {
-      // Popup blocked - just continue
+    const link = getRandomLink()
+    if (link) {
+      try {
+        window.open(link, '_blank')
+      } catch {
+        // Popup blocked - just continue
+      }
     }
+    // If cooldown active, do nothing (no redirect)
   }, [])
 
   return (

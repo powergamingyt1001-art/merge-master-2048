@@ -54,47 +54,13 @@ export function getDashboardBigBannerSlot(): string {
   return chosen
 }
 
-// --- Popunder Ad (Global - with conditions) ---
-// Always loads (100%), 8s delay, once per 5 minutes, data-cfasync=false
+// --- Popunder Ad (DISABLED - causes random website redirects) ---
+// The popunder script loads external JS that redirects users to random
+// websites on click. This has been disabled to prevent the redirect issue.
+// Banner ads still work normally and generate revenue.
 export function AdsterraPopunder() {
-  useEffect(() => {
-    const existing = document.getElementById('adsterra-popunder')
-    if (existing) return
-
-    // 30 second delay after page load - prevents redirect on page open
-    const timer = setTimeout(() => {
-      // Check if we can show popunder now (30 min cooldown)
-      if (!canShowPopunderNow()) return
-
-      const script = document.createElement('script')
-      script.id = 'adsterra-popunder'
-      script.src = 'https://pl29392034.profitablecpmratenetwork.com/40/9d/aa/409daa8e988b716a6a40b571e679667a.js?safe_content=1'
-      script.async = true
-      script.setAttribute('data-cfasync', 'false')
-
-      // Fallback: try document.head if document.body append fails
-      try {
-        document.body.appendChild(script)
-      } catch {
-        document.head.appendChild(script)
-      }
-
-      markPopunderShown()
-
-      // Error handling: if script fails to load, retry once with head append
-      script.onerror = () => {
-        const retryScript = document.createElement('script')
-        retryScript.id = 'adsterra-popunder-retry'
-        retryScript.src = script.src
-        retryScript.async = true
-        retryScript.setAttribute('data-cfasync', 'false')
-        document.head.appendChild(retryScript)
-      }
-    }, 30000) // 30 second delay
-
-    return () => clearTimeout(timer)
-  }, [])
-
+  // DISABLED - popunder causes random website redirects on click
+  // Keeping the function export for compatibility but it does nothing
   return null
 }
 

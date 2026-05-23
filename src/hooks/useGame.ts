@@ -2483,7 +2483,7 @@ export function useGame() {
         const existingCoupons = JSON.parse(localStorage.getItem('adminDiscountCoupons') || '[]')
         const userCode = prev.userCode || ''
         const couponCode = `WELCOME${bonus.discountPercent}`
-        const welcomeCouponExists = existingCoupons.some((c: { code: string }) => c.code === couponCode && c.targetUserIds?.includes(userCode))
+        const welcomeCouponExists = existingCoupons.some((c: { code: string; targetUserIds?: string[] }) => c.code === couponCode && c.targetUserIds?.includes(userCode))
         if (!welcomeCouponExists) {
           existingCoupons.push({
             code: couponCode,

@@ -367,7 +367,7 @@ function getCoinAmountFromItem(item: string): number {
   return 500
 }
 
-type AdminTab = 'dashboard' | 'payments' | 'coupons' | 'prices' | 'history' | 'users' | 'partner' | 'security' | 'tasks'
+type AdminTab = 'dashboard' | 'payments' | 'coupons' | 'prices' | 'history' | 'partner' | 'tasks'
 
 // Custom price overrides stored in localStorage
 interface CustomPriceOverride {
@@ -797,6 +797,9 @@ export function CouponCode({
   // Partner sub-tab state
   const [partnerSubTab, setPartnerSubTab] = useState<'partners' | 'security'>('partners')
 
+  // Task sub-tab state
+  const [taskSubTab, setTaskSubTab] = useState<'daily' | 'tournament' | 'weekly'>('daily')
+
   // Check for partner access from URL
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -1133,7 +1136,7 @@ export function CouponCode({
           } else if (partner.data.permissions.includes('manage_prices')) {
             setAdminTab('prices')
           } else if (partner.data.permissions.includes('view_users') || partner.data.permissions.includes('ban_users')) {
-            setAdminTab('users')
+            setAdminTab('partner')
           } else {
             setAdminTab('dashboard')
           }
@@ -3562,216 +3565,6 @@ export function CouponCode({
                       </div>
                     )}
 
-                    {/* ====== USERS TAB ====== */}
-                    {adminTab === 'users' && (
-                      <div className="space-y-3">
-                        {/* User Stats */}
-                        <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                          Real-time User Stats
-                        </p>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div className="p-2.5 rounded-lg text-center"
-                            style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.12)' }}>
-                            <UsersIcon className="w-3.5 h-3.5 mx-auto mb-1" style={{ color: '#EDC22E' }} />
-                            <p className="text-sm font-bold" style={{ color: '#EDC22E' }}>
-                              {userStatsLoading ? '...' : totalUsers}
-                            </p>
-                            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Total Users</p>
-                          </div>
-                          <div className="p-2.5 rounded-lg text-center"
-                            style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.12)' }}>
-                            <Zap className="w-3.5 h-3.5 mx-auto mb-1" style={{ color: '#00E676' }} />
-                            <p className="text-sm font-bold" style={{ color: '#00E676' }}>
-                              {userStatsLoading ? '...' : onlineUsers}
-                            </p>
-                            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Online Now</p>
-                          </div>
-                          <div className="p-2.5 rounded-lg text-center"
-                            style={{ backgroundColor: 'rgba(124,92,252,0.06)', border: '1px solid rgba(124,92,252,0.12)' }}>
-                            <ThumbsUp className="w-3.5 h-3.5 mx-auto mb-1" style={{ color: '#7C5CFC' }} />
-                            <p className="text-sm font-bold" style={{ color: '#7C5CFC' }}>
-                              {userStatsLoading ? '...' : totalReferrals}
-                            </p>
-                            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Referrals</p>
-                          </div>
-                        </div>
-
-                        {/* Refresh stats button */}
-                        <button
-                          onClick={() => {
-                            setUserStatsLoading(true)
-                            Promise.all([getTotalUserCount(), getOnlineUserCount(), getTotalReferralsCount()])
-                              .then(([total, online, refs]) => {
-                                setTotalUsers(total)
-                                setOnlineUsers(online)
-                                setTotalReferrals(refs)
-                              })
-                              .catch(() => { /* silent */ })
-                              .finally(() => setUserStatsLoading(false))
-                          }}
-                          className="w-full py-1.5 rounded-lg text-[8px] font-bold flex items-center justify-center gap-1.5 transition-transform active:scale-95"
-                          style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}
-                        >
-                          <RefreshCw className={`w-2.5 h-2.5 ${userStatsLoading ? 'animate-spin' : ''}`} />
-                          Refresh Stats
-                        </button>
-
-                        {/* Ban User Section */}
-                        <div className="p-3 rounded-lg"
-                          style={{ backgroundColor: 'rgba(246,94,59,0.06)', border: '1px solid rgba(246,94,59,0.15)' }}>
-                          <div className="flex items-center gap-1.5 mb-2.5">
-                            <Ban className="w-3.5 h-3.5" style={{ color: '#F65E3B' }} />
-                            <p className="text-[10px] font-bold" style={{ color: '#F65E3B' }}>Ban User</p>
-                          </div>
-
-                          {/* Player ID input */}
-                          <div className="space-y-2">
-                            <input
-                              type="text"
-                              value={banPlayerId}
-                              onChange={(e) => setBanPlayerId(e.target.value)}
-                              placeholder="Enter Player ID (e.g. p_abc123...)"
-                              className="w-full px-3 py-2 rounded-lg text-[10px] outline-none"
-                              style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
-                            />
-
-                            {/* Reason input */}
-                            <input
-                              type="text"
-                              value={banReason}
-                              onChange={(e) => setBanReason(e.target.value)}
-                              placeholder="Reason for ban"
-                              className="w-full px-3 py-2 rounded-lg text-[10px] outline-none"
-                              style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
-                            />
-
-                            {/* Duration selector */}
-                            <div className="flex gap-1.5">
-                              {(['weekly', 'monthly', 'yearly', 'permanent'] as const).map(d => (
-                                <button
-                                  key={d}
-                                  onClick={() => setBanDuration(d)}
-                                  className="flex-1 py-1.5 rounded-lg text-[7px] font-bold transition-all"
-                                  style={{
-                                    backgroundColor: banDuration === d ? 'rgba(246,94,59,0.2)' : 'rgba(0,0,0,0.2)',
-                                    border: `1px solid ${banDuration === d ? 'rgba(246,94,59,0.4)' : 'rgba(255,255,255,0.06)'}`,
-                                    color: banDuration === d ? '#F65E3B' : 'rgba(255,255,255,0.4)',
-                                  }}
-                                >
-                                  {d.charAt(0).toUpperCase() + d.slice(1)}
-                                </button>
-                              ))}
-                            </div>
-
-                            {/* Ban button */}
-                            <button
-                              onClick={() => {
-                                const id = banPlayerId.trim()
-                                if (!id) return
-                                banUser(id, banReason || 'No reason specified', banDuration)
-                                setBannedUsers(loadBannedUsers())
-                                setBanPlayerId('')
-                                setBanReason('')
-                                setBanDuration('weekly')
-                              }}
-                              disabled={!banPlayerId.trim()}
-                              className="w-full py-2 rounded-lg text-[10px] font-bold transition-transform active:scale-95 disabled:opacity-30"
-                              style={{ background: 'linear-gradient(135deg, #F65E3B, #D32F2F)', color: '#FFFFFF' }}
-                            >
-                              🚫 BAN USER
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Banned Users List */}
-                        <div>
-                          <p className="text-[9px] font-bold mb-2" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                            Banned Users ({bannedUsers.length})
-                          </p>
-                          {bannedUsers.length === 0 ? (
-                            <div className="text-center py-4">
-                              <span className="text-2xl block mb-1">✅</span>
-                              <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No banned users</p>
-                            </div>
-                          ) : (
-                            <div className="space-y-1.5 max-h-[40vh] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
-                              {bannedUsers.map(user => {
-                                const isExpired = user.expiresAt !== null && user.expiresAt < Date.now()
-                                const isPermanent = user.expiresAt === null
-                                const timeLeft = user.expiresAt ? user.expiresAt - Date.now() : 0
-                                const daysLeft = Math.ceil(timeLeft / (1000 * 60 * 60 * 24))
-                                return (
-                                  <div key={user.playerId} className="p-2.5 rounded-lg"
-                                    style={{
-                                      backgroundColor: isExpired ? 'rgba(255,255,255,0.02)' : 'rgba(246,94,59,0.04)',
-                                      border: `1px solid ${isExpired ? 'rgba(255,255,255,0.04)' : 'rgba(246,94,59,0.12)'}`,
-                                      opacity: isExpired ? 0.5 : 1,
-                                    }}>
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-1.5 mb-1">
-                                          <Ban className="w-2.5 h-2.5 shrink-0" style={{ color: isExpired ? 'rgba(255,255,255,0.3)' : '#F65E3B' }} />
-                                          <p className="text-[9px] font-bold truncate" style={{ color: '#FFFFFF' }}>
-                                            {user.playerId}
-                                          </p>
-                                          {isExpired && (
-                                            <span className="text-[6px] font-bold px-1 py-0.5 rounded-full"
-                                              style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)' }}>
-                                              EXPIRED
-                                            </span>
-                                          )}
-                                          {isPermanent && !isExpired && (
-                                            <span className="text-[6px] font-bold px-1 py-0.5 rounded-full"
-                                              style={{ backgroundColor: 'rgba(246,94,59,0.15)', color: '#F65E3B' }}>
-                                              PERMANENT
-                                            </span>
-                                          )}
-                                        </div>
-                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                          Reason: {user.reason}
-                                        </p>
-                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                                          Duration: {user.banDuration}
-                                          {!isPermanent && !isExpired && ` • ${daysLeft > 0 ? `${daysLeft}d left` : 'Expires today'}`}
-                                          {' • '}Banned: {new Date(user.bannedAt).toLocaleDateString()}
-                                        </p>
-                                      </div>
-                                      <button
-                                        onClick={() => {
-                                          unbanUser(user.playerId)
-                                          setBannedUsers(loadBannedUsers())
-                                        }}
-                                        className="shrink-0 px-2 py-1 rounded-lg text-[7px] font-bold transition-transform active:scale-95"
-                                        style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)', color: '#00E676' }}
-                                      >
-                                        UNBAN
-                                      </button>
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Clean expired bans button */}
-                        {bannedUsers.some(u => u.expiresAt !== null && u.expiresAt < Date.now()) && (
-                          <button
-                            onClick={() => {
-                              const active = bannedUsers.filter(u => u.expiresAt === null || u.expiresAt > Date.now())
-                              saveBannedUsers(active)
-                              setBannedUsers(active)
-                            }}
-                            className="w-full py-1.5 rounded-lg text-[8px] font-bold flex items-center justify-center gap-1.5 transition-transform active:scale-95"
-                            style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}
-                          >
-                            <Trash2 className="w-2.5 h-2.5" />
-                            Clean Expired Bans
-                          </button>
-                        )}
-                      </div>
-                    )}
-
                     {/* ====== PARTNER TAB ====== */}
                     {adminTab === 'partner' && !partnerMode && (
                       <div className="space-y-3">
@@ -3940,104 +3733,161 @@ export function CouponCode({
                           )}
                         </div>
 
-                        {/* Tournament Prize Editor */}
-                        <div className="p-2.5 rounded-lg"
-                          style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.15)' }}>
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <span className="text-[10px]">🏆</span>
-                            <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Tournament Prizes</p>
+                        {/* Ban User Section */}
+                        <div className="p-3 rounded-lg"
+                          style={{ backgroundColor: 'rgba(246,94,59,0.06)', border: '1px solid rgba(246,94,59,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2.5">
+                            <Ban className="w-3.5 h-3.5" style={{ color: '#F65E3B' }} />
+                            <p className="text-[10px] font-bold" style={{ color: '#F65E3B' }}>Ban User</p>
                           </div>
-                          <div className="space-y-1.5">
-                            {[
-                              { key: 'rank1' as const, label: '1st Place' },
-                              { key: 'rank2' as const, label: '2nd Place' },
-                              { key: 'rank3' as const, label: '3rd Place' },
-                              { key: 'rank4' as const, label: '4th Place' },
-                              { key: 'rank5' as const, label: '5th Place' },
-                            ].map(item => (
-                              <div key={item.key} className="flex items-center gap-1.5">
-                                <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>{item.label}:</p>
-                                <input
-                                  type="number"
-                                  value={tournamentPrizes[item.key]}
-                                  onChange={(e) => setTournamentPrizes(prev => ({ ...prev, [item.key]: parseInt(e.target.value) || 0 }))}
-                                  min={0}
-                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
-                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
-                                />
-                                <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>coins</span>
-                              </div>
-                            ))}
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Entry Fee:</p>
-                              <input
-                                type="number"
-                                value={tournamentPrizes.entryFee}
-                                onChange={(e) => setTournamentPrizes(prev => ({ ...prev, entryFee: parseInt(e.target.value) || 0 }))}
-                                min={0}
-                                className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
-                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
-                              />
-                              <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>coins</span>
+
+                          {/* Player ID input */}
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={banPlayerId}
+                              onChange={(e) => setBanPlayerId(e.target.value)}
+                              placeholder="Enter Player ID (e.g. p_abc123...)"
+                              className="w-full px-3 py-2 rounded-lg text-[10px] outline-none"
+                              style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                            />
+
+                            {/* Reason input */}
+                            <input
+                              type="text"
+                              value={banReason}
+                              onChange={(e) => setBanReason(e.target.value)}
+                              placeholder="Reason for ban"
+                              className="w-full px-3 py-2 rounded-lg text-[10px] outline-none"
+                              style={{ backgroundColor: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                            />
+
+                            {/* Duration selector */}
+                            <div className="flex gap-1.5">
+                              {(['weekly', 'monthly', 'yearly', 'permanent'] as const).map(d => (
+                                <button
+                                  key={d}
+                                  onClick={() => setBanDuration(d)}
+                                  className="flex-1 py-1.5 rounded-lg text-[7px] font-bold transition-all"
+                                  style={{
+                                    backgroundColor: banDuration === d ? 'rgba(246,94,59,0.2)' : 'rgba(0,0,0,0.2)',
+                                    border: `1px solid ${banDuration === d ? 'rgba(246,94,59,0.4)' : 'rgba(255,255,255,0.06)'}`,
+                                    color: banDuration === d ? '#F65E3B' : 'rgba(255,255,255,0.4)',
+                                  }}
+                                >
+                                  {d.charAt(0).toUpperCase() + d.slice(1)}
+                                </button>
+                              ))}
                             </div>
+
+                            {/* Ban button */}
                             <button
                               onClick={() => {
-                                saveTournamentPrizes(tournamentPrizes)
+                                const id = banPlayerId.trim()
+                                if (!id) return
+                                banUser(id, banReason || 'No reason specified', banDuration)
+                                setBannedUsers(loadBannedUsers())
+                                setBanPlayerId('')
+                                setBanReason('')
+                                setBanDuration('weekly')
                               }}
-                              className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
-                              style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(237,194,46,0.3)' }}
+                              disabled={!banPlayerId.trim()}
+                              className="w-full py-2 rounded-lg text-[10px] font-bold transition-transform active:scale-95 disabled:opacity-30"
+                              style={{ background: 'linear-gradient(135deg, #F65E3B, #D32F2F)', color: '#FFFFFF' }}
                             >
-                              🏆 SAVE TOURNAMENT PRIZES
+                              🚫 BAN USER
                             </button>
                           </div>
                         </div>
 
-                        {/* Weekly Prize Editor */}
-                        <div className="p-2.5 rounded-lg"
-                          style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.15)' }}>
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <span className="text-[10px]">🎁</span>
-                            <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>Weekly Bonus</p>
-                          </div>
-                          <div className="space-y-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Amount:</p>
-                              <input
-                                type="number"
-                                value={tournamentPrizes.weeklyBonus}
-                                onChange={(e) => setTournamentPrizes(prev => ({ ...prev, weeklyBonus: parseInt(e.target.value) || 0 }))}
-                                min={0}
-                                className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
-                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
-                              />
-                              <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>coins</span>
+                        {/* Banned Users List */}
+                        <div>
+                          <p className="text-[9px] font-bold mb-2" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                            Banned Users ({bannedUsers.length})
+                          </p>
+                          {bannedUsers.length === 0 ? (
+                            <div className="text-center py-4">
+                              <span className="text-2xl block mb-1">✅</span>
+                              <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No banned users</p>
                             </div>
-                            <button
-                              onClick={() => {
-                                saveTournamentPrizes(tournamentPrizes)
-                              }}
-                              className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
-                              style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(0,230,118,0.3)' }}
-                            >
-                              🎁 SAVE WEEKLY BONUS
-                            </button>
-                          </div>
+                          ) : (
+                            <div className="space-y-1.5 max-h-[40vh] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                              {bannedUsers.map(user => {
+                                const isExpired = user.expiresAt !== null && user.expiresAt < Date.now()
+                                const isPermanent = user.expiresAt === null
+                                const timeLeft = user.expiresAt ? user.expiresAt - Date.now() : 0
+                                const daysLeft = Math.ceil(timeLeft / (1000 * 60 * 60 * 24))
+                                return (
+                                  <div key={user.playerId} className="p-2.5 rounded-lg"
+                                    style={{
+                                      backgroundColor: isExpired ? 'rgba(255,255,255,0.02)' : 'rgba(246,94,59,0.04)',
+                                      border: `1px solid ${isExpired ? 'rgba(255,255,255,0.04)' : 'rgba(246,94,59,0.12)'}`,
+                                      opacity: isExpired ? 0.5 : 1,
+                                    }}>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5 mb-1">
+                                          <Ban className="w-2.5 h-2.5 shrink-0" style={{ color: isExpired ? 'rgba(255,255,255,0.3)' : '#F65E3B' }} />
+                                          <p className="text-[9px] font-bold truncate" style={{ color: '#FFFFFF' }}>
+                                            {user.playerId}
+                                          </p>
+                                          {isExpired && (
+                                            <span className="text-[6px] font-bold px-1 py-0.5 rounded-full"
+                                              style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)' }}>
+                                              EXPIRED
+                                            </span>
+                                          )}
+                                          {isPermanent && !isExpired && (
+                                            <span className="text-[6px] font-bold px-1 py-0.5 rounded-full"
+                                              style={{ backgroundColor: 'rgba(246,94,59,0.15)', color: '#F65E3B' }}>
+                                              PERMANENT
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                          Reason: {user.reason}
+                                        </p>
+                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                          Duration: {user.banDuration}
+                                          {!isPermanent && !isExpired && ` • ${daysLeft > 0 ? `${daysLeft}d left` : 'Expires today'}`}
+                                          {' • '}Banned: {new Date(user.bannedAt).toLocaleDateString()}
+                                        </p>
+                                      </div>
+                                      <button
+                                        onClick={() => {
+                                          unbanUser(user.playerId)
+                                          setBannedUsers(loadBannedUsers())
+                                        }}
+                                        className="shrink-0 px-2 py-1 rounded-lg text-[7px] font-bold transition-transform active:scale-95"
+                                        style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)', color: '#00E676' }}
+                                      >
+                                        UNBAN
+                                      </button>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )}
 
-                    {/* Partner mode restricted notice */}
-                    {adminTab === 'partner' && partnerMode && (
-                      <div className="text-center py-4">
-                        <span className="text-2xl block mb-1">🔒</span>
-                        <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Partner management is only available to the owner</p>
-                      </div>
-                    )}
+                        {/* Clean expired bans button */}
+                        {bannedUsers.some(u => u.expiresAt !== null && u.expiresAt < Date.now()) && (
+                          <button
+                            onClick={() => {
+                              const active = bannedUsers.filter(u => u.expiresAt === null || u.expiresAt > Date.now())
+                              saveBannedUsers(active)
+                              setBannedUsers(active)
+                            }}
+                            className="w-full py-1.5 rounded-lg text-[8px] font-bold flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                            style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}
+                          >
+                            <Trash2 className="w-2.5 h-2.5" />
+                            Clean Expired Bans
+                          </button>
+                        )}
 
-                    {/* ====== SECURITY TAB (Admin only) ====== */}
-                    {adminTab === 'security' && adminRole === 'admin' && (
-                      <div className="space-y-3">
-                        {/* Change Admin Password */}
+                        {/* Admin Password Section */}
                         <div className="p-2.5 rounded-lg"
                           style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.15)' }}>
                           <div className="flex items-center gap-1.5 mb-2">
@@ -4079,137 +3929,38 @@ export function CouponCode({
                             </p>
                           )}
                         </div>
-
-                        {/* Partner Passwords */}
-                        <div className="p-2.5 rounded-lg"
-                          style={{ backgroundColor: 'rgba(124,77,255,0.06)', border: '1px solid rgba(124,77,255,0.15)' }}>
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <UserCheck className="w-3 h-3" style={{ color: '#7C4DFF' }} />
-                            <p className="text-[9px] font-bold" style={{ color: '#7C4DFF' }}>Partner Passwords</p>
-                          </div>
-                          <p className="text-[7px] mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                            Partners can enter their password in the coupon code field to access specific admin features.
-                          </p>
-                          {/* Add new partner */}
-                          <div className="space-y-1.5 mb-3 p-2 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                            <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Add New Partner</p>
-                            <input
-                              type="text"
-                              value={newPartnerName}
-                              onChange={(e) => setNewPartnerName(e.target.value)}
-                              placeholder="Partner name..."
-                              className="w-full px-2 py-1 rounded-lg text-[8px] outline-none"
-                              style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
-                            />
-                            <input
-                              type="text"
-                              value={newPartnerPassword}
-                              onChange={(e) => setNewPartnerPassword(e.target.value)}
-                              placeholder="Password (min 4 chars)..."
-                              className="w-full px-2 py-1 rounded-lg text-[8px] outline-none"
-                              style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
-                            />
-                            <div className="flex flex-wrap gap-1">
-                              {['view_orders', 'approve_orders', 'manage_coupons', 'manage_prices', 'view_users', 'ban_users'].map(perm => (
-                                <button key={perm}
-                                  onClick={() => {
-                                    setNewPartnerPermissions(prev =>
-                                      prev.includes(perm) ? prev.filter(p => p !== perm) : [...prev, perm]
-                                    )
-                                  }}
-                                  className="text-[6px] font-bold px-1.5 py-0.5 rounded transition-transform active:scale-95"
-                                  style={{
-                                    backgroundColor: newPartnerPermissions.includes(perm) ? 'rgba(124,77,255,0.2)' : 'rgba(255,255,255,0.04)',
-                                    border: newPartnerPermissions.includes(perm) ? '1px solid rgba(124,77,255,0.4)' : '1px solid rgba(255,255,255,0.08)',
-                                    color: newPartnerPermissions.includes(perm) ? '#7C4DFF' : 'rgba(255,255,255,0.4)',
-                                  }}
-                                >
-                                  {perm.replace(/_/g, ' ')}
-                                </button>
-                              ))}
-                            </div>
-                            <button
-                              onClick={async () => {
-                                if (!newPartnerName.trim() || newPartnerPassword.trim().length < 4) return
-                                const id = `partner_${Date.now()}`
-                                await firebaseSavePartner(id, {
-                                  name: newPartnerName.trim(),
-                                  password: newPartnerPassword.trim(),
-                                  permissions: newPartnerPermissions,
-                                  createdAt: Date.now(),
-                                  lastUsedAt: null,
-                                  active: true,
-                                })
-                                setPartnerList(await firebaseGetPartners())
-                                setNewPartnerName('')
-                                setNewPartnerPassword('')
-                                setNewPartnerPermissions(['view_orders'])
-                              }}
-                              className="w-full py-1.5 rounded-lg text-[8px] font-bold transition-transform active:scale-95"
-                              style={{ background: 'linear-gradient(135deg, #7C4DFF, #536DFE)', color: '#FFFFFF' }}
-                            >
-                              ADD PARTNER
-                            </button>
-                          </div>
-                          {/* Existing partners */}
-                          <div className="space-y-1">
-                            {partnerList.map(partner => (
-                              <div key={partner.id} className="flex items-center justify-between p-2 rounded-lg"
-                                style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-[9px] font-bold" style={{ color: '#FFFFFF' }}>{partner.name}</p>
-                                  <div className="flex flex-wrap gap-0.5 mt-0.5">
-                                    {partner.permissions.map(p => (
-                                      <span key={p} className="text-[5px] px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(124,77,255,0.1)', color: '#7C4DFF' }}>
-                                        {p.replace(/_/g, ' ')}
-                                      </span>
-                                    ))}
-                                  </div>
-                                  <p className="text-[6px] mt-0.5" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                                    Password: {'•'.repeat(Math.min(partner.password.length, 8))} • {partner.active ? '✅ Active' : '❌ Inactive'}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <button
-                                    onClick={async () => {
-                                      await firebaseSavePartner(partner.id, { ...partner, active: !partner.active })
-                                      setPartnerList(await firebaseGetPartners())
-                                    }}
-                                    className="text-[7px] font-bold px-2 py-1 rounded"
-                                    style={{ backgroundColor: partner.active ? 'rgba(246,94,59,0.1)' : 'rgba(0,230,118,0.1)', color: partner.active ? '#F65E3B' : '#00E676' }}
-                                  >
-                                    {partner.active ? 'Disable' : 'Enable'}
-                                  </button>
-                                  <button
-                                    onClick={async () => {
-                                      await firebaseDeletePartner(partner.id)
-                                      setPartnerList(await firebaseGetPartners())
-                                    }}
-                                    className="text-[7px] font-bold px-2 py-1 rounded"
-                                    style={{ backgroundColor: 'rgba(246,94,59,0.1)', color: '#F65E3B' }}
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                            {partnerList.length === 0 && (
-                              <p className="text-[8px] text-center py-2" style={{ color: 'rgba(255,255,255,0.3)' }}>No partners yet</p>
-                            )}
-                          </div>
-                        </div>
                       </div>
                     )}
-                    {adminTab === 'security' && adminRole === 'partner' && (
+
+                    {/* Partner mode restricted notice */}
+                    {adminTab === 'partner' && partnerMode && (
                       <div className="text-center py-4">
                         <span className="text-2xl block mb-1">🔒</span>
-                        <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Security settings are only available to the main admin</p>
+                        <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Partner management is only available to the owner</p>
                       </div>
                     )}
+
 
                     {/* ====== TASKS TAB (Admin only) ====== */}
                     {adminTab === 'tasks' && adminRole === 'admin' && (
                       <div className="space-y-3">
+                        {/* Task Sub-Tab Switcher */}
+                        <div className="flex rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                          {[
+                            { key: 'daily' as const, label: '📋 Daily Tasks', color: '#E040FB' },
+                            { key: 'tournament' as const, label: '🏆 Tournament', color: '#EDC22E' },
+                            { key: 'weekly' as const, label: '🎁 Weekly', color: '#00E676' },
+                          ].map(tab => (
+                            <button key={tab.key} onClick={() => setTaskSubTab(tab.key)}
+                              className="flex-1 py-2 text-[9px] font-bold transition-all"
+                              style={{ backgroundColor: taskSubTab === tab.key ? `${tab.color}20` : 'rgba(255,255,255,0.03)', color: taskSubTab === tab.key ? tab.color : 'rgba(255,255,255,0.4)', borderBottom: taskSubTab === tab.key ? `2px solid ${tab.color}` : '2px solid transparent' }}>
+                              {tab.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {taskSubTab === 'daily' && (
+                        <>
                         <div className="flex items-center gap-2 mb-2">
                           <Sparkles className="w-4 h-4" style={{ color: '#E040FB' }} />
                           <p className="text-xs font-bold" style={{ color: '#E040FB' }}>Daily Tasks Manager</p>
@@ -4486,6 +4237,100 @@ export function CouponCode({
                             </div>
                           )}
                         </div>
+                        </>
+                        )}
+
+                        {taskSubTab === 'tournament' && (
+                        <>
+                        {/* Tournament Prize Editor */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <span className="text-[10px]">🏆</span>
+                            <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Tournament Prizes</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            {[
+                              { key: 'rank1' as const, label: '1st Place' },
+                              { key: 'rank2' as const, label: '2nd Place' },
+                              { key: 'rank3' as const, label: '3rd Place' },
+                              { key: 'rank4' as const, label: '4th Place' },
+                              { key: 'rank5' as const, label: '5th Place' },
+                            ].map(item => (
+                              <div key={item.key} className="flex items-center gap-1.5">
+                                <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>{item.label}:</p>
+                                <input
+                                  type="number"
+                                  value={tournamentPrizes[item.key]}
+                                  onChange={(e) => setTournamentPrizes(prev => ({ ...prev, [item.key]: parseInt(e.target.value) || 0 }))}
+                                  min={0}
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                                />
+                                <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>coins</span>
+                              </div>
+                            ))}
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Entry Fee:</p>
+                              <input
+                                type="number"
+                                value={tournamentPrizes.entryFee}
+                                onChange={(e) => setTournamentPrizes(prev => ({ ...prev, entryFee: parseInt(e.target.value) || 0 }))}
+                                min={0}
+                                className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              />
+                              <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>coins</span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                saveTournamentPrizes(tournamentPrizes)
+                              }}
+                              className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                              style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(237,194,46,0.3)' }}
+                            >
+                              🏆 SAVE TOURNAMENT PRIZES
+                            </button>
+                          </div>
+                        </div>
+                        </>
+                        )}
+
+                        {taskSubTab === 'weekly' && (
+                        <>
+                        {/* Weekly Prize Editor */}
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <span className="text-[10px]">🎁</span>
+                            <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>Weekly Bonus</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Amount:</p>
+                              <input
+                                type="number"
+                                value={tournamentPrizes.weeklyBonus}
+                                onChange={(e) => setTournamentPrizes(prev => ({ ...prev, weeklyBonus: parseInt(e.target.value) || 0 }))}
+                                min={0}
+                                className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              />
+                              <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>coins</span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                saveTournamentPrizes(tournamentPrizes)
+                              }}
+                              className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                              style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(0,230,118,0.3)' }}
+                            >
+                              🎁 SAVE WEEKLY BONUS
+                            </button>
+                          </div>
+                        </div>
+                        </>
+                        )}
                       </div>
                     )}
                     {adminTab === 'tasks' && adminRole === 'partner' && (
@@ -4509,9 +4354,7 @@ export function CouponCode({
                 { key: 'coupons' as AdminTab, icon: '🎟️', label: 'Coupon' },
                 { key: 'prices' as AdminTab, icon: '💰', label: 'Price' },
                 { key: 'history' as AdminTab, icon: '📜', label: 'History' },
-                { key: 'users' as AdminTab, icon: '👥', label: 'Users' },
                 { key: 'partner' as AdminTab, icon: '🤝', label: 'Partner' },
-                { key: 'security' as AdminTab, icon: '🔐', label: 'Security' },
                 { key: 'tasks' as AdminTab, icon: '📋', label: 'Tasks' },
               ].filter(t => {
                 if (adminRole === 'admin' && !partnerMode) return true
@@ -4519,12 +4362,10 @@ export function CouponCode({
                 // Partner role - filter based on permissions
                 if (adminRole === 'partner') {
                   if (t.key === 'dashboard') return true
-                  if (t.key === 'payments' && partnerPermissions.includes('view_orders')) return true
-                  if (t.key === 'payments' && partnerPermissions.includes('approve_orders')) return true
+                  if (t.key === 'payments' && (partnerPermissions.includes('view_orders') || partnerPermissions.includes('approve_orders'))) return true
                   if (t.key === 'coupons' && partnerPermissions.includes('manage_coupons')) return true
                   if (t.key === 'prices' && partnerPermissions.includes('manage_prices')) return true
-                  if (t.key === 'users' && (partnerPermissions.includes('view_users') || partnerPermissions.includes('ban_users'))) return true
-                  if (t.key === 'security') return false // Partners never see security
+                  if (t.key === 'partner' && (partnerPermissions.includes('view_users') || partnerPermissions.includes('ban_users'))) return true
                   if (t.key === 'tasks') return false // Partners never see tasks
                   return false
                 }
