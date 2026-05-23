@@ -32,6 +32,7 @@ export interface FirebasePlayer {
   modBestScore: number
   coins: number
   totalCoinsEarned: number
+  winningCoins: number
   level: number
   lastActive: number
   joinedAt: number
@@ -64,6 +65,7 @@ export async function syncPlayerToFirebase(playerData: {
   modBestScore: number
   coins: number
   totalCoinsEarned: number
+  winningCoins: number
   level: number
   totalBattlesPlayed: number
   totalBattlesWon: number

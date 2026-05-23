@@ -92,6 +92,7 @@ interface PlayDashboardProps {
   onClaimWeeklyBonus?: () => void
   userCode: string
   totalCoinsEarned: number
+  winningCoins: number
   roomCardCount: number
   gameHistory: GameHistoryEntry[]
   streakWeek: number
@@ -137,7 +138,7 @@ export function PlayDashboard({
   onUpdatePlayerName, onUpdatePlayerAvatar,
   dailyTasks, onClaimDailyTask, onCompleteVisitWebsiteTask, onResetAllData,
   weeklyBonusClaimed = false, onClaimWeeklyBonus,
-  userCode, totalCoinsEarned, roomCardCount, gameHistory,
+  userCode, totalCoinsEarned, winningCoins, roomCardCount, gameHistory,
   streakWeek = 1, onAddRoomCards,
 }: PlayDashboardProps) {
   const [showSpin, setShowSpin] = useState(false)
@@ -751,7 +752,7 @@ export function PlayDashboard({
         streakClaimed={streakClaimed} onClaim={onClaimStreakDay} streakWeek={streakWeek} />
       <WelcomeGift isOpen={showWelcome} onClose={() => setShowWelcome(false)} onClaim={() => { onClaimWelcome(); setShowWelcome(false) }} />
       <Leaderboard isOpen={showLeaderboard} onClose={() => setShowLeaderboard(false)}
-        gamePoints={gamePoints} bestScore={bestScore} coins={coins} totalCoinsEarned={totalCoinsEarned}
+        gamePoints={gamePoints} bestScore={bestScore} coins={coins} totalCoinsEarned={totalCoinsEarned} winningCoins={winningCoins}
         playerName={playerName} playerAvatar={playerAvatar} playerId={playerId} tournamentPoints={tournamentPoints} />
       <Tournament isOpen={showTournament} onClose={() => setShowTournament(false)}
         coins={coins}

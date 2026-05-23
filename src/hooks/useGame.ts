@@ -167,6 +167,8 @@ export interface GameState {
   userCode: string
   // Total coins ever earned (never decreases)
   totalCoinsEarned: number
+  // Coins earned from WINNING battles only (for leaderboard - purchased coins don't count)
+  winningCoins: number
   // Room Card resource for Room Fight feature
   roomCardCount: number
   // SP/XP Leveling System
@@ -880,6 +882,7 @@ export function useGame() {
       multiplierTimeLeft: 0,
       userCode: '',
       totalCoinsEarned: 0,
+      winningCoins: 0,
       roomCardCount: 0,
       streakWeek: 1,
       skillPoints: 0,
@@ -1076,6 +1079,7 @@ export function useGame() {
       multiplierTimeLeft: 0,
       userCode: saved.userCode || generateUserCode(),
       totalCoinsEarned: saved.totalCoinsEarned ?? 0,
+      winningCoins: saved.winningCoins ?? 0,
       roomCardCount: saved.roomCardCount ?? 0,
       streakWeek: saved.streakWeek ?? 1,
       skillPoints: saved.skillPoints ?? 0,
@@ -1143,13 +1147,14 @@ export function useGame() {
       extraTimeCount: state.extraTimeCount,
       userCode: state.userCode,
       totalCoinsEarned: state.totalCoinsEarned,
+      winningCoins: state.winningCoins,
       roomCardCount: state.roomCardCount,
       streakWeek: state.streakWeek,
       skillPoints: state.skillPoints,
       spRemainder: state.spRemainder,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount, state.userCode, state.totalCoinsEarned, state.roomCardCount, state.streakWeek, state.skillPoints, state.spRemainder])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount, state.userCode, state.totalCoinsEarned, state.winningCoins, state.roomCardCount, state.streakWeek, state.skillPoints, state.spRemainder])
 
   // ============================================================
   // FIREBASE SYNC - Sync player data to Firebase RTDB
@@ -1173,6 +1178,7 @@ export function useGame() {
         modBestScore: state.modBestScore,
         coins: state.coins,
         totalCoinsEarned: state.totalCoinsEarned,
+        winningCoins: state.winningCoins,
         level: state.playerLevel,
         totalBattlesPlayed: state.totalBattlesPlayed,
         totalBattlesWon: state.totalBattlesWon,
@@ -2564,6 +2570,22 @@ export function useGame() {
     })
   }, [])
 
+  // Add coins from WINNING battles only (for leaderboard - purchased coins don't count)
+  const addWinningCoins = useCallback((amount: number) => {
+    setState(prev => {
+      const newCoins = prev.coins + amount
+      const newTotalCoinsEarned = prev.totalCoinsEarned + amount
+      const newWinningCoins = prev.winningCoins + amount
+      let newCommissionBalance = prev.commissionBalance
+      let newCommissionClaimed = prev.commissionClaimed
+      if (prev.autoClaimCommission && prev.commissionBalance > 0) {
+        newCommissionClaimed += prev.commissionBalance
+        newCommissionBalance = 0
+      }
+      return { ...prev, coins: newCoins, totalCoinsEarned: newTotalCoinsEarned, winningCoins: newWinningCoins, commissionBalance: newCommissionBalance, commissionClaimed: newCommissionClaimed }
+    })
+  }, [])
+
   const deductCoins = useCallback((amount: number) => {
     setState(prev => {
       if (prev.coins < amount) return prev // Not enough coins
@@ -2858,6 +2880,7 @@ export function useGame() {
       multiplierTimeLeft: 0,
       userCode: generateUserCode(),
       totalCoinsEarned: 0,
+      winningCoins: 0,
       roomCardCount: 0,
       streakWeek: 1,
       skillPoints: 0,
@@ -2904,6 +2927,7 @@ export function useGame() {
     claimWelcome,
     claimStreakDay,
     addCoins,
+    addWinningCoins,
     deductCoins,
     addPowerUp,
     addUndos,

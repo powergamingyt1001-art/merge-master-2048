@@ -608,7 +608,7 @@ function BuyButton({ onPress }: { onPress: () => void }) {
       }}
     >
       <ShoppingCart className="w-3.5 h-3.5" />
-      Add 🛒
+      Add
     </button>
   )
 }
@@ -1142,7 +1142,7 @@ function AbilityCard({
               color: '#FFFFFF',
             }}
           >
-            {isCoinCurrency ? 'BUY' : 'Add 🛒'}
+            Add
           </button>
         )}
       </div>

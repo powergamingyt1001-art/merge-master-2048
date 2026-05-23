@@ -846,17 +846,17 @@ export function ProfilePanel({
                     </AnimatePresence>
                   </div>
 
-                  {/* Join Room Box */}
+                  {/* Play Friend Box */}
                   <div className="rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(0,230,118,0.05)', border: '1px solid rgba(0,230,118,0.15)' }}>
                     <button
                       onClick={() => setExpandedRoom(expandedRoom === 'join' ? null : 'join')}
                       className="w-full p-3 flex items-center justify-between transition-transform active:scale-[0.98]"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="text-lg">🔗</span>
+                        <span className="text-lg">🤝</span>
                         <div className="text-left">
-                          <p className="text-[10px] font-bold" style={{ color: '#00E676' }}>Join Room</p>
-                          <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Find an opponent or join random</p>
+                          <p className="text-[10px] font-bold" style={{ color: '#00E676' }}>Play Friend</p>
+                          <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Challenge a friend or join random</p>
                         </div>
                       </div>
                       <motion.div

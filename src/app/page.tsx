@@ -229,6 +229,7 @@ export default function Home() {
                 onClaimWeeklyBonus={game.claimWeeklyBonus}
                 userCode={game.userCode}
                 totalCoinsEarned={game.totalCoinsEarned}
+                winningCoins={game.winningCoins}
                 roomCardCount={game.roomCardCount}
                 gameHistory={game.gameHistory}
                 streakWeek={game.streakWeek}

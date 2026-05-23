@@ -13,6 +13,7 @@ interface LeaderboardProps {
   bestScore: number
   coins: number
   totalCoinsEarned: number
+  winningCoins: number
   playerName: string
   playerAvatar: string
   playerId: string
@@ -123,13 +124,13 @@ function buildModesLeaderboard(playerBestScore: number, playerName: string, play
   return deduped
 }
 
-function buildCoinsLeaderboard(playerCoins: number, playerName: string, playerAvatar: string, firebasePlayers: FirebasePlayer[], playerId: string): LeaderboardEntry[] {
+function buildCoinsLeaderboard(playerWinningCoins: number, playerName: string, playerAvatar: string, firebasePlayers: FirebasePlayer[], playerId: string): LeaderboardEntry[] {
   const entries: LeaderboardEntry[] = []
 
   if (firebasePlayers.length > 0) {
     firebasePlayers.forEach(p => {
       if (p.id !== playerId) {
-        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.totalCoinsEarned || 0, isPlayer: false, lastActive: p.lastActive, playerId: p.id })
+        entries.push({ rank: 0, name: p.name || 'Player', avatar: p.avatar || '😎', value: p.winningCoins || p.totalCoinsEarned || 0, isPlayer: false, lastActive: p.lastActive, playerId: p.id })
       }
     })
   }
@@ -161,7 +162,7 @@ function buildCoinsLeaderboard(playerCoins: number, playerName: string, playerAv
     deduped.push(entry)
   }
 
-  deduped.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', value: playerCoins, isPlayer: true, playerId })
+  deduped.push({ rank: 0, name: playerName || 'You', avatar: playerAvatar || '😎', value: playerWinningCoins, isPlayer: true, playerId })
   deduped.sort((a, b) => b.value - a.value)
   deduped.forEach((e, i) => { e.rank = i + 1 })
   return deduped
@@ -183,7 +184,7 @@ function getOfflineRank(playerBestScore: number): { currentRank: number; nextTar
   }
 }
 
-export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, totalCoinsEarned, playerName, playerAvatar, playerId, tournamentPoints }: LeaderboardProps) {
+export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, totalCoinsEarned, winningCoins, playerName, playerAvatar, playerId, tournamentPoints }: LeaderboardProps) {
   const [tab, setTab] = useState<TabType>('modesScore')
   const [firebasePlayers, setFirebasePlayers] = useState<FirebasePlayer[]>([])
   const [selectedPlayer, setSelectedPlayerRaw] = useState<LeaderboardEntry | null>(null)
@@ -250,7 +251,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
   }, [])
 
   const modesEntries = buildModesLeaderboard(bestScore, playerName, playerAvatar, firebasePlayers, playerId)
-  const coinsEntries = buildCoinsLeaderboard(totalCoinsEarned, playerName, playerAvatar, firebasePlayers, playerId)
+  const coinsEntries = buildCoinsLeaderboard(winningCoins, playerName, playerAvatar, firebasePlayers, playerId)
   const { currentRank, nextTarget, beatenRanks } = getOfflineRank(bestScore)
 
   // Look up full FirebasePlayer data for the selected player
@@ -351,7 +352,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
                 <div>
                   {/* Reset period indicator */}
                   <div className="flex items-center justify-center gap-1.5 mb-2 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.12)' }}>
-                    <span className="text-[8px] font-bold" style={{ color: '#EDC22E' }}>🔄 Resets 1st of every month</span>
+                    <span className="text-[8px] font-bold" style={{ color: '#EDC22E' }}>🔄 Winning Coins Only — Resets 1st of every month</span>
                   </div>
                   {coinsEntries.length <= 1 && !coinsEntries.some(e => !e.isPlayer) ? (
                     <div className="flex flex-col items-center justify-center py-8">

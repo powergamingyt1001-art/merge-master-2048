@@ -84,7 +84,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     tournamentPoints, tournamentCarryOver,
     countdownActive, countdownSecondsLeft, timerPaused,
     handleMove, newGame, continueGame, undo, activatePowerUp, handleTileClick,
-    reviveWithAd, restartAfterStuck, tickBattleTimer, tickGameTimeElapsed, tickCountdown, addCoins, addNotification,
+    reviveWithAd, restartAfterStuck, tickBattleTimer, tickGameTimeElapsed, tickCountdown, addCoins, addWinningCoins, addNotification,
     goBackToDashboard, calculateTournamentPoints, addGameToHistory,
   } = game
 
@@ -295,7 +295,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     addGameToHistory(gameMode, score, result as 'win' | 'lose' | 'classic', coinEntryFee, battleTimeLimit)
     if (isCoinGame && botBattleResult === 'win' && coinEntryFee > 0) {
       const winAmount = coinEntryFee * 2
-      addCoins(winAmount)
+      addWinningCoins(winAmount)
       addNotification('Coin Game Won!', `You won ${winAmount} coins! 🎉`, 'reward', '💰')
     } else if (isCoinGame && botBattleResult === 'lose') {
       addNotification('Coin Game Lost', `You lost ${coinEntryFee} coins`, 'battle', '😔')
@@ -308,7 +308,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
         addNotification('Tournament Game Over', `Score: ${score} - Keep playing!`, 'battle', '⚔️')
       }
     }
-  }, [isCoinGame, isTournament, botBattleResult, coinEntryFee, score, addCoins, addNotification, addGameToHistory, gameMode, battleTimeLimit, calculateTournamentPoints])
+  }, [isCoinGame, isTournament, botBattleResult, coinEntryFee, score, addCoins, addWinningCoins, addNotification, addGameToHistory, gameMode, battleTimeLimit, calculateTournamentPoints])
 
   const handleBattleEnd = useCallback(() => {
     finalizeGame()
