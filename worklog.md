@@ -384,3 +384,32 @@ Work Log:
 
 ## Lint Results
 - 0 errors, 0 warnings after all changes
+
+---
+Task ID: critical-fix-1
+Agent: Main Agent
+Task: Fix App Crash & Account Reset Bug (Critical Priority)
+
+Work Log:
+- Analyzed screenshot: app showing "Something went wrong - Cannot read properties of undefined (reading 'map')"
+- Identified ROOT CAUSE: In CouponCode.tsx line 1647, `fo.items.map(...)` crashes when Firebase order doesn't have `items` field (undefined)
+- This crash triggers ErrorBoundary, which PREVIOUSLY only preserved 5 fields (playerId, userCode, playerName, playerAvatar, inviteCode) and cleared ALL other data
+- When ErrorBoundary reloads, user gets a "new account" with only identity data - all coins, abilities, progress lost
+- This explains the user's report: "entering admin code resets the account" - the admin panel opens, loads Firebase orders, some order has missing `items`, crash, account reset
+
+Fixes Applied:
+1. CouponCode.tsx: Added `Array.isArray(fo.items) ? fo.items : []` null safety for Firebase orders items
+2. firebase-service.ts: Added items array safety in `onOrdersUpdate` and `onUserOrdersUpdate`
+3. ErrorBoundary.tsx: Complete rewrite - now preserves FULL localStorage data instead of clearing it
+4. InvitePanel.tsx: Added null safety for `friendsList.map()` and `friendRequests` callbacks from Firebase
+5. Leaderboard.tsx: Fixed NaN display when `totalBattlesWon` is undefined
+6. Store.tsx: Added null safety for `fbOrder.items.map()` in notification messages
+7. PlayDashboard.tsx: Changed "Buy" to "Add" on Store button and tooltip
+8. Store.tsx: Changed "BUY 💰" to "ADD 💰" on room card coin purchase button
+
+Stage Summary:
+- ROOT CAUSE FIXED: App no longer crashes on Firebase orders with missing `items` field
+- ErrorBoundary now preserves ALL user data on crash recovery - no more account resets
+- All .map() calls on Firebase data now have null safety checks
+- Store buttons changed from "Buy" to "Add" as requested
+- Git pushed to origin/main, Vercel will auto-deploy
