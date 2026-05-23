@@ -11,7 +11,7 @@ import { useEffect, useRef } from 'react'
 // inappropriate/dirty ads for family-friendly gaming
 //
 // AD CONDITIONS:
-// - Popunder: Always loads, 8s delay, once per 5 min, data-cfasync=false
+// - Popunder: Always loads, 30s delay, once per 30 min, data-cfasync=false
 // - Big banners (728x90, 300x250): Only ONE per page view (rotated)
 // - Small banners (320x50, 468x60): Always shown (small, non-intrusive)
 // ============================================================
@@ -33,8 +33,8 @@ function canShowPopunderNow(): boolean {
   if (typeof window === 'undefined') return false
   const lastTime = parseInt(localStorage.getItem('last_popunder_time') || '0', 10)
   const now = Date.now()
-  // Minimum 5 minutes between popunders
-  return now - lastTime > 5 * 60 * 1000
+  // Minimum 30 minutes between popunders
+  return now - lastTime > 30 * 60 * 1000
 }
 
 function markPopunderShown(): void {
@@ -61,14 +61,14 @@ export function AdsterraPopunder() {
     const existing = document.getElementById('adsterra-popunder')
     if (existing) return
 
-    // 8 second delay after page load - prevents redirect on page open
+    // 30 second delay after page load - prevents redirect on page open
     const timer = setTimeout(() => {
-      // Check if we can show popunder now (5 min cooldown)
+      // Check if we can show popunder now (30 min cooldown)
       if (!canShowPopunderNow()) return
 
       const script = document.createElement('script')
       script.id = 'adsterra-popunder'
-      script.src = 'https://pl29392034.profitablecpmratenetwork.com/40/9d/aa/409daa8e988b716a6a40b571e679667a.js'
+      script.src = 'https://pl29392034.profitablecpmratenetwork.com/40/9d/aa/409daa8e988b716a6a40b571e679667a.js?safe_content=1'
       script.async = true
       script.setAttribute('data-cfasync', 'false')
 
@@ -90,7 +90,7 @@ export function AdsterraPopunder() {
         retryScript.setAttribute('data-cfasync', 'false')
         document.head.appendChild(retryScript)
       }
-    }, 8000) // 8 second delay
+    }, 30000) // 30 second delay
 
     return () => clearTimeout(timer)
   }, [])
@@ -175,7 +175,7 @@ export function AdsterraBanner728x90() {
       if (containerRef.current) {
         createIsolatedBanner(containerRef.current, '23e07d223b190b8e97e26dad42844982', 728, 90)
       }
-    }, 1000)
+    }, 3000)
     return () => clearTimeout(timer)
   }, [])
 
@@ -196,7 +196,7 @@ export function AdsterraBanner300x250() {
       if (containerRef.current) {
         createIsolatedBanner(containerRef.current, '28ee70730f6d9a4745a4e8b56c3693bd', 300, 250)
       }
-    }, 1500)
+    }, 5000)
     return () => clearTimeout(timer)
   }, [])
 
@@ -217,7 +217,7 @@ export function AdsterraBanner468x60() {
       if (containerRef.current) {
         createIsolatedBanner(containerRef.current, '775b637466f146ce8138a6adaa661063', 468, 60)
       }
-    }, 3000)
+    }, 8000)
     return () => clearTimeout(timer)
   }, [])
 
@@ -238,7 +238,7 @@ export function AdsterraBanner320x50() {
       if (containerRef.current) {
         createIsolatedBanner(containerRef.current, '14dda57ff56632821027d924e1ff5e1c', 320, 50)
       }
-    }, 500)
+    }, 2000)
     return () => clearTimeout(timer)
   }, [])
 

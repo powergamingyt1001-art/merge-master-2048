@@ -22,7 +22,7 @@ import {
   getDashboardBigBannerSlot,
 } from '@/components/ads/AdsterraAds'
 import { PowerUp, Notification, DailyTask, DailyTaskReward, GameHistoryEntry, getLevelInfo } from '@/hooks/useGame'
-import { getRandomLink } from '@/components/ads/AdOverlay'
+
 
 interface PlayDashboardProps {
   coins: number
@@ -580,7 +580,6 @@ export function PlayDashboard({
                         </button>
                       ) : isVisitTask && isOnline ? (
                         <button onClick={() => {
-                          try { window.open(getRandomLink(), '_blank') } catch { /* popup blocked */ }
                           onCompleteVisitWebsiteTask?.()
                         }}
                           className="px-2 py-0.5 rounded text-[7px] font-bold transition-transform active:scale-95"
@@ -598,10 +597,9 @@ export function PlayDashboard({
                             CLAIM 💰
                           </button>
                           <button onClick={() => {
-                            // Open popup ad for +100 bonus coins
-                            try { window.open(getRandomLink(), '_blank') } catch { /* popup blocked */ }
+                            // Give +100 bonus coins without redirect
                             onAddCoins(100)
-                            onAddNotification('Bonus Coins!', 'You watched an ad and got +100 bonus coins! 🎉', 'reward', '💰')
+                            onAddNotification('Bonus Coins!', 'You got +100 bonus coins! 🎉', 'reward', '💰')
                           }}
                             className="px-1.5 py-0.5 rounded text-[6px] font-bold transition-transform active:scale-95"
                             style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.2)' }}>
@@ -747,7 +745,8 @@ export function PlayDashboard({
 
       {/* Modals */}
       <SpinWheel isOpen={showSpin} onClose={() => setShowSpin(false)} spinTickets={spinTickets}
-        onUseTicket={onUseSpinTicket} onWinPrize={handleSpinPrize} onWatchAdForSpin={() => { onAddSpinTickets(1) }} isOnline={isOnline} coins={coins} onDeductCoins={onDeductCoins} onAddSpinTickets={onAddSpinTickets} />
+        onUseTicket={onUseSpinTicket} onWinPrize={handleSpinPrize} onWatchAdForSpin={() => { onAddSpinTickets(1) }} isOnline={isOnline} coins={coins} onDeductCoins={onDeductCoins} onAddSpinTickets={onAddSpinTickets}
+        playerId={playerId} playerName={playerName} userCode={userCode} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} />
       <LoginStreak isOpen={showStreak} onClose={() => setShowStreak(false)} streakDay={streakDay}
         streakClaimed={streakClaimed} onClaim={onClaimStreakDay} streakWeek={streakWeek} />
       <WelcomeGift isOpen={showWelcome} onClose={() => setShowWelcome(false)} onClaim={() => { onClaimWelcome(); setShowWelcome(false) }} />
