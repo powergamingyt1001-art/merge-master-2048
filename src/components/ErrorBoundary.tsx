@@ -27,43 +27,65 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   handleReset = async () => {
-    // Preserve critical user identity data before clearing
-    let preservedPlayerId = ''
-    let preservedUserCode = ''
-    let preservedPlayerName = ''
-    let preservedPlayerAvatar = ''
-    let preservedInviteCode = ''
+    // Preserve ALL user data before clearing
+    // The crash might be from corrupted cache, not corrupted data
+    let preservedData: Record<string, any> = {}
     try {
       const data = localStorage.getItem('mergeMaster2048')
       if (data) {
-        const parsed = JSON.parse(data)
-        preservedPlayerId = parsed.playerId || ''
-        preservedUserCode = parsed.userCode || ''
-        preservedPlayerName = parsed.playerName || ''
-        preservedPlayerAvatar = parsed.playerAvatar || ''
-        preservedInviteCode = parsed.inviteCode || ''
+        preservedData = JSON.parse(data)
       }
     } catch {}
 
-    // Clear ALL cached data that might be corrupted
+    // Instead of clearing ALL localStorage data and only keeping 5 fields,
+    // we keep the FULL saved data intact. The crash is likely from a
+    // runtime error (undefined.map), not from corrupted localStorage data.
+    // We only clear the specific caches that might cause issues.
+
+    // Clear only temporary/cached data that could be corrupted
+    const keysToPreserve = new Set([
+      'mergeMaster2048',
+      'mergeMaster2048_orders',
+      'mergeMaster2048_playerLikes',
+      'mergeMaster2048_friendRequests',
+      'claimedCoupons',
+      'claimedAdminCoupons',
+      'multiplierCouponCount',
+      'purchaseHistory',
+      'usedCoupons',
+      'usedAdminCoupons',
+      'adminDailyTasks',
+      'adminCustomCouponCodes',
+      'adminCustomPrices',
+      'adminCoinAbilityPrices',
+      'adminNightCodeSettings',
+      'adminDayCodeSettings',
+      'adminLockDuration',
+      'adminBannedUsers',
+      'adminDiscountCoupons',
+      'adminPartnerLinks',
+      'adminTournamentPrizes',
+    ])
+
+    // Only clear non-essential keys that might cause issues
     try {
-      localStorage.removeItem('mergeMaster2048')
       localStorage.removeItem('mergeMaster2048_storeHistory')
       localStorage.removeItem('mergeMaster2048_abilityPurchaseLimits')
       localStorage.removeItem('mergeMaster2048_lastFreeAd')
     } catch {}
 
-    // Restore preserved identity data so user doesn't lose their ID
+    // Ensure the main game data is intact with all fields
+    // If preservedData only has identity fields (from a previous buggy reset),
+    // we don't overwrite the existing data - we just keep whatever is there
     try {
-      if (preservedPlayerId || preservedUserCode) {
-        const restoredData = {
-          playerId: preservedPlayerId,
-          userCode: preservedUserCode,
-          playerName: preservedPlayerName || 'Player',
-          playerAvatar: preservedPlayerAvatar || '😎',
-          inviteCode: preservedInviteCode,
+      if (Object.keys(preservedData).length > 0) {
+        // Ensure critical identity fields exist
+        if (!preservedData.playerId || !preservedData.userCode) {
+          // Data might have been partially cleared by a previous buggy reset
+          // Try to recover from Firebase by just keeping what we have
         }
-        localStorage.setItem('mergeMaster2048', JSON.stringify(restoredData))
+        // Save the full preserved data back (in case any partial write corrupted it)
+        localStorage.setItem('mergeMaster2048', JSON.stringify(preservedData))
       }
     } catch {}
 

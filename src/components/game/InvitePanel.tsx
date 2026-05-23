@@ -99,7 +99,7 @@ export function InvitePanel({
   useEffect(() => {
     if (!playerId || !isOpen) return
     const unsub = onFriendRequestsUpdate(playerId, (reqs) => {
-      setFriendRequests(reqs as RequestWithId[])
+      setFriendRequests((Array.isArray(reqs) ? reqs : []) as RequestWithId[])
     })
     return () => unsub()
   }, [playerId, isOpen])
@@ -109,7 +109,9 @@ export function InvitePanel({
     if (!playerId || !isOpen) return
     const unsub = onFriendsUpdate(playerId, (friendsList) => {
       // Check online status for each friend (based on lastActive)
-      const enriched = friendsList.map(f => ({
+      // Null safety: Firebase callback might return null/undefined
+      const safeList = Array.isArray(friendsList) ? friendsList : []
+      const enriched = safeList.map(f => ({
         ...f,
         online: false, // Will be updated by individual lookups if needed
       }))

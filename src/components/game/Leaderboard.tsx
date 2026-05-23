@@ -559,13 +559,13 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
                         <span className="text-[9px] font-bold" style={{ color: '#E040FB' }}>Win Rate</span>
                       </div>
                       <span className="text-2xl font-extrabold" style={{ color: '#E040FB' }}>
-                        {selectedFirebasePlayer?.totalBattlesPlayed
-                          ? `${Math.round((selectedFirebasePlayer.totalBattlesWon / selectedFirebasePlayer.totalBattlesPlayed) * 100)}%`
+                        {selectedFirebasePlayer?.totalBattlesPlayed && selectedFirebasePlayer.totalBattlesPlayed > 0
+                          ? `${Math.round(((selectedFirebasePlayer.totalBattlesWon || 0) / selectedFirebasePlayer.totalBattlesPlayed) * 100)}%`
                           : '0%'}
                       </span>
-                      {selectedFirebasePlayer?.totalBattlesPlayed ? (
+                      {selectedFirebasePlayer?.totalBattlesPlayed && selectedFirebasePlayer.totalBattlesPlayed > 0 ? (
                         <p className="text-[7px] mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                          {selectedFirebasePlayer.totalBattlesWon}W / {selectedFirebasePlayer.totalBattlesPlayed - selectedFirebasePlayer.totalBattlesWon}L
+                          {selectedFirebasePlayer.totalBattlesWon || 0}W / {selectedFirebasePlayer.totalBattlesPlayed - (selectedFirebasePlayer.totalBattlesWon || 0)}L
                         </p>
                       ) : null}
                     </div>

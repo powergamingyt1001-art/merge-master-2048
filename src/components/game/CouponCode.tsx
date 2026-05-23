@@ -1644,22 +1644,23 @@ export function CouponCode({
   const mergedAllPurchases: PurchaseHistoryEntry[] = [
     // Firebase orders first (cross-device, real-time, source of truth)
     ...firebaseOrders.map(fo => {
-      const itemStr = fo.items.map(i => `${i.name} x${i.quantity}`).join(', ')
+      const safeItems = Array.isArray(fo.items) ? fo.items : []
+      const itemStr = safeItems.length > 0 ? safeItems.map(i => `${i.name || 'Item'} x${i.quantity || 1}`).join(', ') : (fo.playerName || 'Unknown Order')
       const isInrAbility = itemStr.includes('5x') || itemStr.includes('2.5x')
       return {
         id: `store_${fo.id}`,
-        date: fo.date,
+        date: fo.date || new Date().toISOString(),
         item: itemStr,
-        amount: `₹${fo.finalAmount}`,
+        amount: `₹${fo.finalAmount || fo.totalAmount || 0}`,
         status: (fo.status === 'pending' ? 'Pending' : fo.status === 'approved' ? 'Delivered' : 'Denied') as 'Pending' | 'Delivered' | 'Denied',
         type: (isInrAbility ? 'inr_ability' : 'coins') as 'coins' | 'ability' | 'inr_ability',
         transactionId: fo.transactionId,
         whatsappNumber: fo.whatsappNumber,
         buyerName: fo.name,
         screenshotDataUrl: fo.proofBase64,
-        coinAmount: isInrAbility ? undefined : fo.items.reduce((s, i) => s + i.quantity, 0),
+        coinAmount: isInrAbility ? undefined : safeItems.reduce((s, i) => s + (i.quantity || 0), 0),
         abilityType: isInrAbility ? (itemStr.includes('5x') ? '5x' : '2.5x') : undefined,
-        abilityCount: isInrAbility ? fo.items.reduce((s, i) => s + i.quantity, 0) : undefined,
+        abilityCount: isInrAbility ? safeItems.reduce((s, i) => s + (i.quantity || 0), 0) : undefined,
       }
     }),
     // Fallback: localStorage storeOrders that haven't synced to Firebase yet

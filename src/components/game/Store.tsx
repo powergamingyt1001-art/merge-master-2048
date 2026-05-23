@@ -1325,7 +1325,7 @@ function RoomTab({ onBuy, onCoinBuy, coins, onAddRoomCards, onAddNotification, o
           <button onClick={handleBuyRoomCardWithCoins} disabled={coins < 3000 || roomCardCoinPurchased}
             className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40"
             style={{ background: 'linear-gradient(135deg, #E040FB, #7C4DFF)', color: '#FFFFFF' }}>
-            {roomCardCoinPurchased ? 'SOLD OUT' : 'BUY 💰'}
+            {roomCardCoinPurchased ? 'SOLD OUT' : 'ADD 💰'}
           </button>
         </div>
       </div>
@@ -1733,9 +1733,11 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
               changed = true
               // Show notification for status changes
               if (fbOrder.status === 'approved') {
-                onAddNotification('Order Approved! ✅', `Your order "${fbOrder.items.map(i => i.name).join(', ')}" has been approved!`, 'reward', '📦')
+                const itemNames = Array.isArray(fbOrder.items) ? fbOrder.items.map(i => i.name).join(', ') : 'Your order'
+                onAddNotification('Order Approved! ✅', `Your order "${itemNames}" has been approved!`, 'reward', '📦')
               } else if (fbOrder.status === 'rejected') {
-                onAddNotification('Order Rejected ❌', `Your order "${fbOrder.items.map(i => i.name).join(', ')}" was rejected. Contact support.`, 'system', '⚠️')
+                const itemNames = Array.isArray(fbOrder.items) ? fbOrder.items.map(i => i.name).join(', ') : 'Your order'
+                onAddNotification('Order Rejected ❌', `Your order "${itemNames}" was rejected. Contact support.`, 'system', '⚠️')
               }
             }
           }

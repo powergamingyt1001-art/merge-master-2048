@@ -1229,7 +1229,14 @@ export function onOrdersUpdate(callback: (orders: FirebaseStoreOrder[]) => void)
       if (snapshot.exists()) {
         const orders: FirebaseStoreOrder[] = []
         snapshot.forEach((child) => {
-          orders.push({ id: child.key!, ...child.val() })
+          const raw = child.val()
+          // Ensure items array is always valid (prevent undefined.map crash)
+          const safeOrder = {
+            id: child.key!,
+            ...raw,
+            items: Array.isArray(raw?.items) ? raw.items : [],
+          }
+          orders.push(safeOrder as FirebaseStoreOrder)
         })
         callback(orders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)))
       } else {
@@ -1266,9 +1273,14 @@ export function onUserOrdersUpdate(playerId: string, callback: (orders: Firebase
       if (snapshot.exists()) {
         const orders: FirebaseStoreOrder[] = []
         snapshot.forEach((child) => {
-          const data = child.val()
-          if (data.playerId === playerId) {
-            orders.push({ id: child.key!, ...data })
+          const raw = child.val()
+          if (raw.playerId === playerId) {
+            const safeOrder = {
+              id: child.key!,
+              ...raw,
+              items: Array.isArray(raw?.items) ? raw.items : [],
+            }
+            orders.push(safeOrder as FirebaseStoreOrder)
           }
         })
         callback(orders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)))

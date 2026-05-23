@@ -313,7 +313,7 @@ export function PlayDashboard({
                   border: coins === 0 ? '1px solid rgba(246,94,59,0.35)' : '1px solid rgba(237,194,46,0.25)',
                   animation: coins === 0 ? 'pulse 2s cubic-bezier(0.4,0,0.6,1) infinite' : 'none',
                 }}
-                title={coins === 0 ? 'Buy coins!' : 'Open Store'}
+                title={coins === 0 ? 'Add coins!' : 'Open Store'}
               >
                 <Coins className="w-3 h-3" style={{ color: coins === 0 ? '#F65E3B' : '#EDC22E' }} />
                 <span className={`text-[10px] font-extrabold ${coins === 0 ? 'animate-pulse' : ''}`} style={{ color: coins === 0 ? '#F65E3B' : '#EDC22E' }}>
@@ -513,7 +513,7 @@ export function PlayDashboard({
               style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '1px solid rgba(237,194,46,0.2)' }}>
               <span className="text-base">🏪</span>
               <p className="text-[7px] font-bold" style={{ color: '#EDC22E' }}>Store</p>
-              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Buy</p>
+              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Add</p>
             </button>
           </div>
 
