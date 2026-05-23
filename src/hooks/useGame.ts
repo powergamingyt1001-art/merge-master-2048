@@ -240,11 +240,11 @@ function generatePlayerId(): string {
 }
 
 function generateUserCode(): string {
-  // Generate a random 6-8 digit numeric code
-  const length = 6 + Math.floor(Math.random() * 3) // 6, 7, or 8 digits
+  // Generate a random 4-character alphanumeric code like "rz5s", "k7m2"
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
   let code = ''
-  for (let i = 0; i < length; i++) {
-    code += Math.floor(Math.random() * 10).toString()
+  for (let i = 0; i < 4; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)]
   }
   return code
 }

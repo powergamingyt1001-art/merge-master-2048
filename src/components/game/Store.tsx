@@ -1015,41 +1015,78 @@ function UPIPaymentModal({
 
 // ─── Coins Tab ───────────────────────────────────────────────────────────────
 
-function CoinsTab({ onBuy }: { onBuy: (item: string, price: number, quantity: number) => void }) {
+function CoinsTab({ onAddToCart, cart, onUpdateCartQuantity }: {
+  onAddToCart: (item: AbilityItem) => void
+  cart: CartItem[]
+  onUpdateCartQuantity: (id: string, delta: number) => void
+}) {
   const effectivePacks = getEffectiveCoinPacks()
   return (
     <div className="grid grid-cols-2 gap-3">
-      {effectivePacks.map((pack, i) => (
-        <motion.div
-          key={pack.id}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: i * 0.06, duration: 0.3 }}
-          className="relative flex flex-col items-center justify-between p-4 pt-5 rounded-2xl"
-          style={{
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            boxShadow: pack.tag ? `0 0 20px ${pack.tag.color}15` : 'none',
-          }}
-        >
-          {pack.tag && <TagBadge label={pack.tag.label} color={pack.tag.color} />}
-          <div className="text-center mb-3">
-            <div className="text-2xl mb-1">💰</div>
-            <p className="text-sm font-extrabold" style={{ color: '#EDC22E' }}>
-              {formatNumber(pack.amount)}
-            </p>
-            <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Coins</p>
-          </div>
-          <div className="w-full">
-            <p className="text-center text-xs font-bold mb-2" style={{ color: 'rgba(255,255,255,0.7)' }}>
-              {formatNumber(pack.amount)} Coins = ₹{pack.price}
-            </p>
-            <BuyButton
-              onPress={() => onBuy(`${formatNumber(pack.amount)} Coins`, pack.price, pack.amount)}
-            />
-          </div>
-        </motion.div>
-      ))}
+      {effectivePacks.map((pack, i) => {
+        const cartItem = cart.find(c => c.id === pack.id)
+        const inCart = cartItem?.quantity || 0
+        return (
+          <motion.div
+            key={pack.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.06, duration: 0.3 }}
+            className="relative flex flex-col items-center justify-between p-4 pt-5 rounded-2xl"
+            style={{
+              background: inCart > 0 ? 'rgba(237,194,46,0.06)' : 'rgba(255,255,255,0.04)',
+              border: inCart > 0 ? '1px solid rgba(237,194,46,0.2)' : '1px solid rgba(255,255,255,0.08)',
+              boxShadow: pack.tag ? `0 0 20px ${pack.tag.color}15` : 'none',
+            }}
+          >
+            {pack.tag && <TagBadge label={pack.tag.label} color={pack.tag.color} />}
+            <div className="text-center mb-3">
+              <div className="text-2xl mb-1">💰</div>
+              <p className="text-sm font-extrabold" style={{ color: '#EDC22E' }}>
+                {formatNumber(pack.amount)}
+              </p>
+              <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Coins</p>
+            </div>
+            <div className="w-full">
+              <p className="text-center text-xs font-bold mb-2" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                {formatNumber(pack.amount)} Coins = ₹{pack.price}
+              </p>
+              {inCart > 0 ? (
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => onUpdateCartQuantity(pack.id, -1)}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center transition-transform active:scale-90"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}
+                  >
+                    <Minus className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                  </button>
+                  <span className="text-xs font-bold" style={{ color: '#EDC22E' }}>{inCart}</span>
+                  <button
+                    onClick={() => onUpdateCartQuantity(pack.id, 1)}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center transition-transform active:scale-90"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}
+                  >
+                    <Plus className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                  </button>
+                </div>
+              ) : (
+                <BuyButton
+                  label="Add"
+                  onPress={() => onAddToCart({
+                    id: pack.id,
+                    emoji: '💰',
+                    name: `${formatNumber(pack.amount)} Coins`,
+                    quantity: pack.amount,
+                    price: pack.price,
+                    section: 'regular',
+                    currency: 'inr',
+                  })}
+                />
+              )}
+            </div>
+          </motion.div>
+        )
+      })}
     </div>
   )
 }
@@ -2601,7 +2638,7 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <CoinsTab onBuy={handleBuy} />
+                    <CoinsTab onAddToCart={addToCart} cart={cart} onUpdateCartQuantity={updateCartQuantity} />
                   </motion.div>
                 )}
                 {activeTab === 'ability' && (

@@ -560,7 +560,7 @@ export function SpinWheel({
   const [couponCode, setCouponCode] = useState('')
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null)
   const [couponError, setCouponError] = useState('')
-  const [paymentModal, setPaymentModal] = useState<{ open: boolean; itemName: string; itemPrice: number; itemQuantity: number }>({
+  const [paymentModal, setPaymentModal] = useState<{ open: boolean; itemName: string; itemPrice: number; itemQuantity: number; discountCouponCode?: string; discountAmount?: number }>({
     open: false, itemName: '', itemPrice: 0, itemQuantity: 0,
   })
 
@@ -672,14 +672,21 @@ export function SpinWheel({
     if (inrItems.length > 0) {
       const total = finalTotal
       const itemNames = inrItems.map(i => `${i.emoji} ${i.name} x${i.quantity}`).join(', ')
-      setPaymentModal({ open: true, itemName: itemNames, itemPrice: total, itemQuantity: 1 })
+      setPaymentModal({
+        open: true,
+        itemName: itemNames,
+        itemPrice: total,
+        itemQuantity: 1,
+        discountCouponCode: appliedCoupon?.code,
+        discountAmount: discountAmount > 0 ? discountAmount : undefined,
+      })
     }
 
     setCart([])
     clearSharedCart()
     setCouponCode('')
     setShowCart(false)
-  }, [cart, appliedCoupon, finalTotal])
+  }, [cart, appliedCoupon, finalTotal, discountAmount])
 
   // ─── Existing Spin Functionality ──────────────────────────────────────────
 
@@ -949,7 +956,18 @@ export function SpinWheel({
                               </button>
                             </div>
                             {couponError && <p className="text-[7px]" style={{ color: '#F65E3B' }}>{couponError}</p>}
-                            {appliedCoupon && <p className="text-[7px]" style={{ color: '#00E676' }}>✅ {appliedCoupon.discountPercent}% off applied!</p>}
+                            {appliedCoupon && (
+                              <div className="flex items-center justify-between">
+                                <p className="text-[7px]" style={{ color: '#00E676' }}>✅ {appliedCoupon.discountPercent}% off applied!</p>
+                                <button
+                                  onClick={() => { setAppliedCoupon(null); setCouponCode('') }}
+                                  className="text-[7px] font-bold px-1 py-0.5 rounded"
+                                  style={{ backgroundColor: 'rgba(246,94,59,0.15)', color: '#F65E3B', border: '1px solid rgba(246,94,59,0.2)' }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            )}
 
                             {/* Totals */}
                             <div className="space-y-0.5">
@@ -1357,8 +1375,8 @@ export function SpinWheel({
           itemQuantity={paymentModal.itemQuantity}
           playerId={playerId}
           onOrderPlaced={handleOrderPlaced}
-          discountCouponCode={appliedCoupon?.code}
-          discountAmount={discountAmount > 0 ? discountAmount : undefined}
+          discountCouponCode={paymentModal.discountCouponCode}
+          discountAmount={paymentModal.discountAmount}
         />
       )}
     </>
