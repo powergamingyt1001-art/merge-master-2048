@@ -2471,15 +2471,23 @@ export function useGame() {
     setState(prev => {
       if (prev.welcomeClaimed) return prev
 
-      // Generate WELCOME60 discount coupon in admin coupons system
+      // Read admin welcome bonus config
+      let bonus = { hammers: 5, spins: 5, roomCards: 2, bombs: 5, magnets: 5, timers: 5, multiplier5x: 5, multiplier2_5x: 5, undos: 5, discountPercent: 60 }
+      try {
+        const saved = localStorage.getItem('adminWelcomeBonus')
+        if (saved) bonus = JSON.parse(saved)
+      } catch { /* use defaults */ }
+
+      // Generate WELCOME discount coupon in admin coupons system
       try {
         const existingCoupons = JSON.parse(localStorage.getItem('adminDiscountCoupons') || '[]')
         const userCode = prev.userCode || ''
-        const welcomeCouponExists = existingCoupons.some((c: { code: string }) => c.code === 'WELCOME60' && c.targetUserIds?.includes(userCode))
+        const couponCode = `WELCOME${bonus.discountPercent}`
+        const welcomeCouponExists = existingCoupons.some((c: { code: string }) => c.code === couponCode && c.targetUserIds?.includes(userCode))
         if (!welcomeCouponExists) {
           existingCoupons.push({
-            code: 'WELCOME60',
-            discountPercent: 60,
+            code: couponCode,
+            discountPercent: bonus.discountPercent,
             minPurchase: 29,
             maxUses: 1,
             currentUses: 0,
@@ -2487,7 +2495,7 @@ export function useGame() {
             targetUserIds: [userCode],
             createdAt: Date.now(),
             createdBy: 'system',
-            description: 'Welcome bonus: 60% off on ₹29+ purchases!',
+            description: `Welcome bonus: ${bonus.discountPercent}% off on ₹29+ purchases!`,
           })
           localStorage.setItem('adminDiscountCoupons', JSON.stringify(existingCoupons))
         }
@@ -2496,16 +2504,15 @@ export function useGame() {
       return {
         ...prev,
         welcomeClaimed: true,
-        hammerCount: prev.hammerCount + 5,
-        magnetCount: prev.magnetCount + 5,
-        blastCount: prev.blastCount + 5,
-        undoTotal: prev.undoTotal + 5,
-        spinTickets: prev.spinTickets + 10, // 10 Spin Tickets (up from 5)
-        coins: prev.coins + 500, // Welcome bonus coins for new users
-        multiplier5xCount: prev.multiplier5xCount + 5, // 5x Ability × 5
-        multiplier2_5xCount: prev.multiplier2_5xCount + 5, // 2.5x Ability × 5
-        extraTimeCount: prev.extraTimeCount + 5, // Timer Ability × 5
-        roomCardCount: prev.roomCardCount + 2, // 2 FREE Room Cards
+        hammerCount: prev.hammerCount + bonus.hammers,
+        magnetCount: prev.magnetCount + bonus.magnets,
+        blastCount: prev.blastCount + bonus.bombs,
+        undoTotal: prev.undoTotal + bonus.undos,
+        spinTickets: prev.spinTickets + bonus.spins,
+        multiplier5xCount: prev.multiplier5xCount + bonus.multiplier5x,
+        multiplier2_5xCount: prev.multiplier2_5xCount + bonus.multiplier2_5x,
+        extraTimeCount: prev.extraTimeCount + bonus.timers,
+        roomCardCount: prev.roomCardCount + bonus.roomCards,
       }
     })
   }, [])

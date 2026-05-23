@@ -413,3 +413,79 @@ Stage Summary:
 - All .map() calls on Firebase data now have null safety checks
 - Store buttons changed from "Buy" to "Add" as requested
 - Git pushed to origin/main, Vercel will auto-deploy
+
+---
+Task ID: 2
+Agent: Store Cart & Coupon System Agent
+Task: Store Component - Cart System, Coin Buy, Coupons, Scratch Card, Admin History
+
+Work Log:
+
+## Changes Made:
+
+### 1. Store.tsx - Coin Items "Buy" Button (Auto-Approve)
+- Changed AbilityCard button text: coin items show "Buy", INR items show "Add"
+- Updated BuyButton component to accept a `label` prop ('Add' | 'Buy') with different styling
+- Coin purchases are auto-approved: no admin approval needed
+- Coins are deducted instantly and items delivered immediately
+
+### 2. Store.tsx - Firebase Coin Purchase Recording
+- Added `CoinPurchaseRecord` interface and `recordCoinPurchaseToFirebase` function
+- All coin purchases (abilities, spins, room cards) are recorded to Firebase `coinPurchases` path
+- Records include: id, date, playerId, playerName, userCode, item, coinPrice, quantity, abilityType, status='auto_approved', createdAt
+- Applied in: `handleCoinBuy`, `SpinsTab.handleCoinBuy`, `RoomTab.handleBuyRoomCardWithCoins`, and cart checkout for coin items
+
+### 3. Store.tsx - Cart Coupon System
+- Updated `applyCoupon` to use `validateDiscountCoupon` from CouponCode.tsx instead of manual localStorage parsing
+- Validates against user's userCode and cart total
+- Added "Cancel" button next to applied coupon to remove it
+- Coupon consumption via `consumeDiscountCoupon` when order is placed
+
+### 4. Store.tsx - Purchase Threshold Coupons
+- **₹29+ purchase**: Auto 60% discount on current order. When INR subtotal ≥ ₹29 and < ₹200, automatically applies 60% off and adjusts payment modal price
+- **₹200+ purchase**: 70% off coupon for NEXT purchase. Generates unique coupon code `NEXT70{userCode}{timestamp}`, stores it in `adminDiscountCoupons` targeting user's userCode, shows ScratchCardPopup after 1.5s delay
+
+### 5. Store.tsx - ScratchCardPopup Component
+- Full scratch card popup with grey canvas overlay
+- User can click/drag to scratch or just click to reveal
+- Hidden content: 70% OFF coupon code
+- 🤑 emoji rain falling from top for 3 seconds (30 animated emojis)
+- ✨ sparkle effects around the card after reveal
+- "Claim" button stores coupon and closes popup
+- Custom CSS animation for sparkle-fade effect
+
+### 6. CouponCode.tsx - Admin Panel History Toggle
+- Added `historyFilter` state: 'all' | 'inr' | 'coins'
+- Added toggle buttons (All / ₹ INR / 💰 Coins) in History tab header
+- When "Coins" is selected, shows Firebase coin purchases from `coinPurchases` path
+- Real-time Firebase listener for coin purchases via `onValue(ref(db, 'coinPurchases'))`
+- Coin purchase entries show: item, playerName, userCode, date, coinPrice, "Auto-Approved" badge
+- INR/All filter shows existing payment history with lock duration settings
+
+### 7. Firebase Integration
+- Added imports: `db` from `@/lib/firebase`, `ref` and `set` from `firebase/database` (Store.tsx)
+- Added imports: `db` from `@/lib/firebase`, `ref` and `onValue` from `firebase/database` (CouponCode.tsx)
+- Coin purchase data stored at `coinPurchases/{purchaseId}` in Firebase Realtime Database
+
+### Technical changes:
+- `Store.tsx`: Added `validateDiscountCoupon`, `consumeDiscountCoupon`, `DiscountCoupon` imports from CouponCode.tsx
+- `Store.tsx`: Added `db`, `ref`, `set` imports from firebase
+- `Store.tsx`: Updated `BuyButton` to accept `label` prop
+- `Store.tsx`: Changed AbilityCard button text for coin items to "Buy"
+- `Store.tsx`: Added `ScratchCardPopup` component (~200 lines)
+- `Store.tsx`: Added `CoinPurchaseRecord` interface and `recordCoinPurchaseToFirebase` async function
+- `Store.tsx`: Updated `handleCoinBuy` to record to Firebase
+- `Store.tsx`: Updated `SpinsTab` signature to include `playerId`, `playerName`, `userCode` props
+- `Store.tsx`: Updated `RoomTab` signature to include `playerId`, `playerName`, `userCode` props
+- `Store.tsx`: Updated `applyCoupon` to use `validateDiscountCoupon`
+- `Store.tsx`: Added cancel coupon button in cart
+- `Store.tsx`: Updated `handlePlaceOrder` to async with 60%/70% threshold logic
+- `Store.tsx`: Added `scratchCard` state and ScratchCardPopup rendering
+- `CouponCode.tsx`: Added `Filter` icon import
+- `CouponCode.tsx`: Added `db`, `ref`, `onValue` imports from firebase
+- `CouponCode.tsx`: Added `historyFilter` and `firebaseCoinPurchases` state
+- `CouponCode.tsx`: Added Firebase coin purchases listener in admin panel useEffect
+- `CouponCode.tsx`: Added history filter toggle UI and coin purchases display section
+
+### Lint Results
+- 0 errors, 0 warnings

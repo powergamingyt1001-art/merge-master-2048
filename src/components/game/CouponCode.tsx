@@ -2,8 +2,10 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon, Copy, Percent, Package, TrendingUp, DollarSign, Send, Lock, UserCheck } from 'lucide-react'
+import { X, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon, Copy, Percent, Package, TrendingUp, DollarSign, Send, Lock, UserCheck, Filter } from 'lucide-react'
 import { getTotalUserCount, getOnlineUserCount, getTotalReferralsCount, checkAdminPassword, setAdminPassword as firebaseSetAdminPassword, authenticatePartner, getPartners as firebaseGetPartners, savePartner as firebaseSavePartner, deletePartner as firebaseDeletePartner, onOrdersUpdate, updateOrderStatus as firebaseUpdateOrderStatus, deliverOrderItems, broadcastCoupon as firebaseBroadcastCoupon, broadcastDailyTask as firebaseBroadcastDailyTask, onCouponBroadcast, type FirebaseStoreOrder, type PartnerData } from '@/lib/firebase-service'
+import { db } from '@/lib/firebase'
+import { ref, onValue } from 'firebase/database'
 
 interface CouponCodeProps {
   isOpen: boolean
@@ -723,6 +725,10 @@ export function CouponCode({
   const [nightCodeCustom, setNightCodeCustom] = useState('')
   const [viewingScreenshot, setViewingScreenshot] = useState<string | null>(null)
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
+  // History tab toggle between INR and Coins
+  const [historyFilter, setHistoryFilter] = useState<'inr' | 'coins' | 'all'>('all')
+  // Firebase coin purchases state
+  const [firebaseCoinPurchases, setFirebaseCoinPurchases] = useState<any[]>([])
   // Timer for day/night countdown
   const [now, setNow] = useState(new Date())
   useEffect(() => {
@@ -765,6 +771,31 @@ export function CouponCode({
   // Total revenue tracker
   const [totalRevenue, setTotalRevenue] = useState<number>(0)
   const [pendingOrderCount, setPendingOrderCount] = useState<number>(0)
+
+  // Save All state
+  const [saveAllMsg, setSaveAllMsg] = useState<string>('')
+
+  // Coupon sub-tab state (Day/Night, Create, Discount)
+  const [couponSubTab, setCouponSubTab] = useState<'daynight' | 'create' | 'discount'>('daynight')
+
+  // Welcome bonus config
+  interface WelcomeBonusConfig {
+    hammers: number; spins: number; roomCards: number; bombs: number; magnets: number; timers: number;
+    multiplier5x: number; multiplier2_5x: number; undos: number; discountPercent: number;
+  }
+  const DEFAULT_WELCOME_BONUS: WelcomeBonusConfig = { hammers: 5, spins: 5, roomCards: 2, bombs: 5, magnets: 5, timers: 5, multiplier5x: 5, multiplier2_5x: 5, undos: 5, discountPercent: 60 }
+  const WELCOME_BONUS_KEY = 'adminWelcomeBonus'
+  function loadWelcomeBonus(): WelcomeBonusConfig {
+    if (typeof window === 'undefined') return DEFAULT_WELCOME_BONUS
+    try { const d = localStorage.getItem(WELCOME_BONUS_KEY); return d ? JSON.parse(d) : DEFAULT_WELCOME_BONUS } catch { return DEFAULT_WELCOME_BONUS }
+  }
+  const [welcomeBonus, setWelcomeBonus] = useState<WelcomeBonusConfig>(() => loadWelcomeBonus())
+
+  // Price sub-tab state
+  const [priceSubTab, setPriceSubTab] = useState<'coins' | 'abilities' | 'coinPackage'>('coins')
+
+  // Partner sub-tab state
+  const [partnerSubTab, setPartnerSubTab] = useState<'partners' | 'security'>('partners')
 
   // Check for partner access from URL
   useEffect(() => {
@@ -909,7 +940,24 @@ export function CouponCode({
       setTotalRevenue(approvedRevenue)
       setPendingOrderCount(orders.filter(o => o.status === 'pending').length)
     })
-    return unsubscribe
+    // Also listen for coin purchases from Firebase
+    let coinUnsubscribe: (() => void) | null = null
+    try {
+      const coinPurchasesRef = ref(db, 'coinPurchases')
+      coinUnsubscribe = onValue(coinPurchasesRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.val()
+          const purchases = Object.values(data) as any[]
+          setFirebaseCoinPurchases(purchases)
+        } else {
+          setFirebaseCoinPurchases([])
+        }
+      })
+    } catch { /* ignore */ }
+    return () => {
+      unsubscribe()
+      coinUnsubscribe?.()
+    }
   }, [showAdminPanel, ordersRefreshKey])
 
   // Pick a random reward based on weights
@@ -1303,6 +1351,59 @@ export function CouponCode({
   }, [codeInput, claimHistory, customCodes, firebaseCoupons, pickRandomReward, applyReward, applyAdminReward, applyCustomReward, dayCodeSettings, nightCodeSettings, onAddCoins, onAddPowerUp, onAddSpinTickets, onAddNotification])
 
   // ===== ADMIN PANEL HANDLERS =====
+
+  // Save All Admin Configuration
+  const handleSaveAllAdmin = useCallback(() => {
+    try {
+      // Save all admin config to localStorage
+      if (customPrices) saveCustomPrices(customPrices)
+      saveCustomCouponCodes(customCodes)
+      saveNightCodeSettings(nightCodeSettings)
+      saveCoinAbilityPrices(coinAbilityPrices)
+      saveLockDuration(lockDuration)
+      saveDiscountCoupons(discountCoupons)
+      saveAdminDailyTasks(adminDailyTasks)
+      saveTournamentPrizes(tournamentPrizes)
+      saveBannedUsers(bannedUsers)
+      localStorage.setItem(WELCOME_BONUS_KEY, JSON.stringify(welcomeBonus))
+      // Save day code settings
+      localStorage.setItem('adminDayCodeSettings', JSON.stringify(dayCodeSettings))
+
+      // Broadcast key config to Firebase for real-time sync
+      try {
+        if (customPrices) {
+          firebaseBroadcastCoupon({ code: '__CONFIG_SYNC__', reward: 'prices_update', rewardType: 'coins', rewardAmount: 0, emoji: '⚙️', maxUses: 999 }).catch(() => {})
+        }
+      } catch { /* silent */ }
+
+      setSaveAllMsg('✓ Saved!')
+      setTimeout(() => setSaveAllMsg(''), 2000)
+    } catch {
+      setSaveAllMsg('Error!')
+      setTimeout(() => setSaveAllMsg(''), 2000)
+    }
+  }, [customPrices, customCodes, nightCodeSettings, coinAbilityPrices, lockDuration, discountCoupons, adminDailyTasks, tournamentPrizes, bannedUsers, welcomeBonus, dayCodeSettings])
+
+  // Listen for Firebase coin purchases when admin panel is open
+  useEffect(() => {
+    if (!showAdminPanel) return
+    let unsub: (() => void) | null = null
+    import('@/lib/firebase').then(({ db }) => {
+      import('firebase/database').then(({ ref, onValue }) => {
+        const coinRef = ref(db, 'coinPurchases')
+        unsub = onValue(coinRef, (snap) => {
+          const data = snap.val()
+          if (data) {
+            const arr = Object.values(data).sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0))
+            setFirebaseCoinPurchases(arr as any[])
+          } else {
+            setFirebaseCoinPurchases([])
+          }
+        })
+      })
+    }).catch(() => {})
+    return () => { if (unsub) unsub() }
+  }, [showAdminPanel])
 
   // Approve a purchase (works with both purchaseHistory and storeOrders)
   const handleApprovePurchase = useCallback((entry: PurchaseHistoryEntry) => {
@@ -2019,10 +2120,17 @@ export function CouponCode({
                 <Shield className="w-4 h-4" style={{ color: '#FF7A00' }} />
                 <h3 className="text-sm font-bold" style={{ color: '#FF7A00' }}>Admin Panel</h3>
               </div>
-              <button onClick={() => setShowAdminPanel(false)} className="w-7 h-7 rounded-full flex items-center justify-center"
-                style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
-                <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={handleSaveAllAdmin} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                  style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF', boxShadow: '0 2px 8px rgba(0,230,118,0.3)' }}>
+                  <RefreshCw className="w-3 h-3" />
+                  {saveAllMsg || 'Save All'}
+                </button>
+                <button onClick={() => setShowAdminPanel(false)} className="w-7 h-7 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                  <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                </button>
+              </div>
             </div>
 
             {/* Admin Tabs - Hidden on mobile, replaced by footer nav */}
@@ -2033,7 +2141,6 @@ export function CouponCode({
                 { key: 'coupons' as AdminTab, label: 'Coupons', icon: <Ticket className="w-3 h-3" /> },
                 { key: 'prices' as AdminTab, label: 'Prices', icon: <Coins className="w-3 h-3" /> },
                 { key: 'history' as AdminTab, label: 'History', icon: <ChevronRight className="w-3 h-3" /> },
-                { key: 'users' as AdminTab, label: 'Users', icon: <Ban className="w-3 h-3" /> },
                 { key: 'partner' as AdminTab, label: 'Partner', icon: <UsersIcon className="w-3 h-3" /> },
                 { key: 'tasks' as AdminTab, label: 'Tasks', icon: <Sparkles className="w-3 h-3" /> },
               ].filter(t => {
@@ -2112,40 +2219,31 @@ export function CouponCode({
                           </div>
                         </div>
 
-                        {/* Quick Actions */}
-                        <div className="p-2.5 rounded-lg"
-                          style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                          <p className="text-[9px] font-bold mb-2" style={{ color: 'rgba(255,255,255,0.5)' }}>Quick Actions</p>
-                          <div className="grid grid-cols-4 gap-2">
-                            <button onClick={() => setAdminTab('payments')}
-                              className="p-2 rounded-lg text-center transition-transform active:scale-95"
-                              style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)' }}>
-                              <span className="text-lg block">💳</span>
-                              <p className="text-[7px] font-bold mt-1" style={{ color: '#F65E3B' }}>Payments</p>
-                              {pendingOrderCount > 0 && (
-                                <span className="text-[6px] px-1.5 py-0.5 rounded-full mt-0.5 inline-block" style={{ backgroundColor: '#F65E3B', color: '#FFFFFF' }}>
-                                  {pendingOrderCount}
-                                </span>
-                              )}
-                            </button>
-                            <button onClick={() => setAdminTab('coupons')}
-                              className="p-2 rounded-lg text-center transition-transform active:scale-95"
-                              style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
-                              <span className="text-lg block">🎟️</span>
-                              <p className="text-[7px] font-bold mt-1" style={{ color: '#EDC22E' }}>Coupons</p>
-                            </button>
-                            <button onClick={() => setAdminTab('users')}
-                              className="p-2 rounded-lg text-center transition-transform active:scale-95"
-                              style={{ backgroundColor: 'rgba(124,77,255,0.08)', border: '1px solid rgba(124,77,255,0.15)' }}>
-                              <span className="text-lg block">👥</span>
-                              <p className="text-[7px] font-bold mt-1" style={{ color: '#7C4DFF' }}>Users</p>
-                            </button>
-                            <button onClick={() => setAdminTab('security')}
-                              className="p-2 rounded-lg text-center transition-transform active:scale-95"
-                              style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
-                              <span className="text-lg block">🔐</span>
-                              <p className="text-[7px] font-bold mt-1" style={{ color: '#00E676' }}>Security</p>
-                            </button>
+                        {/* Discount Stats - Separate Boxes */}
+                        <div className="grid grid-cols-2 gap-2">
+                          {/* Discount Users Today */}
+                          <div className="p-3 rounded-xl"
+                            style={{ backgroundColor: 'rgba(124,77,255,0.08)', border: '1px solid rgba(124,77,255,0.2)' }}>
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Ticket className="w-3.5 h-3.5" style={{ color: '#7C4DFF' }} />
+                              <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Coupon Users Today</p>
+                            </div>
+                            <p className="text-xl font-bold" style={{ color: '#7C4DFF' }}>
+                              {firebaseOrders.filter(o => o.discountCoupon && o.status === 'approved' && new Date(o.date || o.createdAt).toISOString().split('T')[0] === getTodayStr()).length}
+                            </p>
+                            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Used discount coupons today</p>
+                          </div>
+                          {/* Discount Revenue */}
+                          <div className="p-3 rounded-xl"
+                            style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.2)' }}>
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Percent className="w-3.5 h-3.5" style={{ color: '#00E676' }} />
+                              <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Discount Revenue</p>
+                            </div>
+                            <p className="text-xl font-bold" style={{ color: '#00E676' }}>
+                              ₹{(() => { const r = firebaseOrders.filter(o => o.discountCoupon && o.status === 'approved').reduce((s, o) => s + o.finalAmount, 0); return r >= 1000 ? `${(r/1000).toFixed(1).replace(/\.0$/, '')}K` : r })()}
+                            </p>
+                            <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Revenue after discount</p>
                           </div>
                         </div>
 
@@ -2422,7 +2520,24 @@ export function CouponCode({
                     {/* ====== COUPONS TAB ====== */}
                     {adminTab === 'coupons' && (
                       <div className="space-y-3">
-                        {/* Day/Night Code Management Section */}
+                        {/* Coupon Sub-Tab Switcher */}
+                        <div className="flex rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                          {[
+                            { key: 'daynight' as const, label: '☀️ Day/Night', color: '#EDC22E' },
+                            { key: 'create' as const, label: '✨ Create Code', color: '#00E676' },
+                            { key: 'discount' as const, label: '💸 Discount', color: '#F65E3B' },
+                          ].map(tab => (
+                            <button key={tab.key} onClick={() => setCouponSubTab(tab.key)}
+                              className="flex-1 py-2 text-[9px] font-bold transition-all"
+                              style={{ backgroundColor: couponSubTab === tab.key ? `${tab.color}20` : 'rgba(255,255,255,0.03)', color: couponSubTab === tab.key ? tab.color : 'rgba(255,255,255,0.4)', borderBottom: couponSubTab === tab.key ? `2px solid ${tab.color}` : '2px solid transparent' }}>
+                              {tab.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Day/Night Code Tab */}
+                        {couponSubTab === 'daynight' && (
+                        <>
                         <div className="p-2.5 rounded-lg"
                           style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.15)' }}>
                           <div className="flex items-center justify-between mb-2">
@@ -2770,20 +2885,118 @@ export function CouponCode({
                             </div>
                           </div>
                         )}
-                      </div>
-                    )}
+                        </>
+                        )} {/* end daynight sub-tab */}
 
-                    {/* ====== DISCOUNT COUPONS SECTION (in Coupons tab) ====== */}
-                    {adminTab === 'coupons' && (
-                      <div className="space-y-3 mt-3">
-                        <div className="p-2.5 rounded-lg"
-                          style={{ backgroundColor: 'rgba(255,109,0,0.06)', border: '1px solid rgba(255,109,0,0.15)' }}>
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <Percent className="w-3 h-3" style={{ color: '#FF6D00' }} />
-                            <p className="text-[9px] font-bold" style={{ color: '#FF6D00' }}>Discount Coupons</p>
-                            <span className="text-[7px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,109,0,0.12)', color: '#FF6D00' }}>
-                              {discountCoupons.length} total
-                            </span>
+                        {/* Create New Code Sub-Tab */}
+                        {couponSubTab === 'create' && (
+                          <div className="space-y-3">
+                            {/* Create New Coupon Form */}
+                            <div className="p-2.5 rounded-lg"
+                              style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.15)' }}>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <Plus className="w-3 h-3" style={{ color: '#00E676' }} />
+                                <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>Create New Coupon Code</p>
+                              </div>
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Code:</p>
+                                  <input type="text" value={newCodeInput} onChange={(e) => setNewCodeInput(e.target.value.toUpperCase())} placeholder="e.g. BONUS100"
+                                    className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                    style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }} />
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Reward:</p>
+                                  <select value={newCodeRewardType} onChange={(e) => setNewCodeRewardType(e.target.value as RewardType)}
+                                    className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                    style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}>
+                                    <option value="coins">💰 Coins</option>
+                                    <option value="spins">🎫 Spin Tickets</option>
+                                    <option value="magnets">🧲 Magnets</option>
+                                    <option value="bombs">💣 Bombs</option>
+                                    <option value="hammers">🔨 Hammers</option>
+                                    <option value="5x">✨ 5x Multiplier</option>
+                                    <option value="2.5x">🌟 2.5x Multiplier</option>
+                                  </select>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Amount:</p>
+                                  <input type="number" value={newCodeRewardAmount} onChange={(e) => setNewCodeRewardAmount(Number(e.target.value))} min={1}
+                                    className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                    style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }} />
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Max Uses:</p>
+                                  <input type="number" value={newCodeMaxUses} onChange={(e) => setNewCodeMaxUses(Number(e.target.value))} min={1}
+                                    className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                    style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }} />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <label className="flex items-center gap-1 cursor-pointer">
+                                    <input type="checkbox" checked={newCodeIsDay} onChange={(e) => setNewCodeIsDay(e.target.checked)} className="w-3 h-3 accent-amber-500" />
+                                    <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.5)' }}>☀️ Day</span>
+                                  </label>
+                                  <label className="flex items-center gap-1 cursor-pointer">
+                                    <input type="checkbox" checked={newCodeIsNight} onChange={(e) => setNewCodeIsNight(e.target.checked)} className="w-3 h-3 accent-purple-500" />
+                                    <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.5)' }}>🌙 Night</span>
+                                  </label>
+                                </div>
+                                <button onClick={handleCreateCoupon} disabled={!newCodeInput.trim()}
+                                  className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95 disabled:opacity-40"
+                                  style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF' }}>
+                                  CREATE CODE
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Active Custom Codes List */}
+                            {customCodes.length > 0 && (
+                              <div>
+                                <p className="text-[9px] font-bold mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                                  📋 Active Custom Codes ({customCodes.length})
+                                </p>
+                                <div className="space-y-1 max-h-48 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                                  {customCodes.map(code => (
+                                    <div key={code.code} className="flex items-center justify-between px-2 py-1.5 rounded-lg"
+                                      style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                      <div>
+                                        <div className="flex items-center gap-1">
+                                          <p className="text-[9px] font-bold font-mono" style={{ color: '#EDC22E' }}>{code.code}</p>
+                                          {code.isDayCode && (
+                                            <span className="text-[6px] px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(255,215,0,0.1)', color: '#FFD700' }}>DAY</span>
+                                          )}
+                                          {code.isNightCode && (
+                                            <span className="text-[6px] px-1 py-0.5 rounded" style={{ backgroundColor: 'rgba(0,230,118,0.1)', color: '#00E676' }}>NIGHT</span>
+                                          )}
+                                        </div>
+                                        <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                          {code.emoji} {code.label} • Uses: {code.currentUses}/{code.maxUses}
+                                        </p>
+                                      </div>
+                                      <button onClick={() => handleDeleteCoupon(code.code)}
+                                        className="w-6 h-6 rounded-lg flex items-center justify-center transition-transform active:scale-95"
+                                        style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)' }}>
+                                        <Trash2 className="w-3 h-3" style={{ color: '#F65E3B' }} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )} {/* end create sub-tab */}
+
+                        {/* Discount Code Sub-Tab */}
+                        {couponSubTab === 'discount' && (
+                          <div className="space-y-3">
+                            <div className="p-2.5 rounded-lg"
+                              style={{ backgroundColor: 'rgba(255,109,0,0.06)', border: '1px solid rgba(255,109,0,0.15)' }}>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <Percent className="w-3 h-3" style={{ color: '#FF6D00' }} />
+                                <p className="text-[9px] font-bold" style={{ color: '#FF6D00' }}>Discount Coupons</p>
+                                <span className="text-[7px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,109,0,0.12)', color: '#FF6D00' }}>
+                                  {discountCoupons.length} total
+                                </span>
                           </div>
 
                           {/* Create new discount coupon */}
@@ -2963,18 +3176,138 @@ export function CouponCode({
                             </div>
                           )}
                         </div>
+                          </div>
+                        )} {/* end discount sub-tab */}
+
+                        {/* Welcome Bonus Section (below all coupon tabs) */}
+                        <div className="p-3 rounded-xl mt-3"
+                          style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '2px solid rgba(237,194,46,0.25)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <span className="text-base">🎁</span>
+                            <p className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>Welcome Bonus (New Users)</p>
+                          </div>
+                          <p className="text-[8px] mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>New ID बनाने पर ये सब मिलेगा:</p>
+                          <div className="grid grid-cols-2 gap-1.5 mb-3">
+                            {[
+                              { emoji: '🔨', label: 'Hammers', key: 'hammers' as const },
+                              { emoji: '🎫', label: 'Spin Tickets', key: 'spins' as const },
+                              { emoji: '🃏', label: 'Room Cards', key: 'roomCards' as const },
+                              { emoji: '💣', label: 'Bombs', key: 'bombs' as const },
+                              { emoji: '🧲', label: 'Magnets', key: 'magnets' as const },
+                              { emoji: '⏱️', label: 'Timers', key: 'timers' as const },
+                              { emoji: '⚡', label: '5x Multi', key: 'multiplier5x' as const },
+                              { emoji: '🔥', label: '2.5x Multi', key: 'multiplier2_5x' as const },
+                              { emoji: '↩️', label: 'Undos', key: 'undos' as const },
+                              { emoji: '🎟️', label: 'Discount %', key: 'discountPercent' as const },
+                            ].map(item => (
+                              <div key={item.key} className="flex items-center justify-between px-2 py-1.5 rounded-lg"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px]">{item.emoji}</span>
+                                  <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.6)' }}>{item.label}</span>
+                                </div>
+                                <input type="number" value={welcomeBonus[item.key]} min={0}
+                                  onChange={(e) => {
+                                    const val = Number(e.target.value)
+                                    setWelcomeBonus(prev => ({ ...prev, [item.key]: val }))
+                                  }}
+                                  className="w-10 px-1 py-0.5 rounded text-[8px] font-bold text-center outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', color: '#EDC22E' }} />
+                              </div>
+                            ))}
+                          </div>
+                          <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(237,194,46,0.2)' }}>
+                            <p className="text-[8px] font-bold text-center" style={{ color: '#EDC22E' }}>
+                              Preview: New users get {welcomeBonus.hammers}🔨 {welcomeBonus.spins}🎫 {welcomeBonus.roomCards}🃏 {welcomeBonus.bombs}💣 {welcomeBonus.magnets}🧲 {welcomeBonus.timers}⏱️ {welcomeBonus.multiplier5x}⚡ {welcomeBonus.multiplier2_5x}🔥 {welcomeBonus.undos}↩️ + {welcomeBonus.discountPercent}% OFF coupon 🎟️
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     )}
 
                     {/* ====== PRICES TAB ====== */}
                     {adminTab === 'prices' && (
                       <div className="space-y-3">
-                        {/* Coin Package Prices */}
+                        {/* Price Sub-Tab Switcher */}
+                        <div className="flex rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                          {[
+                            { key: 'coins' as const, label: '💰 Coins', color: '#EDC22E' },
+                            { key: 'abilities' as const, label: '⚡ Abilities', color: '#F65E3B' },
+                            { key: 'coinPackage' as const, label: '📦 INR Pack', color: '#00E676' },
+                          ].map(tab => (
+                            <button key={tab.key} onClick={() => setPriceSubTab(tab.key)}
+                              className="flex-1 py-2 text-[9px] font-bold transition-all"
+                              style={{ backgroundColor: priceSubTab === tab.key ? `${tab.color}20` : 'rgba(255,255,255,0.03)', color: priceSubTab === tab.key ? tab.color : 'rgba(255,255,255,0.4)', borderBottom: priceSubTab === tab.key ? `2px solid ${tab.color}` : '2px solid transparent' }}>
+                              {tab.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Coins sub-tab: Coin ability prices */}
+                        {priceSubTab === 'coins' && (
                         <div className="p-2.5 rounded-lg"
                           style={{ backgroundColor: 'rgba(237,194,46,0.05)', border: '1px solid rgba(237,194,46,0.15)' }}>
                           <div className="flex items-center gap-1.5 mb-2">
                             <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
-                            <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Coin Packages</p>
+                            <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Coin Ability Prices</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            {Object.entries(coinAbilityPrices).map(([key, val]) => (
+                              <div key={key} className="flex items-center gap-1.5">
+                                <span className="text-[7px] font-semibold w-16" style={{ color: 'rgba(255,255,255,0.5)' }}>{key}</span>
+                                <input type="number" value={val} min={0}
+                                  onChange={(e) => {
+                                    const updated = { ...coinAbilityPrices, [key]: parseInt(e.target.value) || 0 }
+                                    setCoinAbilityPrices(updated)
+                                    saveCoinAbilityPrices(updated)
+                                  }}
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }} />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        )}
+
+                        {/* Abilities sub-tab: INR ability packages */}
+                        {priceSubTab === 'abilities' && (
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(246,94,59,0.05)', border: '1px solid rgba(246,94,59,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Zap className="w-3 h-3" style={{ color: '#F65E3B' }} />
+                            <p className="text-[9px] font-bold" style={{ color: '#F65E3B' }}>INR Ability Packages</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            {(customPrices?.inrAbilityPackages || DEFAULT_INR_ABILITY_PACKAGES).map((pkg, idx) => (
+                              <div key={idx} className="flex items-center gap-1.5">
+                                <span className="text-[7px] font-semibold w-10" style={{ color: 'rgba(255,255,255,0.5)' }}>{pkg.type}</span>
+                                <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>×{pkg.uses}</span>
+                                <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>₹</span>
+                                <input type="number" value={pkg.price} min={0}
+                                  onChange={(e) => {
+                                    const newPrice = parseInt(e.target.value) || 0
+                                    const current = customPrices?.inrAbilityPackages || DEFAULT_INR_ABILITY_PACKAGES
+                                    const updated = [...current]
+                                    updated[idx] = { ...updated[idx], price: newPrice }
+                                    const newPrices: CustomPriceOverride = { coinPackages: customPrices?.coinPackages || DEFAULT_COIN_PACKAGES, inrAbilityPackages: updated }
+                                    setCustomPrices(newPrices)
+                                    saveCustomPrices(newPrices)
+                                  }}
+                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }} />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        )}
+
+                        {/* Coin Package sub-tab: INR coin packages */}
+                        {priceSubTab === 'coinPackage' && (
+                        <div className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(0,230,118,0.05)', border: '1px solid rgba(0,230,118,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Package className="w-3 h-3" style={{ color: '#00E676' }} />
+                            <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>INR Coin Packages</p>
                           </div>
                           <div className="space-y-1.5">
                             {(customPrices?.coinPackages || DEFAULT_COIN_PACKAGES).map((pkg, idx) => (
@@ -3034,119 +3367,15 @@ export function CouponCode({
                             ))}
                           </div>
                         </div>
+                        )}
 
-                        {/* INR Ability Package Prices */}
-                        <div className="p-2.5 rounded-lg"
-                          style={{ backgroundColor: 'rgba(255,109,0,0.05)', border: '1px solid rgba(255,109,0,0.15)' }}>
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <Zap className="w-3 h-3" style={{ color: '#FF6D00' }} />
-                            <p className="text-[9px] font-bold" style={{ color: '#FF6D00' }}>INR Ability Prices (₹)</p>
-                          </div>
-                          <div className="space-y-1.5">
-                            {(customPrices?.inrAbilityPackages || DEFAULT_INR_ABILITY_PACKAGES).map((pkg, idx) => (
-                              <div key={idx} className="flex items-center gap-2">
-                                <span className="text-[8px] font-semibold w-20 truncate" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                                  {pkg.type} ×{pkg.uses}
-                                </span>
-                                <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>₹</span>
-                                <input
-                                  type="number"
-                                  value={pkg.price}
-                                  onChange={(e) => {
-                                    const newPrice = parseInt(e.target.value) || 0
-                                    const currentPackages = customPrices?.inrAbilityPackages || DEFAULT_INR_ABILITY_PACKAGES
-                                    const updated = [...currentPackages]
-                                    updated[idx] = { ...updated[idx], price: newPrice }
-                                    const newPrices: CustomPriceOverride = {
-                                      coinPackages: customPrices?.coinPackages || DEFAULT_COIN_PACKAGES,
-                                      inrAbilityPackages: updated,
-                                    }
-                                    setCustomPrices(newPrices)
-                                    saveCustomPrices(newPrices)
-                                  }}
-                                  min={1}
-                                  className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
-                                  style={{
-                                    backgroundColor: 'rgba(255,255,255,0.06)',
-                                    border: '1px solid rgba(255,255,255,0.1)',
-                                    color: '#FF6D00',
-                                  }}
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Coin Ability Prices (coins per 5 uses) */}
-                        <div className="p-2.5 rounded-lg"
-                          style={{ backgroundColor: 'rgba(237,194,46,0.05)', border: '1px solid rgba(237,194,46,0.15)' }}>
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
-                            <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>Coin Ability Prices (coins/5)</p>
-                          </div>
-                          <div className="space-y-1.5">
-                            {([
-                              { key: 'hammer' as const, emoji: '🔨', label: 'Hammer' },
-                              { key: 'magnet' as const, emoji: '🧲', label: 'Magnet' },
-                              { key: 'bomb' as const, emoji: '💣', label: 'Bomb' },
-                              { key: 'timer' as const, emoji: '⏱️', label: 'Timer' },
-                              { key: 'undo' as const, emoji: '↩️', label: 'Undo' },
-                            ]).map(ability => (
-                              <div key={ability.key} className="flex items-center gap-1.5">
-                                <span className="text-[9px]">{ability.emoji}</span>
-                                <span className="text-[8px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.5)' }}>{ability.label}</span>
-                                <button
-                                  onClick={() => {
-                                    const newPrice = Math.max(10, coinAbilityPrices[ability.key] - 10)
-                                    const updated = { ...coinAbilityPrices, [ability.key]: newPrice }
-                                    setCoinAbilityPrices(updated)
-                                    saveCoinAbilityPrices(updated)
-                                  }}
-                                  className="w-6 h-6 rounded-lg flex items-center justify-center transition-transform active:scale-90"
-                                  style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)' }}
-                                >
-                                  <Minus className="w-3 h-3" style={{ color: '#F65E3B' }} />
-                                </button>
-                                <span className="text-[10px] font-bold w-10 text-center" style={{ color: '#EDC22E' }}>
-                                  {coinAbilityPrices[ability.key]}
-                                </span>
-                                <button
-                                  onClick={() => {
-                                    const newPrice = coinAbilityPrices[ability.key] + 10
-                                    const updated = { ...coinAbilityPrices, [ability.key]: newPrice }
-                                    setCoinAbilityPrices(updated)
-                                    saveCoinAbilityPrices(updated)
-                                  }}
-                                  className="w-6 h-6 rounded-lg flex items-center justify-center transition-transform active:scale-90"
-                                  style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)' }}
-                                >
-                                  <Plus className="w-3 h-3" style={{ color: '#00E676' }} />
-                                </button>
-                                <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>coins/5</span>
-                              </div>
-                            ))}
-                          </div>
-                          <button
-                            onClick={() => {
-                              setCoinAbilityPrices(DEFAULT_COIN_ABILITY_PRICES)
-                              saveCoinAbilityPrices(DEFAULT_COIN_ABILITY_PRICES)
-                            }}
-                            className="w-full mt-2 py-1 rounded-lg text-[8px] font-bold flex items-center justify-center gap-1 transition-transform active:scale-95"
-                            style={{ backgroundColor: 'rgba(246,94,59,0.06)', border: '1px solid rgba(246,94,59,0.1)', color: '#F65E3B' }}
-                          >
-                            <RotateCcw className="w-2.5 h-2.5" /> Reset Defaults
-                          </button>
-                        </div>
-
-                        {/* Reset to defaults */}
+                        {/* Reset Prices Button */}
                         <button
                           onClick={() => {
-                            const defaults: CustomPriceOverride = {
-                              coinPackages: DEFAULT_COIN_PACKAGES,
-                              inrAbilityPackages: DEFAULT_INR_ABILITY_PACKAGES,
-                            }
-                            setCustomPrices(defaults)
-                            saveCustomPrices(defaults)
+                            setCustomPrices(null)
+                            localStorage.removeItem('adminCustomPrices')
+                            setCoinAbilityPrices(DEFAULT_COIN_ABILITY_PRICES)
+                            saveCoinAbilityPrices(DEFAULT_COIN_ABILITY_PRICES)
                           }}
                           className="w-full py-1.5 rounded-lg text-[9px] font-bold flex items-center justify-center gap-1.5 transition-transform active:scale-95"
                           style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)', color: '#F65E3B' }}
@@ -3155,7 +3384,7 @@ export function CouponCode({
                         </button>
 
                         <p className="text-[7px] text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                          Price changes take effect on next store visit. User payment amount is locked to the displayed price.
+                          Price changes take effect on next store visit. Click "Save All" to apply.
                         </p>
                       </div>
                     )}
@@ -3165,9 +3394,16 @@ export function CouponCode({
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                            All Payment History ({allPurchases.length})
+                            {historyFilter === 'coins' ? 'Coin Purchases' : historyFilter === 'inr' ? 'INR Purchases' : 'All Payment History'} ({historyFilter === 'coins' ? firebaseCoinPurchases.length : allPurchases.length})
                           </p>
-                          {allPurchases.length > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            {/* History filter toggle */}
+                            <div className="flex items-center gap-0.5 p-0.5 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                              <button onClick={() => setHistoryFilter('all')} className="px-2 py-1 rounded text-[7px] font-bold transition-all" style={{ backgroundColor: historyFilter === 'all' ? 'rgba(237,194,46,0.2)' : 'transparent', color: historyFilter === 'all' ? '#EDC22E' : 'rgba(255,255,255,0.4)', border: historyFilter === 'all' ? '1px solid rgba(237,194,46,0.3)' : '1px solid transparent' }}>All</button>
+                              <button onClick={() => setHistoryFilter('inr')} className="px-2 py-1 rounded text-[7px] font-bold transition-all" style={{ backgroundColor: historyFilter === 'inr' ? 'rgba(237,194,46,0.2)' : 'transparent', color: historyFilter === 'inr' ? '#EDC22E' : 'rgba(255,255,255,0.4)', border: historyFilter === 'inr' ? '1px solid rgba(237,194,46,0.3)' : '1px solid transparent' }}>₹ INR</button>
+                              <button onClick={() => setHistoryFilter('coins')} className="px-2 py-1 rounded text-[7px] font-bold transition-all" style={{ backgroundColor: historyFilter === 'coins' ? 'rgba(237,194,46,0.2)' : 'transparent', color: historyFilter === 'coins' ? '#EDC22E' : 'rgba(255,255,255,0.4)', border: historyFilter === 'coins' ? '1px solid rgba(237,194,46,0.3)' : '1px solid transparent' }}>💰 Coins</button>
+                            </div>
+                          {historyFilter !== 'coins' && allPurchases.length > 0 && (
                             <div className="flex items-center gap-1.5">
                               {selectedHistoryIds.size > 0 && (
                                 <button
@@ -3187,48 +3423,45 @@ export function CouponCode({
                               </button>
                             </div>
                           )}
-                        </div>
-
-                        {/* Lock Duration Setting */}
-                        <div className="p-2.5 rounded-lg"
-                          style={{ backgroundColor: 'rgba(255,109,0,0.05)', border: '1px solid rgba(255,109,0,0.15)' }}>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                              <Clock className="w-3 h-3" style={{ color: '#FF6D00' }} />
-                              <p className="text-[9px] font-bold" style={{ color: '#FF6D00' }}>Lock Duration</p>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                onClick={() => {
-                                  const newDuration = Math.max(1, lockDuration - 1)
-                                  setLockDuration(newDuration)
-                                  saveLockDuration(newDuration)
-                                }}
-                                className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-90"
-                                style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)' }}
-                              >
-                                <Minus className="w-2.5 h-2.5" style={{ color: '#F65E3B' }} />
-                              </button>
-                              <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>{lockDuration} week{lockDuration !== 1 ? 's' : ''}</span>
-                              <button
-                                onClick={() => {
-                                  const newDuration = lockDuration + 1
-                                  setLockDuration(newDuration)
-                                  saveLockDuration(newDuration)
-                                }}
-                                className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-90"
-                                style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)' }}
-                              >
-                                <Plus className="w-2.5 h-2.5" style={{ color: '#00E676' }} />
-                              </button>
-                            </div>
                           </div>
-                          <p className="text-[7px] mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                            Coins/abilities from store purchases are locked for this duration after delivery
-                          </p>
                         </div>
 
-                        {allPurchases.length === 0 ? (
+                        {/* Coins purchase history section */}
+                        {historyFilter === 'coins' && (
+                          firebaseCoinPurchases.length === 0 ? (
+                            <div className="text-center py-4">
+                              <span className="text-2xl block mb-1">💰</span>
+                              <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No coin purchase history</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5 max-h-96 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+                              {firebaseCoinPurchases.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0)).map((purchase: any) => (
+                                <div key={purchase.id} className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                  <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '1px solid rgba(237,194,46,0.2)' }}>
+                                    <span className="text-[10px]">💰</span>
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[9px] font-bold truncate" style={{ color: '#FFFFFF' }}>{purchase.item || 'Unknown Item'}</p>
+                                    <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                      {purchase.playerName || 'Unknown'} • {purchase.userCode || ''}
+                                    </p>
+                                    <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                      {new Date(purchase.date || purchase.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>💰 {purchase.coinPrice?.toLocaleString('en-IN') || 0}</p>
+                                    <span className="inline-block px-1.5 py-0.5 rounded-full text-[7px] font-bold" style={{ backgroundColor: 'rgba(0,230,118,0.15)', color: '#00E676' }}>
+                                      Auto-Approved
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )
+                        )}
+
+                        {historyFilter !== 'coins' && allPurchases.length === 0 ? (
                           <div className="text-center py-4">
                             <span className="text-2xl block mb-1">📋</span>
                             <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No payment history</p>

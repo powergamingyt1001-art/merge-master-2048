@@ -5,6 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Coins, Zap, Clock, AlertCircle, Copy, Check, Upload, FileText, ImageIcon, Trash2, ShoppingCart, Minus, Plus, Tag } from 'lucide-react'
 import { getRandomLink } from '@/components/ads/AdOverlay'
 import { placeOrder as firebasePlaceOrder, onUserOrdersUpdate, type FirebaseStoreOrder } from '@/lib/firebase-service'
+import { validateDiscountCoupon, consumeDiscountCoupon, type DiscountCoupon } from '@/components/game/CouponCode'
+import { db } from '@/lib/firebase'
+import { ref, set } from 'firebase/database'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -596,19 +599,20 @@ function TagBadge({ label, color }: { label: string; color: string }) {
   )
 }
 
-function BuyButton({ onPress }: { onPress: () => void }) {
+function BuyButton({ onPress, label }: { onPress: () => void; label?: 'Add' | 'Buy' }) {
+  const isBuy = label === 'Buy'
   return (
     <button
       onClick={onPress}
       className="w-full py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-transform hover:scale-[1.02] active:scale-95"
       style={{
-        background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
+        background: isBuy ? 'linear-gradient(135deg, #EDC22E, #FFB300)' : 'linear-gradient(135deg, #EDC22E, #FF7A00)',
         color: '#FFFFFF',
-        boxShadow: '0 2px 12px rgba(237,194,46,0.3)',
+        boxShadow: isBuy ? '0 2px 12px rgba(237,194,46,0.4)' : '0 2px 12px rgba(237,194,46,0.3)',
       }}
     >
-      <ShoppingCart className="w-3.5 h-3.5" />
-      Add
+      {isBuy ? <Coins className="w-3.5 h-3.5" /> : <ShoppingCart className="w-3.5 h-3.5" />}
+      {label || 'Add'}
     </button>
   )
 }
@@ -1142,7 +1146,7 @@ function AbilityCard({
               color: '#FFFFFF',
             }}
           >
-            Add
+            {isCoinCurrency ? 'Buy' : 'Add'}
           </button>
         )}
       </div>
@@ -1262,7 +1266,7 @@ function AbilityTab({ onBuy, onCoinBuy, coins, onAddNotification, onDeductCoins,
 
 // ─── Room Tab ─────────────────────────────────────────────────────────────
 
-function RoomTab({ onBuy, onCoinBuy, coins, onAddRoomCards, onAddNotification, onDeductCoins, cart, onAddToCart, onUpdateCartQuantity }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number; onAddRoomCards?: (count: number) => void; onAddNotification: (title: string, message: string, type: string, emoji: string) => void; onDeductCoins: (amount: number) => void; cart: CartItem[]; onAddToCart: (item: AbilityItem) => void; onUpdateCartQuantity: (id: string, delta: number) => void }) {
+function RoomTab({ onBuy, onCoinBuy, coins, onAddRoomCards, onAddNotification, onDeductCoins, cart, onAddToCart, onUpdateCartQuantity, playerId, playerName, userCode }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number; onAddRoomCards?: (count: number) => void; onAddNotification: (title: string, message: string, type: string, emoji: string) => void; onDeductCoins: (amount: number) => void; cart: CartItem[]; onAddToCart: (item: AbilityItem) => void; onUpdateCartQuantity: (id: string, delta: number) => void; playerId: string; playerName: string; userCode: string }) {
   const [roomCardCoinPurchased, setRoomCardCoinPurchased] = useState(() => !canBuyRoomCardWithCoins())
 
   const handleBuyRoomCardWithCoins = useCallback(() => {
@@ -1278,8 +1282,24 @@ function RoomTab({ onBuy, onCoinBuy, coins, onAddRoomCards, onAddNotification, o
     onAddRoomCards?.(1)
     markRoomCardCoinPurchased()
     setRoomCardCoinPurchased(true)
+
+    // Record coin purchase to Firebase
+    const coinPurchaseId = Date.now().toString() + Math.random().toString(36).slice(2, 6)
+    recordCoinPurchaseToFirebase({
+      id: coinPurchaseId,
+      date: new Date().toISOString(),
+      playerId,
+      playerName,
+      userCode,
+      item: '🃏 1 Room Card',
+      coinPrice: 3000,
+      quantity: 1,
+      status: 'auto_approved',
+      createdAt: Date.now(),
+    }).catch(() => { /* silent fail */ })
+
     onAddNotification('Room Card Purchased! 🃏', 'You bought 1 Room Card for 3,000 coins!', 'reward', '🃏')
-  }, [coins, onDeductCoins, onAddRoomCards, onAddNotification])
+  }, [coins, onDeductCoins, onAddRoomCards, onAddNotification, playerId, playerName, userCode])
 
   return (
     <div className="space-y-4">
@@ -1529,12 +1549,15 @@ const SPIN_COIN_PACKS: SpinPack[] = [
 
 // ─── Spins Tab ──────────────────────────────────────────────────────────────
 
-function SpinsTab({ onBuy, coins, onDeductCoins, onAddSpinTickets, onAddNotification }: {
+function SpinsTab({ onBuy, coins, onDeductCoins, onAddSpinTickets, onAddNotification, playerId, playerName, userCode }: {
   onBuy: (item: string, price: number, quantity: number) => void
   coins: number
   onDeductCoins: (amount: number) => void
   onAddSpinTickets?: (count: number) => void
   onAddNotification: (title: string, message: string, type: string, emoji: string) => void
+  playerId: string
+  playerName: string
+  userCode: string
 }) {
   const [remainingSpins, setRemainingSpins] = useState(() => getRemainingSpinCoinPurchase())
 
@@ -1557,13 +1580,28 @@ function SpinsTab({ onBuy, coins, onDeductCoins, onAddSpinTickets, onAddNotifica
     recordSpinCoinPurchase(spinsToBuy)
     setRemainingSpins(getRemainingSpinCoinPurchase())
 
+    // Record coin purchase to Firebase
+    const coinPurchaseId = Date.now().toString() + Math.random().toString(36).slice(2, 6)
+    recordCoinPurchaseToFirebase({
+      id: coinPurchaseId,
+      date: new Date().toISOString(),
+      playerId,
+      playerName,
+      userCode,
+      item: `🎫 ${pack.spins} Spin${pack.spins > 1 ? 's' : ''}${pack.bonusSpins ? ` +${pack.bonusSpins} FREE` : ''}`,
+      coinPrice: pack.price,
+      quantity: totalSpins,
+      status: 'auto_approved',
+      createdAt: Date.now(),
+    }).catch(() => { /* silent fail */ })
+
     onAddNotification(
       'Spins Purchased! 🎫',
       `You bought ${pack.spins} spin${pack.spins > 1 ? 's' : ''}${pack.bonusSpins ? ` +${pack.bonusSpins} FREE` : ''} for ${formatNumber(pack.price)} coins!`,
       'reward',
       '🎫'
     )
-  }, [coins, remainingSpins, onDeductCoins, onAddSpinTickets, onAddNotification])
+  }, [coins, remainingSpins, onDeductCoins, onAddSpinTickets, onAddNotification, playerId, playerName, userCode])
 
   return (
     <div className="space-y-4">
@@ -1705,6 +1743,267 @@ function SpinsTab({ onBuy, coins, onDeductCoins, onAddSpinTickets, onAddNotifica
   )
 }
 
+// ─── Firebase Coin Purchase Recording ──────────────────────────────────────────
+
+interface CoinPurchaseRecord {
+  id: string
+  date: string
+  playerId: string
+  playerName: string
+  userCode: string
+  item: string
+  coinPrice: number
+  quantity: number
+  abilityType?: string
+  status: 'auto_approved'
+  createdAt: number
+}
+
+async function recordCoinPurchaseToFirebase(record: CoinPurchaseRecord): Promise<void> {
+  try {
+    const purchaseRef = ref(db, `coinPurchases/${record.id}`)
+    await set(purchaseRef, {
+      ...record,
+      createdAt: Date.now(),
+    })
+  } catch (err) {
+    console.warn('Firebase coin purchase recording failed:', err)
+  }
+}
+
+// ─── Scratch Card Popup Component ────────────────────────────────────────────
+
+interface ScratchCardPopupProps {
+  isOpen: boolean
+  onClose: () => void
+  couponCode: string
+  discountPercent: number
+  onClaim: (code: string) => void
+  userCode: string
+}
+
+function ScratchCardPopup({ isOpen, onClose, couponCode, discountPercent, onClaim, userCode }: ScratchCardPopupProps) {
+  const [scratched, setScratched] = useState(false)
+  const [scratchProgress, setScratchProgress] = useState(0)
+  const [emojiRainActive, setEmojiRainActive] = useState(false)
+  const [claimed, setClaimed] = useState(false)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const isDrawingRef = useRef(false)
+  const sparkleTimersRef = useRef<NodeJS.Timeout[]>([])
+
+  // Emoji rain effect
+  useEffect(() => {
+    if (!isOpen) return
+    setScratched(false)
+    setScratchProgress(0)
+    setClaimed(false)
+    setEmojiRainActive(true)
+    // Stop emoji rain after 3 seconds
+    const timer = setTimeout(() => setEmojiRainActive(false), 3000)
+    return () => clearTimeout(timer)
+  }, [isOpen])
+
+  // Sparkle effects
+  useEffect(() => {
+    if (!isOpen || !scratched) return
+    const interval = setInterval(() => {
+      // Create a sparkle element
+      const sparkle = document.createElement('div')
+      sparkle.textContent = '✨'
+      sparkle.style.cssText = `
+        position: fixed;
+        font-size: ${12 + Math.random() * 16}px;
+        pointer-events: none;
+        z-index: 9999;
+        left: ${30 + Math.random() * 40}%;
+        top: ${20 + Math.random() * 50}%;
+        animation: sparkle-fade 1s ease-out forwards;
+      `
+      document.body.appendChild(sparkle)
+      setTimeout(() => sparkle.remove(), 1000)
+    }, 200)
+    sparkleTimersRef.current.push(interval as any)
+    return () => { clearInterval(interval); sparkleTimersRef.current.forEach(t => clearTimeout(t)); sparkleTimersRef.current = [] }
+  }, [isOpen, scratched])
+
+  // Canvas scratch interaction
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !isOpen || scratched) return
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    // Draw scratch overlay
+    ctx.fillStyle = '#888888'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    // Add "Scratch to Reveal" text
+    ctx.fillStyle = '#AAAAAA'
+    ctx.font = 'bold 14px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText('Scratch to Reveal', canvas.width / 2, canvas.height / 2 + 5)
+
+    const handleStart = () => { isDrawingRef.current = true }
+    const handleEnd = () => {
+      isDrawingRef.current = false
+      if (scratchProgress > 40 && !scratched) {
+        setScratched(true)
+        setEmojiRainActive(true)
+        setTimeout(() => setEmojiRainActive(false), 3000)
+      }
+    }
+    const handleMove = (e: MouseEvent | TouchEvent) => {
+      if (!isDrawingRef.current) return
+      const rect = canvas.getBoundingClientRect()
+      const x = ('touches' in e ? e.touches[0].clientX : e.clientX) - rect.left
+      const y = ('touches' in e ? e.touches[0].clientY : e.clientY) - rect.top
+      ctx.globalCompositeOperation = 'destination-out'
+      ctx.beginPath()
+      ctx.arc(x, y, 20, 0, Math.PI * 2)
+      ctx.fill()
+      setScratchProgress(prev => Math.min(prev + 5, 100))
+    }
+
+    canvas.addEventListener('mousedown', handleStart)
+    canvas.addEventListener('mouseup', handleEnd)
+    canvas.addEventListener('mousemove', handleMove)
+    canvas.addEventListener('touchstart', handleStart)
+    canvas.addEventListener('touchend', handleEnd)
+    canvas.addEventListener('touchmove', handleMove)
+    canvas.addEventListener('click', () => {
+      if (!scratched) {
+        setScratched(true)
+        setEmojiRainActive(true)
+        setTimeout(() => setEmojiRainActive(false), 3000)
+      }
+    })
+
+    return () => {
+      canvas.removeEventListener('mousedown', handleStart)
+      canvas.removeEventListener('mouseup', handleEnd)
+      canvas.removeEventListener('mousemove', handleMove)
+      canvas.removeEventListener('touchstart', handleStart)
+      canvas.removeEventListener('touchend', handleEnd)
+      canvas.removeEventListener('touchmove', handleMove)
+    }
+  }, [isOpen, scratched, scratchProgress])
+
+  if (!isOpen) return null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[300] flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
+    >
+      {/* Emoji Rain */}
+      {emojiRainActive && (
+        <div className="fixed inset-0 pointer-events-none overflow-hidden z-[301]">
+          {Array.from({ length: 30 }, (_, i) => (
+            <motion.div
+              key={i}
+              initial={{ y: -50, x: Math.random() * 100 + '%', opacity: 1, rotate: 0 }}
+              animate={{ y: window.innerHeight + 50, opacity: 0, rotate: Math.random() * 720 - 360 }}
+              transition={{ duration: 2 + Math.random(), delay: Math.random() * 1.5, ease: 'easeIn' }}
+              className="absolute text-2xl"
+              style={{ left: Math.random() * 100 + '%' }}
+            >
+              🤑
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      <motion.div
+        initial={{ scale: 0.7, y: 30 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.7 }}
+        className="relative w-full max-w-xs rounded-2xl overflow-hidden"
+        style={{
+          background: 'linear-gradient(135deg, #1a0533, #0d1b3e)',
+          border: '2px solid rgba(237,194,46,0.4)',
+          boxShadow: '0 0 40px rgba(237,194,46,0.2), 0 0 80px rgba(237,194,46,0.1)',
+        }}
+      >
+        {/* Header */}
+        <div className="p-4 text-center" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <p className="text-lg mb-1">🎉🎊🎉</p>
+          <h3 className="text-base font-bold" style={{ color: '#EDC22E' }}>Congratulations!</h3>
+          <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>You earned a reward coupon!</p>
+        </div>
+
+        {/* Scratch Area */}
+        <div className="p-4 flex flex-col items-center">
+          <div className="relative w-full aspect-[2/1] rounded-xl overflow-hidden" style={{ border: '2px solid rgba(237,194,46,0.3)' }}>
+            {/* Hidden content underneath */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-3" style={{ background: 'linear-gradient(135deg, rgba(237,194,46,0.1), rgba(255,122,0,0.1))' }}>
+              <p className="text-3xl mb-2">🤑</p>
+              <p className="text-sm font-extrabold" style={{ color: '#00E676' }}>{discountPercent}% OFF</p>
+              <p className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.7)' }}>Next Purchase!</p>
+              <div className="mt-2 px-3 py-1 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.15)', border: '1px solid rgba(237,194,46,0.3)' }}>
+                <p className="text-[9px] font-mono font-bold" style={{ color: '#EDC22E' }}>{couponCode}</p>
+              </div>
+            </div>
+            {/* Scratch overlay */}
+            {!scratched && (
+              <canvas
+                ref={canvasRef}
+                width={300}
+                height={150}
+                className="absolute inset-0 w-full h-full cursor-pointer"
+                style={{ touchAction: 'none' }}
+              />
+            )}
+          </div>
+          {scratched && !claimed && (
+            <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-[10px] mt-2 text-center" style={{ color: '#00E676' }}>
+              🎉 You revealed a <strong>{discountPercent}% OFF</strong> coupon for your next purchase!
+            </motion.p>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="p-4 pt-0 flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl font-bold text-xs transition-transform active:scale-95"
+            style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}
+          >
+            CLOSE
+          </button>
+          <button
+            onClick={() => {
+              if (!claimed) {
+                setClaimed(true)
+                onClaim(couponCode)
+              }
+            }}
+            disabled={!scratched || claimed}
+            className="flex-1 py-2.5 rounded-xl font-bold text-xs transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-40"
+            style={{
+              background: claimed ? 'rgba(0,230,118,0.2)' : 'linear-gradient(135deg, #EDC22E, #FF7A00)',
+              color: claimed ? '#00E676' : '#FFFFFF',
+              border: claimed ? '1px solid rgba(0,230,118,0.3)' : 'none',
+            }}
+          >
+            {claimed ? '✅ CLAIMED!' : '🎁 CLAIM'}
+          </button>
+        </div>
+      </motion.div>
+
+      {/* Global sparkle animation style */}
+      <style jsx global>{`
+        @keyframes sparkle-fade {
+          0% { opacity: 1; transform: scale(1); }
+          100% { opacity: 0; transform: scale(0.3) translateY(-30px); }
+        }
+      `}</style>
+    </motion.div>
+  )
+}
+
 // ─── Main Store Component ────────────────────────────────────────────────────
 
 export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos, onAddRoomCards, onAddSpinTickets }: StoreProps) {
@@ -1795,6 +2094,23 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
       } else if (item.abilityType) {
         onAddPowerUp(item.abilityType, item.quantity)
       }
+
+      // Record coin purchase to Firebase for admin panel history
+      const coinPurchaseId = Date.now().toString()
+      recordCoinPurchaseToFirebase({
+        id: coinPurchaseId,
+        date: new Date().toISOString(),
+        playerId,
+        playerName,
+        userCode,
+        item: `${item.emoji} ${item.name} x${item.quantity}`,
+        coinPrice: item.price,
+        quantity: item.quantity,
+        abilityType: item.abilityType,
+        status: 'auto_approved',
+        createdAt: Date.now(),
+      }).catch(() => { /* silent fail */ })
+
       onAddNotification(
         'Ability Purchased! 🎉',
         `You bought ${item.emoji} ${item.name} x${item.quantity} for ${formatNumber(item.price)} coins`,
@@ -1802,7 +2118,7 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
         item.emoji
       )
     },
-    [coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos]
+    [coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos, playerId, playerName, userCode]
   )
 
   // Handle real-money purchase: open payment modal
@@ -1902,39 +2218,23 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
     if (!couponCode.trim()) return
     setCouponError('')
 
+    // Use the validateDiscountCoupon function from CouponCode.tsx
+    const result = validateDiscountCoupon(couponCode.trim(), userCode, cartTotalINR)
+    if (result.valid && result.coupon) {
+      setAppliedCoupon({
+        code: result.coupon.code,
+        discountPercent: result.coupon.discountPercent,
+        minPurchase: result.coupon.minPurchase,
+        used: false,
+      })
+      return
+    }
+
     // Check if already used
     try {
       const usedCoupons: string[] = JSON.parse(localStorage.getItem(USED_COUPONS_KEY) || '[]')
       if (usedCoupons.includes(couponCode.trim().toUpperCase())) {
         setCouponError('Coupon already used')
-        return
-      }
-    } catch { /* ignore */ }
-
-    // Check admin discount coupons (adminDiscountCoupons key - used by WELCOME60 etc.)
-    try {
-      const discountCoupons: Array<{ code: string; discountPercent: number; minPurchase?: number; maxUses?: number; currentUses?: number; oneTime?: boolean; oneTimePerUser?: boolean; targetUserIds?: string[]; disabled?: boolean }> = JSON.parse(localStorage.getItem(ADMIN_DISCOUNT_COUPONS_KEY) || '[]')
-      const found = discountCoupons.find(c => c.code.toUpperCase() === couponCode.trim().toUpperCase())
-      if (found) {
-        if (found.disabled) {
-          setCouponError('This coupon has been disabled')
-          return
-        }
-        if (found.maxUses && found.currentUses !== undefined && found.currentUses >= found.maxUses) {
-          setCouponError('This coupon has reached its max uses')
-          return
-        }
-        const minPurchase = found.minPurchase || 0
-        if (minPurchase > 0 && cartTotalINR < minPurchase) {
-          setCouponError(`Minimum ₹${minPurchase} purchase required`)
-          return
-        }
-        setAppliedCoupon({
-          code: found.code,
-          discountPercent: found.discountPercent || 10,
-          minPurchase: minPurchase,
-          used: false,
-        })
         return
       }
     } catch { /* ignore */ }
@@ -1959,13 +2259,16 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
       }
     } catch { /* ignore */ }
 
-    setCouponError('Invalid coupon code')
-  }, [couponCode, cartTotalINR])
+    setCouponError(result.error || 'Invalid coupon code')
+  }, [couponCode, cartTotalINR, userCode])
 
   const discountAmount = appliedCoupon ? Math.round(cartTotalINR * appliedCoupon.discountPercent / 100) : 0
   const finalTotal = cartTotalINR - discountAmount
 
-  const handlePlaceOrder = useCallback(() => {
+  // Scratch card popup state
+  const [scratchCard, setScratchCard] = useState<{ open: boolean; code: string; percent: number }>({ open: false, code: '', percent: 0 })
+
+  const handlePlaceOrder = useCallback(async () => {
     if (cart.length === 0) return
 
     // Mark coupon as used
@@ -1975,10 +2278,14 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
         usedCoupons.push(appliedCoupon.code)
         localStorage.setItem(USED_COUPONS_KEY, JSON.stringify(usedCoupons))
       } catch { /* ignore */ }
+      // Consume the discount coupon
+      try {
+        consumeDiscountCoupon(appliedCoupon.code)
+      } catch { /* ignore */ }
       setAppliedCoupon(null)
     }
 
-    // Process coin items immediately
+    // Process coin items immediately (auto-approve)
     cart.filter(i => i.currency === 'coin').forEach(item => {
       onDeductCoins(item.price * item.quantity)
       if (item.abilityType === 'undo') {
@@ -1988,6 +2295,23 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
       } else if (item.abilityType) {
         onAddPowerUp(item.abilityType as any, item.quantity)
       }
+
+      // Record coin purchase to Firebase
+      const coinPurchaseId = Date.now().toString() + Math.random().toString(36).slice(2, 6)
+      recordCoinPurchaseToFirebase({
+        id: coinPurchaseId,
+        date: new Date().toISOString(),
+        playerId,
+        playerName,
+        userCode,
+        item: `${item.emoji} ${item.name} x${item.quantity}`,
+        coinPrice: item.price * item.quantity,
+        quantity: item.quantity,
+        abilityType: item.abilityType,
+        status: 'auto_approved',
+        createdAt: Date.now(),
+      }).catch(() => { /* silent fail */ })
+
       onAddNotification('Ability Purchased! 🎉', `You bought ${item.emoji} ${item.name} x${item.quantity} for ${formatNumber(item.price * item.quantity)} coins`, 'reward', item.emoji)
     })
 
@@ -1996,16 +2320,56 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
     if (inrItems.length > 0) {
       const total = finalTotal
       const itemNames = inrItems.map(i => `${i.emoji} ${i.name} x${i.quantity}`).join(', ')
-      setPaymentModal({ open: true, itemName: itemNames, itemPrice: total, itemQuantity: 1 })
+
+      // Purchase threshold: ₹29+ → auto 60% discount on current order
+      const inrSubtotal = cartTotalINR
+      if (inrSubtotal >= 29 && inrSubtotal < 200) {
+        // Apply 60% discount to the current order automatically
+        const autoDiscount = Math.round(inrSubtotal * 60 / 100)
+        onAddNotification('🎉 60% Discount Applied!', `Your ₹${inrSubtotal} purchase gets an automatic 60% discount! You save ₹${autoDiscount}!`, 'reward', '🏷️')
+        setPaymentModal({ open: true, itemName: itemNames, itemPrice: inrSubtotal - autoDiscount, itemQuantity: 1 })
+      } else {
+        setPaymentModal({ open: true, itemName: itemNames, itemPrice: total, itemQuantity: 1 })
+      }
+
+      // Purchase threshold: ₹200+ → 70% off next purchase coupon (scratch card)
+      if (inrSubtotal >= 200) {
+        // Generate a unique coupon code for this user
+        const nextCouponCode = `NEXT70${userCode.toUpperCase().slice(0, 6)}${Date.now().toString(36).toUpperCase()}`
+        // Store the coupon in adminDiscountCoupons targeting this user
+        try {
+          const { saveDiscountCoupons: saveDiscounts, loadDiscountCoupons: loadDiscounts } = await import('@/components/game/CouponCode')
+          const existingCoupons = loadDiscounts()
+          existingCoupons.push({
+            code: nextCouponCode,
+            discountPercent: 70,
+            minPurchase: 0,
+            maxUses: 1,
+            currentUses: 0,
+            oneTime: true,
+            targetUserIds: [userCode],
+            createdAt: Date.now(),
+            createdBy: 'system' as const,
+            description: `70% OFF Next Purchase (Reward for ₹200+ order)`,
+          })
+          saveDiscounts(existingCoupons)
+        } catch { /* ignore */ }
+
+        // Show scratch card popup after a small delay
+        setTimeout(() => {
+          setScratchCard({ open: true, code: nextCouponCode, percent: 70 })
+        }, 1500)
+      }
     }
 
     // Clear cart
     setCart([])
     setCouponCode('')
     setShowCart(false)
-  }, [cart, appliedCoupon, finalTotal, onDeductCoins, onAddPowerUp, onAddUndos, onAddNotification])
+  }, [cart, appliedCoupon, finalTotal, cartTotalINR, onDeductCoins, onAddPowerUp, onAddUndos, onAddNotification, playerId, playerName, userCode])
 
   return (
+    <>
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -2145,7 +2509,18 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
                           </button>
                         </div>
                         {couponError && <p className="text-[8px]" style={{ color: '#F65E3B' }}>{couponError}</p>}
-                        {appliedCoupon && <p className="text-[8px]" style={{ color: '#00E676' }}>✅ {appliedCoupon.discountPercent}% off applied!</p>}
+                        {appliedCoupon && (
+                          <div className="flex items-center justify-between">
+                            <p className="text-[8px]" style={{ color: '#00E676' }}>✅ {appliedCoupon.discountPercent}% off applied!</p>
+                            <button
+                              onClick={() => { setAppliedCoupon(null); setCouponCode('') }}
+                              className="text-[8px] font-bold px-1.5 py-0.5 rounded"
+                              style={{ backgroundColor: 'rgba(246,94,59,0.15)', color: '#F65E3B', border: '1px solid rgba(246,94,59,0.2)' }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
 
                         {/* Totals */}
                         <div className="space-y-1">
@@ -2248,7 +2623,7 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <SpinsTab onBuy={handleBuy} coins={coins} onDeductCoins={onDeductCoins} onAddSpinTickets={onAddSpinTickets} onAddNotification={onAddNotification} />
+                    <SpinsTab onBuy={handleBuy} coins={coins} onDeductCoins={onDeductCoins} onAddSpinTickets={onAddSpinTickets} onAddNotification={onAddNotification} playerId={playerId} playerName={playerName} userCode={userCode} />
                   </motion.div>
                 )}
                 {activeTab === 'room' && (
@@ -2259,7 +2634,7 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <RoomTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onAddRoomCards={onAddRoomCards} onAddNotification={onAddNotification} onDeductCoins={onDeductCoins} cart={cart} onAddToCart={addToCart} onUpdateCartQuantity={updateCartQuantity} />
+                    <RoomTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onAddRoomCards={onAddRoomCards} onAddNotification={onAddNotification} onDeductCoins={onDeductCoins} cart={cart} onAddToCart={addToCart} onUpdateCartQuantity={updateCartQuantity} playerId={playerId} playerName={playerName} userCode={userCode} />
                   </motion.div>
                 )}
                 {activeTab === 'history' && (
@@ -2323,5 +2698,16 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
         </motion.div>
       )}
     </AnimatePresence>
+    <ScratchCardPopup
+      isOpen={scratchCard.open}
+      onClose={() => setScratchCard({ open: false, code: '', percent: 0 })}
+      couponCode={scratchCard.code}
+      discountPercent={scratchCard.percent}
+      onClaim={(code) => {
+        onAddNotification('🎉 Coupon Claimed!', `Your 70% OFF coupon ${code} has been saved! Use it on your next purchase.`, 'reward', '🏷️')
+      }}
+      userCode={userCode}
+    />
+    </>
   )
 }
