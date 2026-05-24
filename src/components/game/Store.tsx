@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Coins, Zap, Clock, AlertCircle, Copy, Check, Upload, FileText, ImageIcon, Trash2, ShoppingCart, Minus, Plus, Tag, Gift, Users, Send } from 'lucide-react'
 import { getRandomLink } from '@/components/ads/AdOverlay'
@@ -17,6 +17,7 @@ interface StoreProps {
   onClose: () => void
   playerId: string
   playerName: string
+  playerAvatar: string
   userCode: string
   coins: number
   onAddNotification: (title: string, message: string, type: string, emoji: string) => void
@@ -1297,7 +1298,7 @@ function AbilityTab({ onBuy, onCoinBuy, coins, onAddNotification, onDeductCoins,
 
 // ─── Room Tab ─────────────────────────────────────────────────────────────
 
-function RoomTab({ onBuy, onCoinBuy, coins, onAddRoomCards, onAddNotification, onDeductCoins, cart, onAddToCart, onUpdateCartQuantity, playerId, playerName, userCode }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number; onAddRoomCards?: (count: number) => void; onAddNotification: (title: string, message: string, type: string, emoji: string) => void; onDeductCoins: (amount: number) => void; cart: CartItem[]; onAddToCart: (item: AbilityItem) => void; onUpdateCartQuantity: (id: string, delta: number) => void; playerId: string; playerName: string; userCode: string }) {
+function RoomTab({ onBuy, onCoinBuy, coins, onAddRoomCards, onAddNotification, onDeductCoins, cart, onAddToCart, onUpdateCartQuantity, playerId, playerName, userCode, onSuccessPurchase }: { onBuy: (item: string, price: number, quantity: number) => void; onCoinBuy: (item: AbilityItem) => void; coins: number; onAddRoomCards?: (count: number) => void; onAddNotification: (title: string, message: string, type: string, emoji: string) => void; onDeductCoins: (amount: number) => void; cart: CartItem[]; onAddToCart: (item: AbilityItem) => void; onUpdateCartQuantity: (id: string, delta: number) => void; playerId: string; playerName: string; userCode: string; onSuccessPurchase: (itemName: string) => void }) {
   const [roomCardCoinPurchased, setRoomCardCoinPurchased] = useState(() => !canBuyRoomCardWithCoins())
 
   const handleBuyRoomCardWithCoins = useCallback(() => {
@@ -1330,7 +1331,8 @@ function RoomTab({ onBuy, onCoinBuy, coins, onAddRoomCards, onAddNotification, o
     }).catch(() => { /* silent fail */ })
 
     onAddNotification('Room Card Purchased! 🃏', 'You bought 1 Room Card for 3,000 coins!', 'reward', '🃏')
-  }, [coins, onDeductCoins, onAddRoomCards, onAddNotification, playerId, playerName, userCode])
+    onSuccessPurchase('🃏 1 Room Card')
+  }, [coins, onDeductCoins, onAddRoomCards, onAddNotification, onSuccessPurchase, playerId, playerName, userCode])
 
   return (
     <div className="space-y-4">
@@ -1393,11 +1395,14 @@ interface GiftFriend extends FriendData {
   friendId: string
 }
 
-function GiftTab({ playerId, coins, onDeductCoins, onAddNotification }: {
+function GiftTab({ playerId, playerName, playerAvatar, coins, onDeductCoins, onAddNotification, onSuccessPurchase }: {
   playerId: string
+  playerName: string
+  playerAvatar: string
   coins: number
   onDeductCoins: (amount: number) => void
   onAddNotification: (title: string, message: string, type: string, emoji: string) => void
+  onSuccessPurchase: (itemName: string) => void
 }) {
   const [friends, setFriends] = useState<GiftFriend[]>([])
   const [giftType, setGiftType] = useState<'coins' | 'hammer' | 'magnet' | 'blast'>('coins')
@@ -1438,7 +1443,7 @@ function GiftTab({ playerId, coins, onDeductCoins, onAddNotification }: {
   const giftsSentToday = getGiftCountToday()
   const giftsRemaining = Math.max(0, GIFT_DAILY_LIMIT - giftsSentToday)
 
-  const handleSendGift = useCallback(() => {
+  const handleSendGift = useCallback(async () => {
     if (!selectedFriend) return
     if (giftsRemaining <= 0) {
       onAddNotification('Gift Limit', `You've sent ${GIFT_DAILY_LIMIT} gifts today. Come back tomorrow!`, 'system', '🎁')
@@ -1459,24 +1464,29 @@ function GiftTab({ playerId, coins, onDeductCoins, onAddNotification }: {
     const friendName = friend?.name || 'Friend'
     const giftLabel = giftType === 'coins' ? `${giftAmount} Coins` : `${giftAmount} ${giftType.charAt(0).toUpperCase() + giftType.slice(1)}s`
 
-    // Send notification to friend via Firebase
+    // Send gift notification to recipient via Firebase
     try {
-      const notifRef = push(ref(db, `notifications/${selectedFriend}`))
-      void set(notifRef, {
-        type: 'gift',
-        fromPlayerId: playerId,
+      const giftNotifRef = push(ref(db, `userNotifications/${selectedFriend}`))
+      await set(giftNotifRef, {
+        type: 'gift_received',
         giftType,
         giftAmount,
+        fromPlayerId: playerId,
+        fromPlayerName: playerName || 'Player',
+        fromAvatar: playerAvatar || '😎',
         timestamp: Date.now(),
-        read: false,
+        delivered: false,
       })
-    } catch { /* silent */ }
+    } catch (err) {
+      console.warn('Failed to send gift notification:', err)
+    }
 
     incrementGiftCount()
     onAddNotification('Gift Sent! 🎁', `You sent ${giftLabel} to ${friendName}!`, 'reward', '🎁')
+    onSuccessPurchase(`${giftLabel} → ${friendName}`)
     setSending(false)
     setSelectedFriend(null)
-  }, [selectedFriend, giftsRemaining, giftType, giftAmount, coins, friends, playerId, onDeductCoins, onAddNotification, incrementGiftCount])
+  }, [selectedFriend, giftsRemaining, giftType, giftAmount, coins, friends, playerId, playerName, playerAvatar, onDeductCoins, onAddNotification, onSuccessPurchase, incrementGiftCount])
 
   const coinAmounts = [50, 100, 200, 500, 1000]
   const abilityAmounts = [1, 3, 5]
@@ -1583,8 +1593,16 @@ function GiftTab({ playerId, coins, onDeductCoins, onAddNotification }: {
 
 // ─── History Tab ─────────────────────────────────────────────────────────────
 
-function HistoryTab({ orders, onDeleteAll, onDeleteSelected }: { orders: StoreOrder[]; onDeleteAll: () => void; onDeleteSelected: (ids: string[]) => void }) {
+type HistoryFilter = 'all' | 'successful' | 'failed' | 'pending' | 'gift'
+
+function HistoryTab({ orders, onDeleteAll, onDeleteSelected, purchaseHistory }: { 
+  orders: StoreOrder[]; 
+  onDeleteAll: () => void; 
+  onDeleteSelected: (ids: string[]) => void;
+  purchaseHistory?: Array<{ id: string; date: string; item: string; amount: string; status: string; type: string }>;
+}) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('all')
 
   const toggleSelection = useCallback((id: string) => {
     setSelectedIds(prev => {
@@ -1595,15 +1613,85 @@ function HistoryTab({ orders, onDeleteAll, onDeleteSelected }: { orders: StoreOr
     })
   }, [])
 
+  // Combine orders and purchase history for filtering
+  const allHistoryItems = useMemo(() => {
+    const items: Array<{ id: string; date: string; item: string; amount: string; status: string; type: string; isGift?: boolean }> = []
+    // Add orders
+    for (const order of orders) {
+      items.push({
+        id: order.id,
+        date: order.date,
+        item: order.item,
+        amount: `₹${order.price}`,
+        status: order.status,
+        type: 'inr',
+      })
+    }
+    // Add purchase history (coin purchases, etc.)
+    if (purchaseHistory && Array.isArray(purchaseHistory)) {
+      for (const ph of purchaseHistory) {
+        items.push({
+          id: ph.id,
+          date: ph.date,
+          item: ph.item,
+          amount: ph.amount,
+          status: ph.status === 'Delivered' ? 'approved' : ph.status === 'Denied' ? 'rejected' : 'pending',
+          type: ph.type || 'coins',
+          isGift: ph.item?.toLowerCase().includes('gift'),
+        })
+      }
+    }
+    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }, [orders, purchaseHistory])
+
+  // Filter items based on selected filter
+  const filteredItems = useMemo(() => {
+    switch (historyFilter) {
+      case 'successful':
+        return allHistoryItems.filter(i => i.status === 'approved')
+      case 'failed':
+        return allHistoryItems.filter(i => i.status === 'rejected')
+      case 'pending':
+        return allHistoryItems.filter(i => i.status === 'pending')
+      case 'gift':
+        return allHistoryItems.filter(i => i.isGift || i.item?.toLowerCase().includes('gift'))
+      default:
+        return allHistoryItems
+    }
+  }, [allHistoryItems, historyFilter])
+
   const statusConfig: Record<string, { bg: string; color: string; label: string }> = {
     pending: { bg: 'rgba(255,167,38,0.15)', color: '#FFA726', label: 'Pending' },
-    approved: { bg: 'rgba(0,230,118,0.15)', color: '#00E676', label: 'Approved' },
-    rejected: { bg: 'rgba(246,94,59,0.15)', color: '#F65E3B', label: 'Rejected' },
+    approved: { bg: 'rgba(0,230,118,0.15)', color: '#00E676', label: 'Successful' },
+    rejected: { bg: 'rgba(246,94,59,0.15)', color: '#F65E3B', label: 'Failed' },
   }
+
+  const filterButtons: Array<{ key: HistoryFilter; label: string; color: string }> = [
+    { key: 'all', label: 'All', color: '#FFFFFF' },
+    { key: 'successful', label: '✅ Success', color: '#00E676' },
+    { key: 'failed', label: '❌ Failed', color: '#F65E3B' },
+    { key: 'pending', label: '⏳ Pending', color: '#FFA726' },
+    { key: 'gift', label: '🎁 Gift', color: '#E040FB' },
+  ]
 
   return (
     <div className="space-y-4">
-      {orders.length === 0 ? (
+      {/* Filter Buttons */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+        {filterButtons.map(btn => (
+          <button key={btn.key} onClick={() => setHistoryFilter(btn.key)}
+            className="px-2.5 py-1.5 rounded-lg text-[8px] font-bold whitespace-nowrap transition-all flex-shrink-0"
+            style={{
+              backgroundColor: historyFilter === btn.key ? `${btn.color}15` : 'rgba(255,255,255,0.03)',
+              border: historyFilter === btn.key ? `1px solid ${btn.color}40` : '1px solid rgba(255,255,255,0.06)',
+              color: historyFilter === btn.key ? btn.color : 'rgba(255,255,255,0.4)',
+            }}>
+            {btn.label}
+          </button>
+        ))}
+      </div>
+
+      {filteredItems.length === 0 ? (
         <div
           className="p-6 rounded-xl text-center"
           style={{
@@ -1623,7 +1711,7 @@ function HistoryTab({ orders, onDeleteAll, onDeleteSelected }: { orders: StoreOr
         <div>
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-xs font-extrabold" style={{ color: 'rgba(255,255,255,0.6)' }}>
-              ORDER HISTORY ({orders.length})
+              ORDER HISTORY ({filteredItems.length})
             </h4>
             <div className="flex items-center gap-1.5">
               {selectedIds.size > 0 && (
@@ -1651,12 +1739,12 @@ function HistoryTab({ orders, onDeleteAll, onDeleteSelected }: { orders: StoreOr
             </div>
           </div>
           <div className="space-y-2 max-h-96 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
-            {orders.map((order) => {
-              const sc = statusConfig[order.status] || statusConfig.pending
-              const isSelected = selectedIds.has(order.id)
+            {filteredItems.map((item) => {
+              const sc = statusConfig[item.status] || statusConfig.pending
+              const isSelected = selectedIds.has(item.id)
               return (
                 <motion.div
-                  key={order.id}
+                  key={item.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="flex items-start gap-2 p-3 rounded-xl"
@@ -1668,17 +1756,17 @@ function HistoryTab({ orders, onDeleteAll, onDeleteSelected }: { orders: StoreOr
                   <input
                     type="checkbox"
                     checked={isSelected}
-                    onChange={() => toggleSelection(order.id)}
+                    onChange={() => toggleSelection(item.id)}
                     className="mt-1 w-3 h-3 accent-amber-500 shrink-0 cursor-pointer"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between mb-1">
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold truncate" style={{ color: '#FFFFFF' }}>
-                          {order.item}
+                          {item.isGift && '🎁 '}{item.item}
                         </p>
                         <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                          {new Date(order.date).toLocaleString('en-IN', {
+                          {new Date(item.date).toLocaleString('en-IN', {
                             day: '2-digit',
                             month: 'short',
                             year: 'numeric',
@@ -1689,7 +1777,7 @@ function HistoryTab({ orders, onDeleteAll, onDeleteSelected }: { orders: StoreOr
                       </div>
                       <div className="text-right ml-2">
                         <p className="text-xs font-bold" style={{ color: '#EDC22E' }}>
-                          ₹{order.price}
+                          {item.amount}
                         </p>
                         <span
                           className="inline-block px-2 py-0.5 rounded-full text-[8px] font-bold"
@@ -1703,15 +1791,15 @@ function HistoryTab({ orders, onDeleteAll, onDeleteSelected }: { orders: StoreOr
                       </div>
                     </div>
 
-                    {/* Proof thumbnail if available */}
-                    {order.proofBase64 && (
+                    {/* Proof thumbnail and transaction details - only for INR orders */}
+                    {'proofBase64' in item && (item as any).proofBase64 && (
                       <div className="mt-2 flex items-center gap-2">
                         <div
                           className="w-8 h-8 rounded-lg overflow-hidden"
                           style={{ border: '1px solid rgba(255,255,255,0.08)' }}
                         >
                           <img
-                            src={order.proofBase64}
+                            src={(item as any).proofBase64}
                             alt="Proof"
                             width={32}
                             height={32}
@@ -1727,19 +1815,23 @@ function HistoryTab({ orders, onDeleteAll, onDeleteSelected }: { orders: StoreOr
                       </div>
                     )}
 
+                    {'transactionId' in item && (item as any).transactionId && (
                     <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
                       <p className="text-[8px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                        TX: {order.transactionId}
+                        TX: {(item as any).transactionId}
                       </p>
-                      {order.utrNumber && (
+                      {(item as any).utrNumber && (
                         <p className="text-[8px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                          UTR: {order.utrNumber}
+                          UTR: {(item as any).utrNumber}
                         </p>
                       )}
+                      {(item as any).whatsappNumber && (
                       <p className="text-[8px] font-mono" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                        WA: {order.whatsappNumber}
+                        WA: {(item as any).whatsappNumber}
                       </p>
+                      )}
                     </div>
+                    )}
                   </div>
                 </motion.div>
               )
@@ -2000,7 +2092,7 @@ async function recordCoinPurchaseToFirebase(record: CoinPurchaseRecord): Promise
 
 // ─── Main Store Component ────────────────────────────────────────────────────
 
-export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos, onAddRoomCards, onAddSpinTickets }: StoreProps) {
+export function Store({ isOpen, onClose, playerId, playerName, playerAvatar, userCode, coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos, onAddRoomCards, onAddSpinTickets }: StoreProps) {
   const [activeTab, setActiveTab] = useState<TabId>('coins')
   const [orders, setOrders] = useState<StoreOrder[]>(() => loadOrders())
   const [paymentModal, setPaymentModal] = useState<{ open: boolean; itemName: string; itemPrice: number; itemQuantity: number }>({
@@ -2013,6 +2105,16 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
   // Scratch card popup state
   const [showScratchCard, setShowScratchCard] = useState(false)
   const [scratchCoupon, setScratchCoupon] = useState({ code: '', discount: 0 })
+
+  // Success popup state
+  const [successPopup, setSuccessPopup] = useState<{ show: boolean; itemName: string }>({ show: false, itemName: '' })
+
+  const showSuccessPopup = useCallback((itemName: string) => {
+    setSuccessPopup({ show: true, itemName })
+    setTimeout(() => {
+      setSuccessPopup(prev => ({ ...prev, show: false }))
+    }, 2500)
+  }, [])
 
   // Listen for Firebase order status updates in real-time
   useEffect(() => {
@@ -2126,8 +2228,9 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
         'reward',
         item.emoji
       )
+      showSuccessPopup(`${item.emoji} ${item.name} x${item.quantity}`)
     },
-    [coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos, onAddSpinTickets, playerId, playerName, userCode]
+    [coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos, onAddSpinTickets, playerId, playerName, userCode, showSuccessPopup]
   )
 
   // Handle real-money purchase: open payment modal
@@ -2173,6 +2276,9 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
         )
       }
 
+      // Show success popup
+      showSuccessPopup(order.item)
+
       // Scratch card for ₹160+ purchases - generate random discount coupon for next purchase
       if (order.price >= 160) {
         const scratchDiscounts = [10, 15, 20, 25, 30, 50, 70]
@@ -2185,7 +2291,7 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
         }, 1500)
       }
     },
-    [orders, onAddNotification, onAddRoomCards, playerName, userCode]
+    [orders, onAddNotification, onAddRoomCards, playerName, userCode, showSuccessPopup]
   )
 
   const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
@@ -2650,7 +2756,7 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <RoomTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onAddRoomCards={onAddRoomCards} onAddNotification={onAddNotification} onDeductCoins={onDeductCoins} cart={cart} onAddToCart={addToCart} onUpdateCartQuantity={updateCartQuantity} playerId={playerId} playerName={playerName} userCode={userCode} />
+                    <RoomTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onAddRoomCards={onAddRoomCards} onAddNotification={onAddNotification} onDeductCoins={onDeductCoins} cart={cart} onAddToCart={addToCart} onUpdateCartQuantity={updateCartQuantity} playerId={playerId} playerName={playerName} userCode={userCode} onSuccessPurchase={showSuccessPopup} />
                   </motion.div>
                 )}
                 {activeTab === 'gift' && (
@@ -2661,7 +2767,7 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <GiftTab playerId={playerId} coins={coins} onDeductCoins={onDeductCoins} onAddNotification={onAddNotification} />
+                    <GiftTab playerId={playerId} playerName={playerName} playerAvatar={playerAvatar} coins={coins} onDeductCoins={onDeductCoins} onAddNotification={onAddNotification} onSuccessPurchase={showSuccessPopup} />
                   </motion.div>
                 )}
                 {activeTab === 'history' && (
@@ -2736,6 +2842,94 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
       couponCode={scratchCoupon.code}
       discountPercent={scratchCoupon.discount}
     />
+
+    {/* Order Success Popup */}
+    <AnimatePresence>
+      {successPopup.show && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 1.1, y: -20 }}
+          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+          onClick={() => setSuccessPopup(prev => ({ ...prev, show: false }))}
+          className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-auto"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+        >
+          <motion.div
+            initial={{ scale: 0.5, rotate: -5 }}
+            animate={{ scale: 1, rotate: 0 }}
+            exit={{ scale: 0.5, opacity: 0 }}
+            transition={{ type: 'spring', damping: 15, stiffness: 400 }}
+            className="relative px-8 py-6 rounded-3xl text-center max-w-xs w-full mx-4"
+            style={{
+              background: 'linear-gradient(135deg, #00C853, #00E676, #69F0AE)',
+              boxShadow: '0 8px 40px rgba(0,200,83,0.4), 0 0 80px rgba(0,230,118,0.2)',
+              border: '2px solid rgba(255,255,255,0.3)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Confetti dots */}
+            <div className="absolute inset-0 overflow-hidden rounded-3xl pointer-events-none">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, scale: 0, y: 0 }}
+                  animate={{
+                    opacity: [0, 1, 0],
+                    scale: [0, 1, 0.5],
+                    y: [0, -(30 + Math.random() * 40)],
+                    x: [(Math.random() - 0.5) * 100],
+                  }}
+                  transition={{ duration: 1.2, delay: i * 0.05, ease: 'easeOut' }}
+                  className="absolute w-2 h-2 rounded-full"
+                  style={{
+                    backgroundColor: ['#FFD600', '#FF6D00', '#E040FB', '#00B0FF', '#FF1744', '#76FF03'][i % 6],
+                    left: `${10 + Math.random() * 80}%`,
+                    top: `${40 + Math.random() * 30}%`,
+                  }}
+                />
+              ))}
+            </div>
+
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.1, type: 'spring', damping: 10, stiffness: 200 }}
+              className="text-4xl mb-2"
+            >
+              ✅
+            </motion.div>
+            <motion.h3
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="text-lg font-extrabold mb-1"
+              style={{ color: '#FFFFFF', textShadow: '0 2px 8px rgba(0,0,0,0.2)' }}
+            >
+              Order Successful!
+            </motion.h3>
+            <motion.p
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+              className="text-sm font-semibold"
+              style={{ color: 'rgba(255,255,255,0.9)' }}
+            >
+              {successPopup.itemName}
+            </motion.p>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              className="text-[10px] mt-2"
+              style={{ color: 'rgba(255,255,255,0.6)' }}
+            >
+              Tap to dismiss
+            </motion.p>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
     </>
   )
 }

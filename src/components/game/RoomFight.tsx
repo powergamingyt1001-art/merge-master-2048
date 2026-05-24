@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Copy, Lock, Users, Swords, Shield, Clock, Check, Search, ChevronRight, Zap, AlertTriangle, UserPlus } from 'lucide-react'
-import { onFriendsUpdate } from '@/lib/firebase-service'
+import { onFriendsUpdate, createRoomWithCode, joinRoomByCode, onRoomUpdate, type FirebaseRoom, type FirebaseRoomOpponent, updateRoomStatus, leaveRoom } from '@/lib/firebase-service'
 
 interface RoomFightProps {
   isOpen: boolean
@@ -81,14 +81,13 @@ const TIME_MODE_OPTIONS = [
 
 type GameMode = 'coin' | 'time'
 
-// Mock opponent data for the "searching" animation
-const MOCK_OPPONENTS = [
-  { name: 'BlazeKing', avatar: '🔥', level: 12 },
-  { name: 'ViperStrike', avatar: '🐍', level: 8 },
-  { name: 'StormRider', avatar: '⚡', level: 15 },
-  { name: 'NovaFlare', avatar: '💫', level: 6 },
-  { name: 'FangWolf', avatar: '🐺', level: 10 },
-]
+// Opponent info type for the connected opponent display
+interface ConnectedOpponent {
+  name: string
+  avatar: string
+  level: number
+  id?: string
+}
 
 function generateRoomCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000))
@@ -132,7 +131,12 @@ export function RoomFight({
 
   // Join Room states
   const [joinSearching, setJoinSearching] = useState(false)
-  const [joinOpponent, setJoinOpponent] = useState<typeof MOCK_OPPONENTS[0] | null>(null)
+  const [joinConnected, setJoinConnected] = useState(false)
+  const [joinOpponent, setJoinOpponent] = useState<ConnectedOpponent | null>(null)
+
+  // Firebase room state
+  const [firebaseRoom, setFirebaseRoom] = useState<FirebaseRoom | null>(null)
+  const roomUnsubscribeRef = useRef<(() => void) | null>(null)
 
   // Listen to friends list
   useEffect(() => {
@@ -225,7 +229,80 @@ export function RoomFight({
     return getCoinBetTotal() + getTaxAmount()
   }, [getCoinBetTotal, getTaxAmount])
 
-  const handleCreateRoom = useCallback(() => {
+  // Listen to Firebase room updates when waiting for opponent
+  useEffect(() => {
+    if (!waitingForOpponent || !createdRoomCode) return
+    const unsub = onRoomUpdate(createdRoomCode, (room) => {
+      if (room) {
+        setFirebaseRoom(room)
+        // Check if opponents have joined
+        const acceptedOpponents = (room.opponentIds || []).filter(o => o.status === 'accepted')
+        if (acceptedOpponents.length > 0) {
+          setTimeout(() => onAddNotification('Opponent Joined!', `${acceptedOpponents[0].name} has joined your room!`, 'system', '⚔️'), 0)
+        }
+      }
+    })
+    // Store unsub using a ref instead of setState to avoid lint error
+    roomUnsubscribeRef.current = unsub
+    return () => { unsub() }
+  }, [waitingForOpponent, createdRoomCode])
+
+  // Listen to Firebase room updates when joiner is waiting for host to start
+  useEffect(() => {
+    if (!joinConnected || !joinCode) return
+    const unsub = onRoomUpdate(joinCode, (room) => {
+      if (room) {
+        setFirebaseRoom(room)
+        // If host starts the game (status = playing), start the game for the joiner too
+        if (room.status === 'playing') {
+          setTimeout(() => {
+            const abilities: string[] = []
+            for (const betId of selectedBets) {
+              const item = ALL_BET_ITEMS.find(b => b.id === betId)
+              if (item) {
+                if (item.type === 'ability' && item.abilityType) {
+                  onDeductAbility(item.abilityType, item.amount)
+                  abilities.push(item.abilityType)
+                } else if (item.type === 'coins') {
+                  onDeductCoins(item.amount)
+                  abilities.push(`coins_${item.amount}`)
+                }
+              }
+            }
+            onStartRoomGame(room.timeLimit, abilities)
+            // Clean up
+            setJoinConnected(false)
+            setJoinOpponent(null)
+            setJoinCode('')
+            setJoinPassword('')
+            setShowJoinPassword(false)
+            setFirebaseRoom(null)
+          }, 0)
+        }
+      } else {
+        // Room was deleted
+        setTimeout(() => {
+          onAddNotification('Room Closed', 'The room has been closed by the host.', 'system', '❌')
+          setJoinConnected(false)
+          setJoinOpponent(null)
+          setJoinCode('')
+          setJoinPassword('')
+          setShowJoinPassword(false)
+          setFirebaseRoom(null)
+        }, 0)
+      }
+    })
+    // Store unsub using a ref instead of setState to avoid lint error
+    roomUnsubscribeRef.current = unsub
+    return () => { unsub() }
+  }, [joinConnected, joinCode])
+
+  // Clean up room listener on unmount
+  useEffect(() => {
+    return () => { if (roomUnsubscribeRef.current) roomUnsubscribeRef.current() }
+  }, [])
+
+  const handleCreateRoom = useCallback(async () => {
     if (roomCardCount < 1) {
       onAddNotification('No Room Cards', 'You need at least 1 Room Card to create a room.', 'system', '🃏')
       return
@@ -260,6 +337,43 @@ export function RoomFight({
     }
 
     const code = generateRoomCode()
+
+    // Build abilities list
+    const abilities: string[] = []
+    for (const betId of selectedBets) {
+      const item = ALL_BET_ITEMS.find(b => b.id === betId)
+      if (item) {
+        if (item.type === 'ability' && item.abilityType) {
+          abilities.push(item.abilityType)
+        } else if (item.type === 'coins') {
+          abilities.push(`coins_${item.amount}`)
+        }
+      }
+    }
+
+    // Create room in Firebase
+    const roomId = await createRoomWithCode({
+      code,
+      creatorId: playerId,
+      creatorName: playerName || 'Player',
+      creatorAvatar: playerAvatar || '😎',
+      creatorLevel: playerLevel || 1,
+      creatorUserCode: userCode,
+      password: roomPassword || undefined,
+      coinAmount: coinTotal,
+      timeLimit: selectedTimer,
+      mode: gameMode,
+      abilities,
+      opponentIds: [],
+      taxAmount: tax,
+      playerCount,
+    })
+
+    if (!roomId) {
+      onAddNotification('Error', 'Failed to create room. Please try again.', 'system', '❌')
+      return
+    }
+
     setCreatedRoomCode(code)
     setCreatedRoom({ code, password: roomPassword })
     setWaitingForOpponent(true)
@@ -269,7 +383,7 @@ export function RoomFight({
       onDeductCoins(tax)
     }
     onAddNotification('Room Created!', `Room ${code} created. Share the code with your opponent!${tax > 0 ? ` (5% tax: ${tax.toLocaleString()} 💰)` : ''}`, 'system', '🏠')
-  }, [roomCardCount, selectedBets, roomPassword, onUseRoomCard, onAddNotification, canAffordBet, coins, getCoinBetTotal, onDeductCoins])
+  }, [roomCardCount, selectedBets, roomPassword, onUseRoomCard, onAddNotification, canAffordBet, coins, getCoinBetTotal, onDeductCoins, playerId, playerName, playerAvatar, playerLevel, userCode, selectedTimer, gameMode, playerCount])
 
   const handleCopyRoomCode = useCallback(() => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -279,7 +393,7 @@ export function RoomFight({
     }
   }, [createdRoomCode])
 
-  const handleJoinRoom = useCallback(() => {
+  const handleJoinRoom = useCallback(async () => {
     if (!joinCode || joinCode.length < 6) {
       onAddNotification('Invalid Code', 'Please enter a valid 6-digit room code.', 'system', '❌')
       return
@@ -292,16 +406,47 @@ export function RoomFight({
     }
 
     setJoinSearching(true)
-    // Simulate finding the room and opponent
-    setTimeout(() => {
-      const opponent = MOCK_OPPONENTS[Math.floor(Math.random() * MOCK_OPPONENTS.length)]
-      setJoinOpponent(opponent)
-    }, 2000)
-  }, [joinCode, onAddNotification, coins])
 
-  const handleAcceptJoin = useCallback(() => {
-    if (!joinOpponent) return
-    // Deduct the selected abilities/coins for joining
+    try {
+      const result = await joinRoomByCode(
+        joinCode,
+        {
+          id: playerId,
+          name: playerName || 'Player',
+          avatar: playerAvatar || '😎',
+          level: playerLevel || 1,
+          userCode,
+        },
+        showJoinPassword ? joinPassword : undefined
+      )
+
+      if (result.success && result.room) {
+        // Instant connection - show the room creator's actual info
+        const room = result.room
+        setJoinOpponent({
+          name: room.creatorName,
+          avatar: room.creatorAvatar,
+          level: room.creatorLevel,
+          id: room.creatorId,
+        })
+        setJoinSearching(false)
+        setJoinConnected(true)
+        setFirebaseRoom(room)
+        onAddNotification('Connected!', `You've joined ${room.creatorName}'s room!`, 'system', '✅')
+      } else {
+        setJoinSearching(false)
+        onAddNotification('Join Failed', result.reason || 'Could not join room.', 'system', '❌')
+      }
+    } catch {
+      setJoinSearching(false)
+      onAddNotification('Error', 'Failed to join room. Please try again.', 'system', '❌')
+    }
+  }, [joinCode, onAddNotification, coins, playerId, playerName, playerAvatar, playerLevel, userCode, showJoinPassword, joinPassword])
+
+  // Host clicks "Play" to start the game
+  const handleStartGame = useCallback(() => {
+    if (!firebaseRoom || !createdRoomCode) return
+    // Deduct the selected abilities/coins for the creator
     const abilities: string[] = []
     for (const betId of selectedBets) {
       const item = ALL_BET_ITEMS.find(b => b.id === betId)
@@ -315,30 +460,46 @@ export function RoomFight({
         }
       }
     }
-    onStartRoomGame(55, abilities)
-    setJoinSearching(false)
-    setJoinOpponent(null)
-    setJoinCode('')
-    setJoinPassword('')
-    setShowJoinPassword(false)
-  }, [joinOpponent, selectedBets, onDeductAbility, onDeductCoins, onStartRoomGame])
+    // Update room status to playing
+    updateRoomStatus(createdRoomCode, 'playing')
+    onStartRoomGame(firebaseRoom.timeLimit, abilities)
+    // Clean up
+    setWaitingForOpponent(false)
+    setCreatedRoom(null)
+    setCreatedRoomCode('')
+    setFirebaseRoom(null)
+    if (roomUnsubscribeRef.current) roomUnsubscribeRef.current()
+  }, [firebaseRoom, createdRoomCode, selectedBets, onDeductAbility, onDeductCoins, onStartRoomGame])
 
   const handleCancelJoin = useCallback(() => {
+    // Leave the room if we're connected
+    if (joinConnected && joinCode && playerId) {
+      leaveRoom(joinCode, playerId)
+    }
     setJoinSearching(false)
+    setJoinConnected(false)
     setJoinOpponent(null)
     setJoinCode('')
     setJoinPassword('')
     setShowJoinPassword(false)
-  }, [])
+    setFirebaseRoom(null)
+    if (roomUnsubscribeRef.current) roomUnsubscribeRef.current()
+  }, [joinConnected, joinCode, playerId])
 
   const handleCancelCreate = useCallback(() => {
+    // Delete the room from Firebase
+    if (createdRoomCode && playerId) {
+      leaveRoom(createdRoomCode, playerId)
+    }
     setWaitingForOpponent(false)
     setCreatedRoom(null)
     setCreatedRoomCode('')
     setRoomPassword('')
     setSelectedBets(new Set())
     setInvitedFriends([])
-  }, [])
+    setFirebaseRoom(null)
+    if (roomUnsubscribeRef.current) roomUnsubscribeRef.current()
+  }, [createdRoomCode, playerId])
 
   const handleClose = useCallback(() => {
     handleCancelCreate()
@@ -385,7 +546,7 @@ export function RoomFight({
             </div>
 
             {/* Tab Switcher */}
-            {!waitingForOpponent && !joinSearching && (
+            {!waitingForOpponent && !joinSearching && !joinConnected && (
               <div className="mx-4 mb-3 flex items-center gap-1.5">
                 {(['create', 'join', 'random', 'info'] as RoomTab[]).map(tab => (
                   <button key={tab} onClick={() => setActiveTab(tab)}
@@ -718,24 +879,59 @@ export function RoomFight({
                 </div>
               )}
 
-              {/* Waiting for Opponent / Searching Animation */}
+              {/* Waiting for Opponent / Opponent Joined */}
               {activeTab === 'create' && waitingForOpponent && (
                 <div className="space-y-3">
                   <div className="flex flex-col items-center py-4">
                     <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                      animate={{ rotate: firebaseRoom && (firebaseRoom.opponentIds || []).some(o => o.status === 'accepted') ? 0 : 360 }}
+                      transition={{ duration: 2, repeat: firebaseRoom && (firebaseRoom.opponentIds || []).some(o => o.status === 'accepted') ? 0 : Infinity, ease: 'linear' }}
                       className="w-14 h-14 rounded-full flex items-center justify-center mb-3"
-                      style={{ background: 'linear-gradient(135deg, #F65E3B, #FF7A00)', boxShadow: '0 0 25px rgba(246,94,59,0.5)' }}>
-                      <Search className="w-7 h-7" style={{ color: '#FFFFFF' }} />
+                      style={{ background: firebaseRoom && (firebaseRoom.opponentIds || []).some(o => o.status === 'accepted') ? 'linear-gradient(135deg, #00E676, #00C853)' : 'linear-gradient(135deg, #F65E3B, #FF7A00)', boxShadow: firebaseRoom && (firebaseRoom.opponentIds || []).some(o => o.status === 'accepted') ? '0 0 25px rgba(0,230,118,0.5)' : '0 0 25px rgba(246,94,59,0.5)' }}>
+                      {firebaseRoom && (firebaseRoom.opponentIds || []).some(o => o.status === 'accepted') ? (
+                        <Check className="w-7 h-7" style={{ color: '#FFFFFF' }} />
+                      ) : (
+                        <Search className="w-7 h-7" style={{ color: '#FFFFFF' }} />
+                      )}
                     </motion.div>
-                    <motion.p
-                      animate={{ opacity: [0.5, 1, 0.5] }}
-                      transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                      className="text-sm font-bold" style={{ color: '#FFFFFF' }}>
-                      Searching for players...
-                    </motion.p>
-                    <p className="text-[9px] mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Waiting for {playerCount - 1} opponent{playerCount > 2 ? 's' : ''} • Share code:</p>
+                    
+                    {firebaseRoom && (firebaseRoom.opponentIds || []).some(o => o.status === 'accepted') ? (
+                      <>
+                        <p className="text-sm font-bold" style={{ color: '#00E676' }}>🎉 Opponent Joined!</p>
+                        {/* Show joined opponents */}
+                        <div className="flex items-center gap-4 mt-3">
+                          <div className="flex flex-col items-center">
+                            <div className="w-14 h-14 rounded-full flex items-center justify-center"
+                              style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', border: '2px solid rgba(255,255,255,0.3)' }}>
+                              <span className="text-2xl">{playerAvatar || '😎'}</span>
+                            </div>
+                            <p className="text-[9px] font-bold mt-1" style={{ color: '#FFFFFF' }}>{playerName || 'You'}</p>
+                            <p className="text-[7px]" style={{ color: '#EDC22E' }}>Lv.{playerLevel || 1}</p>
+                          </div>
+                          <span className="text-xl font-black" style={{ color: '#F65E3B' }}>VS</span>
+                          {(firebaseRoom.opponentIds || []).filter(o => o.status === 'accepted').map(opponent => (
+                            <div key={opponent.id} className="flex flex-col items-center">
+                              <div className="w-14 h-14 rounded-full flex items-center justify-center"
+                                style={{ background: 'linear-gradient(135deg, #F65E3B, #FF7A00)', border: '2px solid rgba(255,255,255,0.3)' }}>
+                                <span className="text-2xl">{opponent.avatar}</span>
+                              </div>
+                              <p className="text-[9px] font-bold mt-1" style={{ color: '#FFFFFF' }}>{opponent.name}</p>
+                              <p className="text-[7px]" style={{ color: '#F65E3B' }}>Lv.{opponent.level}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <motion.p
+                          animate={{ opacity: [0.5, 1, 0.5] }}
+                          transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                          className="text-sm font-bold" style={{ color: '#FFFFFF' }}>
+                          Searching for players...
+                        </motion.p>
+                        <p className="text-[9px] mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Waiting for {playerCount - 1} opponent{playerCount > 2 ? 's' : ''} • Share code:</p>
+                      </>
+                    )}
 
                     {/* Room Code Display */}
                     <div className="flex items-center gap-2 mt-2 px-4 py-2 rounded-xl"
@@ -778,16 +974,32 @@ export function RoomFight({
                     </div>
                   </div>
 
-                  <button onClick={handleCancelCreate}
-                    className="w-full py-2.5 rounded-xl font-bold text-[10px] transition-transform active:scale-95"
-                    style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' }}>
-                    CANCEL ROOM
-                  </button>
+                  {/* Play button (when opponent joined) or Cancel */}
+                  {firebaseRoom && (firebaseRoom.opponentIds || []).some(o => o.status === 'accepted') ? (
+                    <div className="flex gap-2">
+                      <button onClick={handleCancelCreate}
+                        className="flex-1 py-3 rounded-xl font-bold text-[10px] transition-transform active:scale-95"
+                        style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' }}>
+                        CANCEL
+                      </button>
+                      <button onClick={handleStartGame}
+                        className="flex-1 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
+                        style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF', boxShadow: '0 4px 15px rgba(0,230,118,0.3)' }}>
+                        <Swords className="w-4 h-4" /> PLAY!
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={handleCancelCreate}
+                      className="w-full py-2.5 rounded-xl font-bold text-[10px] transition-transform active:scale-95"
+                      style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' }}>
+                      CANCEL ROOM
+                    </button>
+                  )}
                 </div>
               )}
 
               {/* ===== JOIN ROOM TAB ===== */}
-              {activeTab === 'join' && !joinSearching && (
+              {activeTab === 'join' && !joinSearching && !joinConnected && (
                 <div className="space-y-3">
                   <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                     <div className="flex items-center gap-1.5 mb-2">
@@ -908,11 +1120,11 @@ export function RoomFight({
                 </div>
               )}
 
-              {/* Join Opponent Found */}
-              {activeTab === 'join' && joinSearching && joinOpponent && (
+              {/* Join Connected - Waiting for host to start */}
+              {activeTab === 'join' && joinConnected && joinOpponent && (
                 <div className="space-y-3">
                   <div className="flex flex-col items-center py-3">
-                    <p className="text-[10px] font-bold mb-3" style={{ color: '#00E676' }}>🎉 Opponent Found!</p>
+                    <p className="text-[10px] font-bold mb-3" style={{ color: '#00E676' }}>✅ Connected!</p>
                     <div className="flex items-center gap-6">
                       <div className="flex flex-col items-center">
                         <div className="w-14 h-14 rounded-full flex items-center justify-center"
@@ -935,18 +1147,20 @@ export function RoomFight({
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
-                    <button onClick={handleCancelJoin}
-                      className="flex-1 py-2.5 rounded-xl font-bold text-[10px] transition-transform active:scale-95"
-                      style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' }}>
-                      CANCEL
-                    </button>
-                    <button onClick={handleAcceptJoin}
-                      className="flex-1 py-2.5 rounded-xl font-bold text-[10px] flex items-center justify-center gap-1.5 transition-transform active:scale-95"
-                      style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF', boxShadow: '0 4px 12px rgba(0,230,118,0.3)' }}>
-                      <Check className="w-3.5 h-3.5" /> ACCEPT
-                    </button>
-                  </div>
+                  <motion.div
+                    animate={{ opacity: [0.5, 1, 0.5] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                    className="p-3 rounded-xl text-center"
+                    style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.2)' }}>
+                    <p className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>⏳ Waiting for host to start...</p>
+                    <p className="text-[8px] mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>{joinOpponent.name} will start the game</p>
+                  </motion.div>
+
+                  <button onClick={handleCancelJoin}
+                    className="w-full py-2.5 rounded-xl font-bold text-[10px] transition-transform active:scale-95"
+                    style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' }}>
+                    LEAVE ROOM
+                  </button>
                 </div>
               )}
 

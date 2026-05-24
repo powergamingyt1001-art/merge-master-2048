@@ -928,6 +928,94 @@ export async function getTotalReferralsCount(): Promise<number> {
 }
 
 // ============================================================
+// GIFT SYSTEM - Send gifts to friends
+// ============================================================
+
+export interface GiftNotification {
+  type: 'gift_received'
+  giftType: 'coins' | 'hammer' | 'magnet' | 'blast'
+  giftAmount: number
+  fromPlayerId: string
+  fromPlayerName: string
+  fromAvatar: string
+  timestamp: number
+  delivered: boolean
+}
+
+/**
+ * Send a gift notification to a recipient user via Firebase.
+ * Writes to userNotifications/{recipientId} so the recipient can receive it in real-time.
+ */
+export async function sendGiftToUser(
+  recipientId: string,
+  gift: Omit<GiftNotification, 'type' | 'timestamp' | 'delivered'>
+): Promise<{ success: boolean }> {
+  try {
+    const giftNotifRef = push(ref(db, `userNotifications/${recipientId}`))
+    await set(giftNotifRef, {
+      type: 'gift_received',
+      giftType: gift.giftType,
+      giftAmount: gift.giftAmount,
+      fromPlayerId: gift.fromPlayerId,
+      fromPlayerName: gift.fromPlayerName,
+      fromAvatar: gift.fromAvatar,
+      timestamp: Date.now(),
+      delivered: false,
+    } satisfies GiftNotification)
+    return { success: true }
+  } catch (err) {
+    console.warn('Firebase sendGiftToUser failed:', err)
+    return { success: false }
+  }
+}
+
+/**
+ * Listen for gift notifications for a user in real-time.
+ */
+export function onGiftNotificationsUpdate(
+  playerId: string,
+  callback: (gifts: Array<{ id: string } & GiftNotification>) => void
+): () => void {
+  try {
+    const notifRef = ref(db, `userNotifications/${playerId}`)
+    const handler = onValue(notifRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const gifts: Array<{ id: string } & GiftNotification> = []
+        snapshot.forEach((child) => {
+          const data = child.val()
+          if (data.type === 'gift_received') {
+            gifts.push({ id: child.key!, ...data })
+          }
+        })
+        callback(gifts.sort((a, b) => b.timestamp - a.timestamp))
+      } else {
+        callback([])
+      }
+    })
+    return () => off(notifRef, 'value', handler)
+  } catch (err) {
+    console.warn('Firebase onGiftNotificationsUpdate failed:', err)
+    callback([])
+    return () => {}
+  }
+}
+
+/**
+ * Mark a gift notification as delivered.
+ */
+export async function markGiftDelivered(
+  playerId: string,
+  notificationId: string
+): Promise<void> {
+  try {
+    const notifRef = ref(db, `userNotifications/${playerId}/${notificationId}`)
+    await update(notifRef, { delivered: true })
+  } catch (err) {
+    console.warn('Firebase markGiftDelivered failed:', err)
+  }
+}
+
+// ============================================================
 // MATCHMAKING SYSTEM - Real-time player matching for battles
 // ============================================================
 
@@ -1981,23 +2069,75 @@ export interface FirebaseRoomOpponent {
 
 export interface FirebaseRoom {
   id: string
+  code: string
   creatorId: string
   creatorName: string
   creatorAvatar: string
   creatorLevel: number
   creatorUserCode: string
+  password?: string
   opponentIds: FirebaseRoomOpponent[]
   coinAmount: number
   timeLimit: number
   mode: 'coin' | 'time'
   abilities: string[]
-  status: 'waiting' | 'playing' | 'finished'
+  status: 'waiting' | 'ready' | 'playing' | 'finished'
   createdAt: number
   winnerId: string | null
   taxAmount: number
+  playerCount: number
 }
 
-// Create a new room
+// Create a new room using a 6-digit code as the key
+export async function createRoomWithCode(roomData: {
+  code: string
+  creatorId: string
+  creatorName: string
+  creatorAvatar: string
+  creatorLevel: number
+  creatorUserCode: string
+  password?: string
+  coinAmount: number
+  timeLimit: number
+  mode: 'coin' | 'time'
+  abilities: string[]
+  opponentIds: FirebaseRoomOpponent[]
+  taxAmount: number
+  playerCount: number
+}): Promise<string> {
+  try {
+    const roomRef = ref(db, `rooms/${roomData.code}`)
+
+    const room: FirebaseRoom = {
+      id: roomData.code,
+      code: roomData.code,
+      creatorId: roomData.creatorId,
+      creatorName: roomData.creatorName,
+      creatorAvatar: roomData.creatorAvatar,
+      creatorLevel: roomData.creatorLevel,
+      creatorUserCode: roomData.creatorUserCode,
+      password: roomData.password || '',
+      opponentIds: roomData.opponentIds,
+      coinAmount: roomData.coinAmount,
+      timeLimit: roomData.timeLimit,
+      mode: roomData.mode,
+      abilities: roomData.abilities,
+      status: 'waiting',
+      createdAt: Date.now(),
+      winnerId: null,
+      taxAmount: roomData.taxAmount,
+      playerCount: roomData.playerCount,
+    }
+
+    await set(roomRef, room)
+    return roomData.code
+  } catch (err) {
+    console.warn('Firebase createRoomWithCode failed:', err)
+    return ''
+  }
+}
+
+// Create a new room (legacy push-based, kept for compatibility)
 export async function createRoom(roomData: {
   creatorId: string
   creatorName: string
@@ -2017,6 +2157,7 @@ export async function createRoom(roomData: {
 
     const room: FirebaseRoom = {
       id: roomId,
+      code: roomId,
       creatorId: roomData.creatorId,
       creatorName: roomData.creatorName,
       creatorAvatar: roomData.creatorAvatar,
@@ -2031,6 +2172,7 @@ export async function createRoom(roomData: {
       createdAt: Date.now(),
       winnerId: null,
       taxAmount: roomData.taxAmount,
+      playerCount: 2,
     }
 
     await set(roomRef, room)
@@ -2041,7 +2183,78 @@ export async function createRoom(roomData: {
   }
 }
 
-// Join a room as an opponent (accept invitation)
+// Join a room by code - adds the player as an opponent instantly (no invite needed)
+export async function joinRoomByCode(
+  code: string,
+  player: { id: string; name: string; avatar: string; level: number; userCode: string },
+  password?: string
+): Promise<{ success: boolean; reason?: string; room?: FirebaseRoom }> {
+  try {
+    const roomRef = ref(db, `rooms/${code}`)
+    const snapshot = await get(roomRef)
+    if (!snapshot.exists()) {
+      return { success: false, reason: 'Room not found' }
+    }
+
+    const room = snapshot.val() as FirebaseRoom
+    if (room.status !== 'waiting' && room.status !== 'ready') {
+      return { success: false, reason: 'Room is no longer available' }
+    }
+
+    // Check password if the room has one
+    if (room.password && room.password !== password) {
+      return { success: false, reason: 'Incorrect password' }
+    }
+
+    // Don't allow the creator to join their own room
+    if (room.creatorId === player.id) {
+      return { success: false, reason: 'You cannot join your own room' }
+    }
+
+    // Check if already joined
+    const alreadyJoined = (room.opponentIds || []).find(o => o.id === player.id)
+    if (alreadyJoined && alreadyJoined.status === 'accepted') {
+      return { success: false, reason: 'You have already joined this room' }
+    }
+
+    // Check if room is full
+    const acceptedOpponents = (room.opponentIds || []).filter(o => o.status === 'accepted')
+    const maxOpponents = (room.playerCount || 2) - 1
+    if (acceptedOpponents.length >= maxOpponents) {
+      return { success: false, reason: 'Room is full' }
+    }
+
+    // Add the player as an opponent with 'accepted' status (instant, no accept step)
+    const newOpponent: FirebaseRoomOpponent = {
+      id: player.id,
+      name: player.name,
+      avatar: player.avatar,
+      level: player.level,
+      userCode: player.userCode,
+      status: 'accepted',
+    }
+
+    // Remove any previous pending/declined entry for this player, then add
+    let updatedOpponents = (room.opponentIds || []).filter(o => o.id !== player.id)
+    updatedOpponents = [...updatedOpponents, newOpponent]
+
+    // Check if we have enough opponents to be ready
+    const allAcceptedCount = updatedOpponents.filter(o => o.status === 'accepted').length
+    const newStatus = allAcceptedCount >= maxOpponents ? 'ready' as const : 'waiting' as const
+
+    await update(roomRef, {
+      opponentIds: updatedOpponents,
+      status: newStatus,
+    })
+
+    return { success: true, room: { ...room, opponentIds: updatedOpponents, status: newStatus } }
+  } catch (err) {
+    console.warn('Firebase joinRoomByCode failed:', err)
+    return { success: false, reason: 'Network error' }
+  }
+}
+
+// Join a room as an opponent (accept invitation) - legacy
 export async function joinRoom(
   roomId: string,
   playerId: string
@@ -2054,7 +2267,7 @@ export async function joinRoom(
     }
 
     const room = snapshot.val() as FirebaseRoom
-    if (room.status !== 'waiting') {
+    if (room.status !== 'waiting' && room.status !== 'ready') {
       return { success: false, reason: 'Room is no longer waiting' }
     }
 
@@ -2072,8 +2285,9 @@ export async function joinRoom(
     }
 
     // Check if all opponents have accepted (room can start)
-    const allAccepted = updatedOpponents.every(o => o.status === 'accepted')
-    const newStatus = allAccepted ? 'playing' as const : 'waiting' as const
+    const maxOpponents = (room.playerCount || 2) - 1
+    const allAccepted = updatedOpponents.filter(o => o.status === 'accepted').length >= maxOpponents
+    const newStatus = allAccepted ? 'ready' as const : 'waiting' as const
 
     await update(roomRef, {
       opponentIds: updatedOpponents,

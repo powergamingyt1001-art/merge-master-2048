@@ -1,11 +1,63 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, Component, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon, Copy, Percent, Package, TrendingUp, DollarSign, Send, Lock, UserCheck, Filter, Save, Database } from 'lucide-react'
 import { getTotalUserCount, getOnlineUserCount, getTotalReferralsCount, checkAdminPassword, setAdminPassword as firebaseSetAdminPassword, authenticatePartner, getPartners as firebaseGetPartners, savePartner as firebaseSavePartner, deletePartner as firebaseDeletePartner, onOrdersUpdate, updateOrderStatus as firebaseUpdateOrderStatus, deliverOrderItems, broadcastCoupon as firebaseBroadcastCoupon, broadcastDailyTask as firebaseBroadcastDailyTask, onCouponBroadcast, type FirebaseStoreOrder, type PartnerData } from '@/lib/firebase-service'
 import { db } from '@/lib/firebase'
 import { ref, onValue } from 'firebase/database'
+
+// ============================================================
+// ADMIN ERROR BOUNDARY - Catches rendering errors in admin panel
+// ============================================================
+interface AdminErrorBoundaryState {
+  hasError: boolean
+  error: string
+}
+
+class AdminErrorBoundary extends Component<
+  { children: ReactNode; onError: (msg: string) => void },
+  AdminErrorBoundaryState
+> {
+  constructor(props: { children: ReactNode; onError: (msg: string) => void }) {
+    super(props)
+    this.state = { hasError: false, error: '' }
+  }
+
+  static getDerivedStateFromError(error: Error): AdminErrorBoundaryState {
+    return { hasError: true, error: error.message || 'Unknown error' }
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Admin Panel Error:', error, errorInfo)
+    this.props.onError(error.message || 'Admin panel encountered an error')
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center p-6 text-center gap-3">
+          <div className="w-16 h-16 rounded-full flex items-center justify-center"
+            style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.3)' }}>
+            <AlertCircle className="w-8 h-8" style={{ color: '#F65E3B' }} />
+          </div>
+          <p className="text-xs font-bold" style={{ color: '#F65E3B' }}>Admin Panel Error</p>
+          <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            Something went wrong rendering the admin panel.
+          </p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: '' })}
+            className="px-4 py-2 rounded-lg text-[10px] font-bold transition-transform active:scale-95"
+            style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}
+          >
+            🔄 Try Again
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 interface CouponCodeProps {
   isOpen: boolean
@@ -835,6 +887,9 @@ export function CouponCode({
     setTimeout(() => setAdminError(''), 5000)
   }, [])
 
+  // Loading state for admin password check
+  const [checkingAdmin, setCheckingAdmin] = useState(false)
+
   // Coupon sub-tab state (Day/Night, Create, Discount)
   const [couponSubTab, setCouponSubTab] = useState<'daynight' | 'create' | 'discount' | 'scratch'>('daynight')
 
@@ -956,7 +1011,7 @@ export function CouponCode({
       setDiscountCoupons(loadDiscountCoupons())
       setAdminDailyTasks(loadAdminDailyTasks())
       // Load partners from Firebase
-      firebaseGetPartners().then(p => setPartnerList(p)).catch(() => {})
+      firebaseGetPartners().then(p => setPartnerList(Array.isArray(p) ? p : [])).catch(() => { setPartnerList([]) })
       // Load user stats from Firebase
       setUserStatsLoading(true)
       Promise.all([getTotalUserCount(), getOnlineUserCount(), getTotalReferralsCount()])
@@ -1012,8 +1067,12 @@ export function CouponCode({
       coinUnsubscribe = onValue(coinPurchasesRef, (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.val()
-          const purchases = Object.values(data) as any[]
-          setFirebaseCoinPurchases(purchases)
+          try {
+            const purchases = Object.values(data) as any[]
+            setFirebaseCoinPurchases(Array.isArray(purchases) ? purchases : [])
+          } catch {
+            setFirebaseCoinPurchases([])
+          }
         } else {
           setFirebaseCoinPurchases([])
         }
@@ -1162,6 +1221,7 @@ export function CouponCode({
 
   // Handle claim
   const handleClaim = useCallback(async () => {
+    if (checkingAdmin) return // Prevent double-submit
     try {
     const code = codeInput.trim().toUpperCase()
     if (!code) {
@@ -1172,20 +1232,29 @@ export function CouponCode({
       // Check for admin access code FIRST (before any other check)
     // Check against Firebase admin password and partner passwords
     if (code.length >= 4) {
-      // Try admin password check
+      // Try admin password check with loading state and error handling
       try {
+        setCheckingAdmin(true)
         const isAdmin = await checkAdminPassword(code)
         if (isAdmin) {
           setAdminRole('admin')
           setShowAdminPanel(true)
           setCodeInput('')
           setStatusMessage(null)
+          setCheckingAdmin(false)
           return
         }
-      } catch { /* ignore */ }
+        setCheckingAdmin(false)
+      } catch (err) {
+        setCheckingAdmin(false)
+        // Firebase unreachable - show clear error message
+        setStatusMessage({ text: 'Network error. Check your connection and try again.', type: 'error' })
+        return
+      }
 
       // Try partner password check
       try {
+        setCheckingAdmin(true)
         const partner = await authenticatePartner(code)
         if (partner) {
           setAdminRole('partner')
@@ -1206,9 +1275,16 @@ export function CouponCode({
           setShowAdminPanel(true)
           setCodeInput('')
           setStatusMessage(null)
+          setCheckingAdmin(false)
           return
         }
-      } catch { /* ignore */ }
+        setCheckingAdmin(false)
+      } catch (err) {
+        setCheckingAdmin(false)
+        // Firebase unreachable for partner auth - show clear error
+        setStatusMessage({ text: 'Network error. Check your connection and try again.', type: 'error' })
+        return
+      }
     }
 
     // Check built-in admin codes
@@ -1419,7 +1495,7 @@ export function CouponCode({
       // Never crash on coupon claim
       setStatusMessage({ text: 'Something went wrong. Please try again.', type: 'error' })
     }
-  }, [codeInput, claimHistory, customCodes, firebaseCoupons, pickRandomReward, applyReward, applyAdminReward, applyCustomReward, dayCodeSettings, nightCodeSettings, onAddCoins, onAddPowerUp, onAddSpinTickets, onAddNotification])
+  }, [codeInput, claimHistory, customCodes, firebaseCoupons, pickRandomReward, applyReward, applyAdminReward, applyCustomReward, dayCodeSettings, nightCodeSettings, onAddCoins, onAddPowerUp, onAddSpinTickets, onAddNotification, checkingAdmin])
 
   // ===== ADMIN PANEL HANDLERS =====
 
@@ -1465,11 +1541,17 @@ export function CouponCode({
       import('firebase/database').then(({ ref, onValue }) => {
         const coinRef = ref(db, 'coinPurchases')
         unsub = onValue(coinRef, (snap) => {
-          const data = snap.val()
-          if (data) {
-            const arr = Object.values(data).sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0))
-            setFirebaseCoinPurchases(arr as any[])
-          } else {
+          try {
+            const data = snap.val()
+            if (data) {
+              const arr = Object.values(data) as any[]
+              const safeArr = Array.isArray(arr) ? arr : []
+              const sorted = safeArr.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0))
+              setFirebaseCoinPurchases(sorted)
+            } else {
+              setFirebaseCoinPurchases([])
+            }
+          } catch {
             setFirebaseCoinPurchases([])
           }
         })
@@ -1858,50 +1940,62 @@ export function CouponCode({
   // Admin panel: Firebase orders are the PRIMARY source for cross-device access.
   // localStorage storeOrders are only used as fallback for orders that haven't synced to Firebase yet.
   // purchaseHistory (local coupon claims) is NOT included in admin view - admin only sees store orders.
-  const mergedAllPurchases: PurchaseHistoryEntry[] = [
-    // Firebase orders first (cross-device, real-time, source of truth)
-    ...firebaseOrders.map(fo => {
-      const safeItems = Array.isArray(fo.items) ? fo.items : []
-      const itemStr = safeItems.length > 0 ? safeItems.map(i => `${i.name || 'Item'} x${i.quantity || 1}`).join(', ') : (fo.playerName || 'Unknown Order')
-      const isInrAbility = itemStr.includes('5x') || itemStr.includes('2.5x')
-      return {
-        id: `store_${fo.id}`,
-        date: fo.date || new Date().toISOString(),
-        item: itemStr,
-        amount: `₹${fo.finalAmount || fo.totalAmount || 0}`,
-        status: (fo.status === 'pending' ? 'Pending' : fo.status === 'approved' ? 'Delivered' : 'Denied') as 'Pending' | 'Delivered' | 'Denied',
-        type: (isInrAbility ? 'inr_ability' : 'coins') as 'coins' | 'ability' | 'inr_ability',
-        transactionId: fo.transactionId,
-        whatsappNumber: fo.whatsappNumber,
-        buyerName: fo.name,
-        screenshotDataUrl: fo.proofBase64,
-        coinAmount: isInrAbility ? undefined : safeItems.reduce((s, i) => s + (i.quantity || 0), 0),
-        abilityType: isInrAbility ? (itemStr.includes('5x') ? '5x' : '2.5x') : undefined,
-        abilityCount: isInrAbility ? safeItems.reduce((s, i) => s + (i.quantity || 0), 0) : undefined,
-      }
-    }),
-    // Fallback: localStorage storeOrders that haven't synced to Firebase yet
-    ...storeOrders
-      .filter(o => !firebaseOrders.some(fo => fo.id === o.id))
-      .map(order => {
-        const isInrAbility = order.item.includes('5x') || order.item.includes('2.5x')
+  // IMPORTANT: Always ensure arrays are never undefined to prevent crashes
+  const safeFirebaseOrders = Array.isArray(firebaseOrders) ? firebaseOrders : []
+  const safeFirebaseCoinPurchases = Array.isArray(firebaseCoinPurchases) ? firebaseCoinPurchases : []
+  const safePartnerList = Array.isArray(partnerList) ? partnerList : []
+  const safeStoreOrders = Array.isArray(storeOrders) ? storeOrders : []
+
+  let mergedAllPurchases: PurchaseHistoryEntry[] = []
+  try {
+    mergedAllPurchases = [
+      // Firebase orders first (cross-device, real-time, source of truth)
+      ...safeFirebaseOrders.map(fo => {
+        const safeItems = Array.isArray(fo.items) ? fo.items : []
+        const itemStr = safeItems.length > 0 ? safeItems.map(i => `${i.name || 'Item'} x${i.quantity || 1}`).join(', ') : (fo.playerName || 'Unknown Order')
+        const isInrAbility = itemStr.includes('5x') || itemStr.includes('2.5x')
         return {
-          id: `store_${order.id}`,
-          date: order.date,
-          item: order.item,
-          amount: `₹${order.price}`,
-          status: (order.status === 'pending' ? 'Pending' : order.status === 'approved' ? 'Delivered' : 'Denied') as 'Pending' | 'Delivered' | 'Denied',
+          id: `store_${fo.id}`,
+          date: fo.date || new Date().toISOString(),
+          item: itemStr,
+          amount: `₹${fo.finalAmount || fo.totalAmount || 0}`,
+          status: (fo.status === 'pending' ? 'Pending' : fo.status === 'approved' ? 'Delivered' : 'Denied') as 'Pending' | 'Delivered' | 'Denied',
           type: (isInrAbility ? 'inr_ability' : 'coins') as 'coins' | 'ability' | 'inr_ability',
-          transactionId: order.transactionId,
-          whatsappNumber: order.whatsappNumber,
-          buyerName: order.name,
-          screenshotDataUrl: order.proofBase64,
-          coinAmount: isInrAbility ? undefined : order.quantity,
-          abilityType: isInrAbility ? (order.item.includes('5x') ? '5x' : '2.5x') : undefined,
-          abilityCount: isInrAbility ? order.quantity : undefined,
+          transactionId: fo.transactionId,
+          whatsappNumber: fo.whatsappNumber,
+          buyerName: fo.name,
+          screenshotDataUrl: fo.proofBase64,
+          coinAmount: isInrAbility ? undefined : safeItems.reduce((s, i) => s + (i.quantity || 0), 0),
+          abilityType: isInrAbility ? (itemStr.includes('5x') ? '5x' : '2.5x') : undefined,
+          abilityCount: isInrAbility ? safeItems.reduce((s, i) => s + (i.quantity || 0), 0) : undefined,
         }
       }),
-  ]
+      // Fallback: localStorage storeOrders that haven't synced to Firebase yet
+      ...safeStoreOrders
+        .filter(o => !safeFirebaseOrders.some(fo => fo.id === o.id))
+        .map(order => {
+          const isInrAbility = order.item.includes('5x') || order.item.includes('2.5x')
+          return {
+            id: `store_${order.id}`,
+            date: order.date,
+            item: order.item,
+            amount: `₹${order.price}`,
+            status: (order.status === 'pending' ? 'Pending' : order.status === 'approved' ? 'Delivered' : 'Denied') as 'Pending' | 'Delivered' | 'Denied',
+            type: (isInrAbility ? 'inr_ability' : 'coins') as 'coins' | 'ability' | 'inr_ability',
+            transactionId: order.transactionId,
+            whatsappNumber: order.whatsappNumber,
+            buyerName: order.name,
+            screenshotDataUrl: order.proofBase64,
+            coinAmount: isInrAbility ? undefined : order.quantity,
+            abilityType: isInrAbility ? (order.item.includes('5x') ? '5x' : '2.5x') : undefined,
+            abilityCount: isInrAbility ? order.quantity : undefined,
+          }
+        }),
+    ]
+  } catch (err) {
+    // Never crash when computing merged purchases - return empty array
+    mergedAllPurchases = []
+  }
 
   const pendingPurchases = mergedAllPurchases.filter(p => p.status === 'Pending')
   const allPurchases = mergedAllPurchases
@@ -2143,25 +2237,30 @@ export function CouponCode({
                     setCodeInput(e.target.value.toUpperCase())
                     setStatusMessage(null)
                   }}
-                  onKeyDown={(e) => e.key === 'Enter' && handleClaim()}
-                  placeholder="Enter code here..."
-                  className="flex-1 px-4 py-2.5 rounded-full text-sm font-semibold outline-none"
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !checkingAdmin) handleClaim() }}
+                  placeholder={checkingAdmin ? 'Verifying...' : 'Enter code here...'}
+                  disabled={checkingAdmin}
+                  className="flex-1 px-4 py-2.5 rounded-full text-sm font-semibold outline-none transition-opacity"
                   style={{
                     backgroundColor: 'rgba(255,255,255,0.06)',
                     border: '1px solid rgba(255,255,255,0.1)',
                     color: '#FFFFFF',
+                    opacity: checkingAdmin ? 0.6 : 1,
                   }}
                 />
                 <button
-                  onClick={handleClaim}
-                  className="px-6 py-2.5 rounded-full text-xs font-bold transition-transform active:scale-95"
+                  onClick={checkingAdmin ? undefined : handleClaim}
+                  disabled={checkingAdmin}
+                  className="px-6 py-2.5 rounded-full text-xs font-bold transition-transform active:scale-95 flex items-center justify-center gap-1"
                   style={{
-                    background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
+                    background: checkingAdmin ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg, #EDC22E, #FF7A00)',
                     color: '#FFFFFF',
-                    boxShadow: '0 2px 10px rgba(237,194,46,0.3)',
+                    boxShadow: checkingAdmin ? 'none' : '0 2px 10px rgba(237,194,46,0.3)',
+                    opacity: checkingAdmin ? 0.7 : 1,
+                    cursor: checkingAdmin ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  CLAIM
+                  {checkingAdmin ? '⏳' : 'CLAIM'}
                 </button>
               </div>
 
@@ -2314,8 +2413,9 @@ export function CouponCode({
               </div>
             )}
 
-            {/* Scrollable Content Area - Full Screen */}
+            {/* Scrollable Content Area - Full Screen - Wrapped in Error Boundary */}
             <div className="flex-1 overflow-y-auto p-3">
+                <AdminErrorBoundary onError={showAdminError}>
                     {/* ====== DASHBOARD TAB ====== */}
                     {adminTab === 'dashboard' && (
                       <div className="space-y-3">
@@ -2373,7 +2473,7 @@ export function CouponCode({
                               <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Coupon Users Today</p>
                             </div>
                             <p className="text-xl font-bold" style={{ color: '#7C4DFF' }}>
-                              {firebaseOrders.filter(o => o.discountCoupon && o.status === 'approved' && new Date(o.date || o.createdAt).toISOString().split('T')[0] === getTodayStr()).length}
+                              {safeFirebaseOrders.filter(o => o.discountCoupon && o.status === 'approved' && new Date(o.date || o.createdAt).toISOString().split('T')[0] === getTodayStr()).length}
                             </p>
                             <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Used discount coupons today</p>
                           </div>
@@ -2385,7 +2485,7 @@ export function CouponCode({
                               <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Discount Revenue</p>
                             </div>
                             <p className="text-xl font-bold" style={{ color: '#00E676' }}>
-                              ₹{(() => { const r = firebaseOrders.filter(o => o.discountCoupon && o.status === 'approved').reduce((s, o) => s + o.finalAmount, 0); return r >= 1000 ? `${(r/1000).toFixed(1).replace(/\.0$/, '')}K` : r })()}
+                              ₹{(() => { const r = safeFirebaseOrders.filter(o => o.discountCoupon && o.status === 'approved').reduce((s, o) => s + (o.finalAmount || 0), 0); return r >= 1000 ? `${(r/1000).toFixed(1).replace(/\.0$/, '')}K` : r })()}
                             </p>
                             <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Revenue after discount</p>
                           </div>
@@ -3764,7 +3864,7 @@ export function CouponCode({
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                            {historyFilter === 'coins' ? 'Coin Purchases' : historyFilter === 'inr' ? 'INR Purchases' : 'All Payment History'} ({historyFilter === 'coins' ? firebaseCoinPurchases.length : allPurchases.length})
+                            {historyFilter === 'coins' ? 'Coin Purchases' : historyFilter === 'inr' ? 'INR Purchases' : 'All Payment History'} ({historyFilter === 'coins' ? safeFirebaseCoinPurchases.length : allPurchases.length})
                           </p>
                           <div className="flex items-center gap-1.5">
                             {/* History filter toggle */}
@@ -3798,14 +3898,14 @@ export function CouponCode({
 
                         {/* Coins purchase history section */}
                         {historyFilter === 'coins' && (
-                          firebaseCoinPurchases.length === 0 ? (
+                          safeFirebaseCoinPurchases.length === 0 ? (
                             <div className="text-center py-4">
                               <span className="text-2xl block mb-1">💰</span>
                               <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No coin purchase history</p>
                             </div>
                           ) : (
                             <div className="space-y-1.5 max-h-96 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
-                              {firebaseCoinPurchases.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0)).map((purchase: any) => (
+                              {[...safeFirebaseCoinPurchases].sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0)).map((purchase: any) => (
                                 <div key={purchase.id} className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                                   <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '1px solid rgba(237,194,46,0.2)' }}>
                                     <span className="text-[10px]">💰</span>
@@ -4756,6 +4856,7 @@ export function CouponCode({
                         <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Task management is only available to the main admin</p>
                       </div>
                     )}
+                </AdminErrorBoundary>
             </div>
 
             {/* Admin Footer Navigation */}
