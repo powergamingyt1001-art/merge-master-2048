@@ -1,19 +1,46 @@
 ---
-Task ID: 1
-Agent: Main Agent
-Task: Fix UID format, Store coins cart flow, SpinWheel improvements, deploy
+Task ID: 8+9+10
+Agent: Friends + Leaderboard + History Agent
+Task: Implement Friends play modes, Coin leaderboard 4-6 boxes, History delete, Admin Save
 
 Work Log:
-- Changed generateUserCode() from 6-8 digit numeric to 4-char alphanumeric (like "rz5s", "k7m2")
-- Fixed Store CoinsTab to use Add to Cart flow instead of directly opening payment modal
-- Added quantity controls (+/-) in CoinsTab when item is in cart
-- Fixed SpinWheel to pass discount coupon code and amount to payment modal
-- Added Cancel button for applied coupon in SpinWheel cart
-- Pushed to GitHub: powergamingyt1001-art/merge-master-2048
-- Deployed to Vercel: https://my-project-liart-iota.vercel.app
+- Added Friends panel to PlayDashboard.tsx with full functionality:
+  - Search by UID to add friends (using Firebase searchPlayerByUserCode)
+  - Send friend requests via Firebase (sendFriendRequest)
+  - Accept/Decline friend requests with real-time updates (onFriendRequestsUpdate)
+  - Friends list with Play button showing 3 modes: ⚔️ Battle, 🎮 Classic, 🪙 Coin
+  - Plus (+) invite button next to each friend
+  - Friend request count indicator on Dashboard header (Users icon with badge)
+  - Friends button in quick actions row with friend count and request badge
+
+- Added 4th-6th position boxes in Leaderboard.tsx:
+  - Battle tab: 4th-6th shown as 3-column grid boxes between podium and list
+  - Coins tab: 4th-6th shown as 3-column grid boxes between podium and list
+  - Empty positions display dashed border boxes with "Empty" label
+  - Player's own position highlighted with gold/battle color border
+  - List now starts from 7th position onwards (was 4th before)
+
+- Added history delete and Clear All in ProfilePanel.tsx:
+  - Each history entry has X delete button (top-right corner)
+  - "🗑️ Clear All" button in history header (visible when entries exist)
+  - Added onDeleteGameHistory and onClearGameHistory props
+  - Props wired through PlayDashboard.tsx to page.tsx to useGame.ts
+
+- Added deleteGameHistory and clearGameHistory to useGame.ts:
+  - deleteGameHistory(id) removes single entry by ID
+  - clearGameHistory() clears all game history
+  - Both update state and persist via localStorage
+
+- Added floating Save All button in CouponCode.tsx admin panel:
+  - Fixed position bottom-right corner when admin panel is open
+  - Uses existing handleSaveAllAdmin function
+  - Shows save confirmation message (✓ Saved!)
+  - Gradient styling matching app theme (EDC22E → FF7A00)
 
 Stage Summary:
-- UID format changed to short alphanumeric (rz5s style) for consistency
-- Store ₹5 coin packs now go through cart → coupon → Buy Now → payment details flow
-- SpinWheel cart now properly supports discount pass-through and Cancel coupon
-- All changes deployed to production
+- Friends can be played with in Battle/Classic/Coin modes via dropdown
+- Friend requests shown with Accept/Cancel buttons and badge indicator
+- Leaderboard shows special 4-6 position boxes with empty state
+- Game history can be individually deleted or cleared entirely
+- Admin panel has floating Save All button at bottom-right
+- All ESLint checks pass

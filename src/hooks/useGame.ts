@@ -163,7 +163,7 @@ export interface GameState {
   extraTimeCount: number
   activeMultiplier: number // 1 = none, 5 = 5x active, 2.5 = 2.5x active
   multiplierTimeLeft: number // seconds remaining for multiplier
-  // User ID (6-8 digit numeric code, unique per user)
+  // User ID (6-digit numeric code, unique per user)
   userCode: string
   // Total coins ever earned (never decreases)
   totalCoinsEarned: number
@@ -183,6 +183,10 @@ export interface GameState {
   realTimeOpponentScore: number // Opponent's live score from Firebase
   realTimeOpponentFinished: boolean // Opponent finished the game
   isRealTimeBattle: boolean // Whether this is a real-time battle vs real player
+  // Like system - Firebase synced
+  likes: number
+  // WELCOME60 auto-coupon claimed flag
+  welcomeCouponClaimed: boolean
 }
 
 const BOT_NAMES = [
@@ -240,13 +244,8 @@ function generatePlayerId(): string {
 }
 
 function generateUserCode(): string {
-  // Generate a random 4-character alphanumeric code like "rz5s", "k7m2"
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
-  let code = ''
-  for (let i = 0; i < 4; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return code
+  // Generate a random 6-digit numeric UID
+  return String(Math.floor(100000 + Math.random() * 900000))
 }
 
 function getEmptyCells(tiles: Tile[]): [number, number][] {
@@ -894,10 +893,51 @@ export function useGame() {
       realTimeOpponentScore: 0,
       realTimeOpponentFinished: false,
       isRealTimeBattle: false,
+      likes: 0,
+      welcomeCouponClaimed: false,
     }
 
     if (!saved) {
-      return { ...defaults, inviteCode: generateInviteCode(), userCode: generateUserCode() }
+      // Auto-give WELCOME60 coupon to all new users
+      try {
+        const existingCoupons = JSON.parse(localStorage.getItem('adminDiscountCoupons') || '[]')
+        const hasWelcome = existingCoupons.some((c: any) => c.code.toUpperCase() === 'WELCOME60')
+        if (!hasWelcome) {
+          existingCoupons.push({
+            code: 'WELCOME60',
+            discountPercent: 60,
+            minPurchase: 0,
+            maxUses: 1,
+            currentUses: 0,
+            disabled: false,
+            target: 'all',
+            createdAt: Date.now()
+          })
+          localStorage.setItem('adminDiscountCoupons', JSON.stringify(existingCoupons))
+        }
+      } catch { /* ignore */ }
+      return { ...defaults, inviteCode: generateInviteCode(), userCode: generateUserCode(), welcomeCouponClaimed: true }
+    }
+
+    // Auto-give WELCOME60 coupon to existing users who haven't claimed it
+    if (!saved.welcomeCouponClaimed) {
+      try {
+        const existingCoupons = JSON.parse(localStorage.getItem('adminDiscountCoupons') || '[]')
+        const hasWelcome = existingCoupons.some((c: any) => c.code.toUpperCase() === 'WELCOME60')
+        if (!hasWelcome) {
+          existingCoupons.push({
+            code: 'WELCOME60',
+            discountPercent: 60,
+            minPurchase: 0,
+            maxUses: 1,
+            currentUses: 0,
+            disabled: false,
+            target: 'all',
+            createdAt: Date.now()
+          })
+          localStorage.setItem('adminDiscountCoupons', JSON.stringify(existingCoupons))
+        }
+      } catch { /* ignore */ }
     }
 
     let streakDay = saved.streakDay || 0
@@ -1091,6 +1131,7 @@ export function useGame() {
       realTimeOpponentScore: 0,
       realTimeOpponentFinished: false,
       isRealTimeBattle: false,
+      welcomeCouponClaimed: saved.welcomeCouponClaimed ?? true,
     }
   })
 
@@ -1152,9 +1193,10 @@ export function useGame() {
       streakWeek: state.streakWeek,
       skillPoints: state.skillPoints,
       spRemainder: state.spRemainder,
+      welcomeCouponClaimed: state.welcomeCouponClaimed,
     }
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount, state.userCode, state.totalCoinsEarned, state.winningCoins, state.roomCardCount, state.streakWeek, state.skillPoints, state.spRemainder])
+  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount, state.userCode, state.totalCoinsEarned, state.winningCoins, state.roomCardCount, state.streakWeek, state.skillPoints, state.spRemainder, state.welcomeCouponClaimed])
 
   // ============================================================
   // FIREBASE SYNC - Sync player data to Firebase RTDB
@@ -1182,6 +1224,7 @@ export function useGame() {
         level: state.playerLevel,
         totalBattlesPlayed: state.totalBattlesPlayed,
         totalBattlesWon: state.totalBattlesWon,
+        likes: state.likes,
       }).catch(() => {/* silent fail */})
     }, 2000) // 2 second debounce
     return () => clearTimeout(timer)
@@ -1272,80 +1315,95 @@ export function useGame() {
       for (const notif of notifications) {
         // Skip already delivered or already processed
         if (notif.delivered || deliveryProcessedRef.current.has(notif.id)) continue
-        if (notif.type !== 'order_delivery' || !notif.items) continue
 
-        // Mark as processed to avoid double delivery
-        deliveryProcessedRef.current.add(notif.id)
+        // Handle order delivery (approval)
+        if (notif.type === 'order_delivery' && notif.items) {
+          // Mark as processed to avoid double delivery
+          deliveryProcessedRef.current.add(notif.id)
 
-        // Deliver items to user
-        const items = notif.items as { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number }
+          // Deliver items to user
+          const items = notif.items as { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number }
 
-        setState(prev => {
-          let newState = { ...prev }
-          let deliveryMsg: string[] = []
+          setState(prev => {
+            let newState = { ...prev }
+            let deliveryMsg: string[] = []
 
-          // Add coins
-          if (items.coins && items.coins > 0) {
-            newState.coins = prev.coins + items.coins
-            newState.totalCoinsEarned = prev.totalCoinsEarned + items.coins
-            deliveryMsg.push(`💰 ${items.coins} coins`)
-          }
+            // Add coins
+            if (items.coins && items.coins > 0) {
+              newState.coins = prev.coins + items.coins
+              newState.totalCoinsEarned = prev.totalCoinsEarned + items.coins
+              deliveryMsg.push(`💰 ${items.coins} coins`)
+            }
 
-          // Add abilities
-          if (items.abilities) {
-            for (const ability of items.abilities) {
-              switch (ability.type) {
-                case 'multiplier5x':
-                  newState.multiplier5xCount = prev.multiplier5xCount + ability.count
-                  deliveryMsg.push(`⚡ ${ability.count}x 5x Multiplier`)
-                  break
-                case 'multiplier2_5x':
-                  newState.multiplier2_5xCount = prev.multiplier2_5xCount + ability.count
-                  deliveryMsg.push(`🔥 ${ability.count}x 2.5x Multiplier`)
-                  break
-                case 'hammer':
-                  newState.hammerCount = prev.hammerCount + ability.count
-                  deliveryMsg.push(`🔨 ${ability.count}x Hammer`)
-                  break
-                case 'magnet':
-                  newState.magnetCount = prev.magnetCount + ability.count
-                  deliveryMsg.push(`🧲 ${ability.count}x Magnet`)
-                  break
-                case 'blast':
-                  newState.blastCount = prev.blastCount + ability.count
-                  deliveryMsg.push(`💣 ${ability.count}x Bomb`)
-                  break
-                case 'extraTime':
-                  newState.extraTimeCount = prev.extraTimeCount + ability.count
-                  deliveryMsg.push(`⏱️ ${ability.count}x Timer`)
-                  break
+            // Add abilities
+            if (items.abilities) {
+              for (const ability of items.abilities) {
+                switch (ability.type) {
+                  case 'multiplier5x':
+                    newState.multiplier5xCount = prev.multiplier5xCount + ability.count
+                    deliveryMsg.push(`⚡ ${ability.count}x 5x Multiplier`)
+                    break
+                  case 'multiplier2_5x':
+                    newState.multiplier2_5xCount = prev.multiplier2_5xCount + ability.count
+                    deliveryMsg.push(`🔥 ${ability.count}x 2.5x Multiplier`)
+                    break
+                  case 'hammer':
+                    newState.hammerCount = prev.hammerCount + ability.count
+                    deliveryMsg.push(`🔨 ${ability.count}x Hammer`)
+                    break
+                  case 'magnet':
+                    newState.magnetCount = prev.magnetCount + ability.count
+                    deliveryMsg.push(`🧲 ${ability.count}x Magnet`)
+                    break
+                  case 'blast':
+                    newState.blastCount = prev.blastCount + ability.count
+                    deliveryMsg.push(`💣 ${ability.count}x Bomb`)
+                    break
+                  case 'extraTime':
+                    newState.extraTimeCount = prev.extraTimeCount + ability.count
+                    deliveryMsg.push(`⏱️ ${ability.count}x Timer`)
+                    break
+                }
               }
             }
-          }
 
-          // Add room cards
-          if (items.roomCards && items.roomCards > 0) {
-            newState.roomCardCount = prev.roomCardCount + items.roomCards
-            deliveryMsg.push(`🃏 ${items.roomCards} Room Card${items.roomCards > 1 ? 's' : ''}`)
-          }
+            // Add room cards
+            if (items.roomCards && items.roomCards > 0) {
+              newState.roomCardCount = prev.roomCardCount + items.roomCards
+              deliveryMsg.push(`🃏 ${items.roomCards} Room Card${items.roomCards > 1 ? 's' : ''}`)
+            }
 
-          // Add spin tickets
-          if (items.spinTickets && items.spinTickets > 0) {
-            newState.spinTickets = prev.spinTickets + items.spinTickets
-            deliveryMsg.push(`🎫 ${items.spinTickets} Spin Ticket${items.spinTickets > 1 ? 's' : ''}`)
-          }
+            // Add spin tickets
+            if (items.spinTickets && items.spinTickets > 0) {
+              newState.spinTickets = prev.spinTickets + items.spinTickets
+              deliveryMsg.push(`🎫 ${items.spinTickets} Spin Ticket${items.spinTickets > 1 ? 's' : ''}`)
+            }
 
-          // Show notification
-          if (deliveryMsg.length > 0) {
-            const msg = deliveryMsg.join(', ')
-            addNotification('📦 Items Delivered!', `Your order has been approved! Received: ${msg}`, 'reward', '🎁')
-          }
+            // Show notification
+            if (deliveryMsg.length > 0) {
+              const msg = deliveryMsg.join(', ')
+              addNotification('📦 Items Delivered!', `Your order has been approved! Received: ${msg}`, 'reward', '🎁')
+            }
 
-          return newState
-        })
+            return newState
+          })
 
-        // Mark as delivered in Firebase
-        markNotificationDelivered(state.playerId, notif.id).catch(() => {})
+          // Mark as delivered in Firebase
+          markNotificationDelivered(state.playerId, notif.id).catch(() => {})
+        }
+
+        // Handle order rejection
+        if (notif.type === 'order_rejected') {
+          // Mark as processed
+          deliveryProcessedRef.current.add(notif.id)
+
+          // Show cancellation notification
+          const rejectMsg = (notif as any).message || 'Your payment was not verified. Order cancelled.'
+          addNotification('❌ Payment Cancelled', rejectMsg, 'system', '⚠️')
+
+          // Mark as delivered in Firebase
+          markNotificationDelivered(state.playerId, notif.id).catch(() => {})
+        }
       }
     })
     return unsubscribe
@@ -2995,6 +3053,18 @@ export function useGame() {
         })
         return { ...prev, dailyTasks: tasks }
       })
+    }, []),
+    deleteGameHistory: useCallback((id: string) => {
+      setState(prev => ({
+        ...prev,
+        gameHistory: prev.gameHistory.filter(e => e.id !== id),
+      }))
+    }, []),
+    clearGameHistory: useCallback(() => {
+      setState(prev => ({
+        ...prev,
+        gameHistory: [],
+      }))
     }, []),
   }
 }

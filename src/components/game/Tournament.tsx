@@ -46,8 +46,14 @@ const FAKE_TOURNAMENT_PLAYERS = [
   { name: 'Volt 11', avatar: '⚡', score: 40 },
 ]
 
-// Week 1-3 prizes (7K budget)
-const WEEK_PRIZES_EARLY = [
+// ─── Weekly Rotation: ₹7K / ₹15K ────────────────────────────────────
+const WEEK_START = new Date(2025, 0, 6) // Jan 6, 2025
+const now = new Date()
+const weekNumber = Math.floor((now.getTime() - WEEK_START.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
+const is15KWeek = weekNumber % 2 === 0 // Even weeks = ₹15K, Odd weeks = ₹7K
+
+// Week 7K prizes
+const WEEK_PRIZES_7K = [
   { rank: 1, coins: 700, spins: 0, roomCards: 2, label: '1st' },
   { rank: 2, coins: 400, spins: 0, roomCards: 0, label: '2nd' },
   { rank: 3, coins: 250, spins: 0, roomCards: 0, label: '3rd' },
@@ -55,7 +61,26 @@ const WEEK_PRIZES_EARLY = [
   { rank: 5, coins: 100, spins: 0, roomCards: 0, label: '5th' },
 ]
 
-const ENTRY_FEE_EARLY = 50
+// Week 15K prizes
+const WEEK_PRIZES_15K = [
+  { rank: 1, coins: 3000, spins: 0, roomCards: 3, label: '1st' },
+  { rank: 2, coins: 2500, spins: 0, roomCards: 0, label: '2nd' },
+  { rank: 3, coins: 2000, spins: 0, roomCards: 0, label: '3rd' },
+  { rank: 4, coins: 1500, spins: 0, roomCards: 0, label: '4th' },
+  { rank: 5, coins: 1000, spins: 0, roomCards: 0, label: '5th' },
+  { rank: 6, coins: 500, spins: 0, roomCards: 0, label: '6th' },
+  // Remaining: ₹4500 distributed as ₹100 each to next 45 players (ranks 7-51)
+]
+
+const ENTRY_FEE = 100
+
+// Participation rewards (~20% of players)
+const PARTICIPATION_REWARDS = [
+  { type: 'spin', count: 5, label: '5 Spins', emoji: '🎫' },
+  { type: 'magnet', count: 5, label: '5 Magnets', emoji: '🧲' },
+  { type: 'hammer', count: 5, label: '5 Hammers', emoji: '🔨' },
+  { type: 'coins', count: 50, label: '50 Coins', emoji: '💰' },
+]
 
 function getWeekNumber(): number {
   const start = new Date(2025, 0, 6)
@@ -63,6 +88,10 @@ function getWeekNumber(): number {
   const diffMs = now.getTime() - start.getTime()
   const diffWeeks = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000))
   return diffWeeks + 1
+}
+
+function is15KWeekNow(): boolean {
+  return getWeekNumber() % 2 === 0
 }
 
 function getTimeLeftInWeek(): string {
@@ -80,8 +109,8 @@ function getTimeLeftInWeek(): string {
 }
 
 function getEarlyPoolRemaining(): number {
-  const used = WEEK_PRIZES_EARLY.reduce((s, p) => s + p.coins, 0)
-  return 7000 - used
+  const used = (is15KWeekNow() ? WEEK_PRIZES_15K : WEEK_PRIZES_7K).reduce((s, p) => s + p.coins, 0)
+  return (is15KWeekNow() ? 15000 : 7000) - used
 }
 
 export function Tournament({
@@ -94,6 +123,7 @@ export function Tournament({
   const [tab, setTab] = useState<TabType>('play')
   const [firebasePlayers, setFirebasePlayers] = useState<FirebasePlayer[]>([])
   const weekNum = getWeekNumber()
+  const currentIs15K = is15KWeekNow()
   const [timeLeft, setTimeLeft] = useState(getTimeLeftInWeek())
   
   // Update timer every second
@@ -103,11 +133,12 @@ export function Tournament({
     }, 1000)
     return () => clearInterval(interval)
   }, [])
-  const prizes = WEEK_PRIZES_EARLY
-  const totalPool = 7000
-  const entryFee = ENTRY_FEE_EARLY
-  const earlyPoolRemaining = getEarlyPoolRemaining()
-  const coinRanksCount = Math.floor(earlyPoolRemaining / 50)
+  const prizes = currentIs15K ? WEEK_PRIZES_15K : WEEK_PRIZES_7K
+  const totalPool = currentIs15K ? 15000 : 7000
+  const entryFee = ENTRY_FEE
+  const topPrizesTotal = prizes.reduce((s, p) => s + p.coins, 0)
+  const poolRemaining = totalPool - topPrizesTotal
+  const coinRanksCount = Math.floor(poolRemaining / 100)
   const coinRankSpins = 2
   const noCoinSpins = 3
   const canJoin = coins >= entryFee
@@ -190,7 +221,7 @@ export function Tournament({
                 <Trophy className="w-5 h-5" style={{ color: '#EDC22E' }} />
                 <div>
                   <h3 className="text-base font-bold" style={{ color: '#FFFFFF' }}>Weekly Tournament</h3>
-                  <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Week {weekNum}</p>
+                  <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Week {weekNum} • {currentIs15K ? '₹15K' : '₹7K'} Pool</p>
                 </div>
               </div>
               <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
@@ -216,15 +247,19 @@ export function Tournament({
               <span className="text-[10px] font-extrabold" style={{ color: '#FFFFFF' }}>{timeLeft}</span>
             </div>
 
-            {/* Pool + Entry Fee */}
+            {/* Pool + Entry Fee + Week Type */}
             <div className="mx-4 mb-2 flex gap-2">
               <div className="flex-1 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
                 <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Prize Pool</p>
-                <p className="text-xs font-extrabold" style={{ color: '#EDC22E' }}>{totalPool.toLocaleString()} 💰</p>
+                <p className="text-xs font-extrabold" style={{ color: '#EDC22E' }}>₹{totalPool.toLocaleString()} 💰</p>
               </div>
               <div className="flex-1 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)' }}>
                 <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Entry Fee</p>
                 <p className="text-xs font-extrabold" style={{ color: '#F65E3B' }}>{entryFee} 🪙</p>
+              </div>
+              <div className="flex-1 p-2 rounded-lg text-center" style={{ backgroundColor: currentIs15K ? 'rgba(237,194,46,0.12)' : 'rgba(0,230,118,0.08)', border: currentIs15K ? '1px solid rgba(237,194,46,0.25)' : '1px solid rgba(0,230,118,0.15)' }}>
+                <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Week Type</p>
+                <p className="text-[10px] font-extrabold" style={{ color: currentIs15K ? '#EDC22E' : '#00E676' }}>{currentIs15K ? '₹15K' : '₹7K'}</p>
               </div>
               {tournamentJoined && (
                 <div className="flex-1 p-2 rounded-lg text-center" style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
@@ -340,7 +375,7 @@ export function Tournament({
                         'Tournament points for weekly leaderboard',
                         'Partial scores carry over to next game',
                         'Only tournament points count for ranking',
-                        `Prize pool: 7K coins weekly`,
+                        `Prize pool: ${currentIs15K ? '15K' : '7K'} coins weekly`,
                         'Rankings reset every Monday',
                         'Daily limit: 20 games',
                         'Fair play: 50/50 chance, highest score wins!',
@@ -390,10 +425,10 @@ export function Tournament({
 
                   <div className="p-2.5 rounded-xl" style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.1)' }}>
                     <p className="text-[10px] font-bold mb-1" style={{ color: '#00E676' }}>
-                      #{prizes.length + 1} to #{prizes.length + coinRanksCount} — 50 coins + {coinRankSpins} spins each
+                      #{prizes.length + 1} to #{prizes.length + coinRanksCount} — 100 coins + {coinRankSpins} spins each
                     </p>
                     <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                      Until 7K pool is exhausted
+                      Until {currentIs15K ? '₹15K' : '₹7K'} pool is exhausted
                     </p>
                   </div>
 
@@ -401,6 +436,19 @@ export function Tournament({
                     <p className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
                       All other players: {noCoinSpins} spins each 🎫
                     </p>
+                  </div>
+
+                  {/* Participation Rewards */}
+                  <div className="p-2.5 rounded-xl" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.1)' }}>
+                    <p className="text-[10px] font-bold mb-1.5" style={{ color: '#EDC22E' }}>🎁 Participation Rewards (~20% players)</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {PARTICIPATION_REWARDS.map((reward) => (
+                        <div key={reward.type} className="flex items-center gap-1 px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                          <span className="text-[9px]">{reward.emoji}</span>
+                          <span className="text-[8px] font-bold" style={{ color: '#EDC22E' }}>{reward.label}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}

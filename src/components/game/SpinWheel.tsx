@@ -547,7 +547,7 @@ export function SpinWheel({
   const [spinMultiplier, setSpinMultiplier] = useState(1)
   const [multiResults, setMultiResults] = useState<{ prize: SpinPrize; revealed: boolean }[]>([])
   const [allRevealed, setAllRevealed] = useState(false)
-  const [spinMode, setSpinMode] = useState<'ticket' | 'coin'>('ticket')
+  // Spin mode is always 'ticket' now - coin mode removed
   const spinCountRef = useRef(0)
   const timeoutRefs = useRef<ReturnType<typeof setTimeout>[]>([])
 
@@ -712,25 +712,22 @@ export function SpinWheel({
 
   const remainingFreeSpins = Math.max(0, FREE_DAILY_SPINS - freeSpinsClaimed.count)
 
-  const COIN_COST_PER_SPIN = 300
-  const affordableSpins = Math.floor(coins / COIN_COST_PER_SPIN)
   const affordableTicketSpins = spinTickets
 
   const effectiveMultiplier = useMemo(() => {
-    const canAfford = spinMode === 'ticket' ? spinTickets >= spinMultiplier : coins >= spinMultiplier * COIN_COST_PER_SPIN
+    const canAfford = spinTickets >= spinMultiplier
     if (canAfford) return spinMultiplier
     for (let i = SPIN_COUNTS.length - 1; i >= 0; i--) {
       const count = SPIN_COUNTS[i]
-      const affordable = spinMode === 'ticket' ? spinTickets >= count : coins >= count * COIN_COST_PER_SPIN
+      const affordable = spinTickets >= count
       if (affordable) return count
     }
     return 1
-  }, [spinMode, spinMultiplier, spinTickets, coins])
+  }, [spinMultiplier, spinTickets])
 
   const totalSpins = effectiveMultiplier === 10 ? 12 : effectiveMultiplier
   const ticketCost = effectiveMultiplier
-  const coinCost = effectiveMultiplier * COIN_COST_PER_SPIN
-  const canAffordSpin = spinMode === 'ticket' ? spinTickets >= ticketCost : coins >= coinCost
+  const canAffordSpin = spinTickets >= ticketCost
 
   const clearPendingTimeouts = useCallback(() => {
     timeoutRefs.current.forEach(t => clearTimeout(t))
@@ -755,12 +752,8 @@ export function SpinWheel({
     setMultiResults([])
     setAllRevealed(false)
 
-    if (spinMode === 'ticket') {
-      for (let i = 0; i < ticketCost; i++) {
-        onUseTicket()
-      }
-    } else {
-      onDeductCoins(coinCost)
+    for (let i = 0; i < ticketCost; i++) {
+      onUseTicket()
     }
 
     const visualWin = pickPrize()
@@ -802,7 +795,7 @@ export function SpinWheel({
       }, 2500)
       timeoutRefs.current.push(t2)
     }
-  }, [canAffordSpin, spinning, spinMode, onUseTicket, onDeductCoins, rotation, effectiveMultiplier, ticketCost, coinCost, totalSpins, clearPendingTimeouts])
+  }, [canAffordSpin, spinning, onUseTicket, rotation, effectiveMultiplier, ticketCost, totalSpins, clearPendingTimeouts])
 
   const handleClaim = useCallback(() => {
     if (!result) return
@@ -945,6 +938,35 @@ export function SpinWheel({
 
                           {/* Coupon & Checkout */}
                           <div className="space-y-1.5">
+                            {/* Available Coupons */}
+                            {(() => {
+                              try {
+                                const usedCoupons = JSON.parse(localStorage.getItem('mergeMaster2048_usedCoupons') || '[]')
+                                const discountCoupons = JSON.parse(localStorage.getItem('adminDiscountCoupons') || '[]')
+                                const adminCoupons = JSON.parse(localStorage.getItem('adminCoupons') || '[]')
+                                const available = [...discountCoupons, ...adminCoupons].filter(
+                                  (c: any) => !c.disabled && !usedCoupons.includes(c.code.toUpperCase()) &&
+                                              (!c.maxUses || !c.currentUses || c.currentUses < c.maxUses)
+                                )
+                                if (available.length > 0) {
+                                  return (
+                                    <div className="mb-2">
+                                      <p className="text-[8px] font-bold mb-1" style={{ color: '#00E676' }}>🎫 Your Coupons</p>
+                                      <div className="flex flex-wrap gap-1">
+                                        {available.map((c: any) => (
+                                          <button key={c.code} onClick={() => setCouponCode(c.code)}
+                                            className="px-2 py-0.5 rounded-full text-[7px] font-bold transition-transform active:scale-95"
+                                            style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.25)', color: '#00E676' }}>
+                                            {c.code} ({c.discountPercent || c.discount || 10}%)
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )
+                                }
+                              } catch { /* ignore */ }
+                              return null
+                            })()}
                             {/* Coupon */}
                             <div className="flex gap-1">
                               <div className="flex-1 flex items-center gap-1 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -1025,38 +1047,9 @@ export function SpinWheel({
                   </div>
                 )}
 
-                {/* Spin Mode Toggle */}
-                <div className="flex items-center gap-2 mb-3">
-                  <button
-                    onClick={() => setSpinMode('ticket')}
-                    className="flex-1 py-2 rounded-lg text-xs font-bold transition-all text-center"
-                    style={{
-                      backgroundColor: spinMode === 'ticket' ? 'rgba(0,230,118,0.2)' : 'rgba(255,255,255,0.06)',
-                      border: spinMode === 'ticket' ? '1px solid rgba(0,230,118,0.5)' : '1px solid rgba(255,255,255,0.1)',
-                      color: spinMode === 'ticket' ? '#00E676' : 'rgba(255,255,255,0.5)',
-                    }}
-                  >
-                    🎫 Ticket Spin
-                  </button>
-                  <button
-                    onClick={() => setSpinMode('coin')}
-                    className="flex-1 py-2 rounded-lg text-xs font-bold transition-all text-center"
-                    style={{
-                      backgroundColor: spinMode === 'coin' ? 'rgba(237,194,46,0.2)' : 'rgba(255,255,255,0.06)',
-                      border: spinMode === 'coin' ? '1px solid rgba(237,194,46,0.5)' : '1px solid rgba(255,255,255,0.1)',
-                      color: spinMode === 'coin' ? '#EDC22E' : 'rgba(255,255,255,0.5)',
-                    }}
-                  >
-                    🪙 Coin Spin (300🪙)
-                  </button>
-                </div>
-
+                {/* Ticket Info */}
                 <p className="text-center text-xs mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  {spinMode === 'ticket' ? (
-                    <>Tickets: <span style={{ color: '#EDC22E', fontWeight: 'bold' }}>{spinTickets}</span> • Available spins: <span style={{ color: '#00E676', fontWeight: 'bold' }}>{affordableTicketSpins}</span></>
-                  ) : (
-                    <>Coins: <span style={{ color: '#EDC22E', fontWeight: 'bold' }}>{coins}</span> • Available spins: <span style={{ color: '#00E676', fontWeight: 'bold' }}>{affordableSpins}</span></>
-                  )}
+                  Tickets: <span style={{ color: '#EDC22E', fontWeight: 'bold' }}>{spinTickets}</span> • Available spins: <span style={{ color: '#00E676', fontWeight: 'bold' }}>{affordableTicketSpins}</span>
                 </p>
 
                 {/* Spin Multiplier Selector */}
@@ -1065,10 +1058,8 @@ export function SpinWheel({
                     {SPIN_COUNTS.map(count => {
                       const isActive = effectiveMultiplier === count
                       const isBonus = count === 10
-                      const canAfford = spinMode === 'ticket' ? spinTickets >= count : coins >= count * COIN_COST_PER_SPIN
-                      const costLabel = spinMode === 'ticket'
-                        ? `${count}🎫`
-                        : `${count * COIN_COST_PER_SPIN}🪙`
+                      const canAfford = spinTickets >= count
+                      const costLabel = `${count}🎫`
                       return (
                         <button
                           key={count}
@@ -1099,18 +1090,7 @@ export function SpinWheel({
                 {/* Multi-spin info */}
                 {!hasResult && !spinning && effectiveMultiplier > 1 && (
                   <p className="text-center text-[10px] mb-2" style={{ color: '#00E676' }}>
-                    {spinMode === 'ticket'
-                      ? (effectiveMultiplier === 10 ? '10 tickets = 12 spins! (+2 FREE 🎉)' : `${effectiveMultiplier} spins for ${effectiveMultiplier} tickets`)
-                      : (effectiveMultiplier === 10 ? '3,000 coins = 12 spins! (+2 FREE 🎉)' : `${effectiveMultiplier} spins for ${coinCost} coins`)
-                    }
-                  </p>
-                )}
-
-                {/* Available spins info */}
-                {!hasResult && !spinning && spinMode === 'coin' && (
-                  <p className="text-center text-[9px] mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                    Your coins can buy up to <span style={{ color: '#EDC22E', fontWeight: 'bold' }}>{affordableSpins}</span> spin{affordableSpins !== 1 ? 's' : ''}
-                    {affordableSpins >= 10 && <span style={{ color: '#00E676' }}> (10+2 FREE deal available!)</span>}
+                    {effectiveMultiplier === 10 ? '10 tickets = 12 spins! (+2 FREE 🎉)' : `${effectiveMultiplier} spins for ${effectiveMultiplier} tickets`}
                   </p>
                 )}
 
@@ -1249,7 +1229,7 @@ export function SpinWheel({
                     style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}
                   >
                     <Play className="w-4 h-4" />
-                    {spinning ? 'Spinning...' : `SPIN ${effectiveMultiplier > 1 ? `${totalSpins}x ` : ''}(${spinMode === 'ticket' ? `${ticketCost} 🎫` : `${coinCost} 🪙`})`}
+                    {spinning ? 'Spinning...' : `SPIN ${effectiveMultiplier > 1 ? `${totalSpins}x ` : ''}(${ticketCost} 🎫)`}
                   </button>
                 )}
 

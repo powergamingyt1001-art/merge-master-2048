@@ -4453,6 +4453,20 @@ export function CouponCode({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Floating Save Button - visible when admin panel is open */}
+      {showAdminPanel && (
+        <button
+          onClick={handleSaveAllAdmin}
+          className="fixed bottom-4 right-4 z-50 px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg transition-transform active:scale-95"
+          style={{
+            background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
+            color: '#FFFFFF',
+            boxShadow: '0 4px 20px rgba(237,194,46,0.4)',
+          }}>
+          💾 {saveAllMsg || 'Save All'}
+        </button>
+      )}
     </>
   )
 }

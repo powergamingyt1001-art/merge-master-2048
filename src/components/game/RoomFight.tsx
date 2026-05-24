@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Copy, Lock, Users, Swords, Shield, Clock, Check, Search, ChevronRight, Zap, AlertTriangle } from 'lucide-react'
+import { X, Copy, Lock, Users, Swords, Shield, Clock, Check, Search, ChevronRight, Zap, AlertTriangle, UserPlus } from 'lucide-react'
+import { onFriendsUpdate } from '@/lib/firebase-service'
 
 interface RoomFightProps {
   isOpen: boolean
@@ -18,18 +19,52 @@ interface RoomFightProps {
   onDeductCoins: (amount: number) => void
   onDeductAbility: (type: 'hammer' | 'magnet' | 'blast', count: number) => void
   onStartRoomGame: (betAmount: number, abilities: string[]) => void
+  playerId: string
 }
 
 type RoomTab = 'create' | 'join' | 'random' | 'info'
-type BetItem = { id: string; label: string; emoji: string; type: 'ability' | 'coins'; abilityType?: 'hammer' | 'magnet' | 'blast'; amount: number }
 
-const BET_ITEMS: BetItem[] = [
+interface CoinOption {
+  id: string
+  label: string
+  emoji: string
+  type: 'coins'
+  amount: number
+}
+
+interface AbilityOption {
+  id: string
+  label: string
+  emoji: string
+  type: 'ability'
+  abilityType: 'hammer' | 'magnet' | 'blast'
+  amount: number
+}
+
+type BetItem = CoinOption | AbilityOption
+
+const COIN_OPTIONS: CoinOption[] = [
+  { id: 'coins1000', label: '1,000', emoji: '💰', type: 'coins', amount: 1000 },
+  { id: 'coins10000', label: '10,000', emoji: '💰', type: 'coins', amount: 10000 },
+  { id: 'coins20000', label: '20,000', emoji: '💰', type: 'coins', amount: 20000 },
+  { id: 'coins50000', label: '50,000', emoji: '💰', type: 'coins', amount: 50000 },
+  { id: 'coins75000', label: '75,000', emoji: '💰', type: 'coins', amount: 75000 },
+  { id: 'coins100000', label: '1,00,000', emoji: '💰', type: 'coins', amount: 100000 },
+]
+
+const ABILITY_OPTIONS: AbilityOption[] = [
   { id: 'hammer', label: 'Hammer', emoji: '🔨', type: 'ability', abilityType: 'hammer', amount: 1 },
   { id: 'magnet', label: 'Magnet', emoji: '🧲', type: 'ability', abilityType: 'magnet', amount: 1 },
   { id: 'bomb', label: 'Bomb', emoji: '💣', type: 'ability', abilityType: 'blast', amount: 1 },
-  { id: 'coins100', label: '100 Coins', emoji: '💰', type: 'coins', amount: 100 },
-  { id: 'coins200', label: '200 Coins', emoji: '💰', type: 'coins', amount: 200 },
-  { id: 'coins500', label: '500 Coins', emoji: '💰', type: 'coins', amount: 500 },
+]
+
+const ALL_BET_ITEMS: BetItem[] = [...COIN_OPTIONS, ...ABILITY_OPTIONS]
+
+const TIMER_OPTIONS = [
+  { label: '30s', seconds: 30 },
+  { label: '60s', seconds: 60 },
+  { label: '90s', seconds: 90 },
+  { label: '120s', seconds: 120 },
 ]
 
 // Mock opponent data for the "searching" animation
@@ -49,6 +84,7 @@ export function RoomFight({
   isOpen, onClose, roomCardCount, userCode, coins,
   hammerCount, magnetCount, blastCount,
   onUseRoomCard, onAddNotification, onDeductCoins, onDeductAbility, onStartRoomGame,
+  playerId,
 }: RoomFightProps) {
   const [activeTab, setActiveTab] = useState<RoomTab>('create')
   const [selectedBets, setSelectedBets] = useState<Set<string>>(new Set())
@@ -58,21 +94,69 @@ export function RoomFight({
   const [joinPassword, setJoinPassword] = useState('')
   const [showJoinPassword, setShowJoinPassword] = useState(false)
 
+  // Timer state
+  const [selectedTimer, setSelectedTimer] = useState(60)
+
   // Create Room states
   const [createdRoom, setCreatedRoom] = useState<{ code: string; password: string } | null>(null)
   const [waitingForOpponent, setWaitingForOpponent] = useState(false)
   const [createdRoomCode, setCreatedRoomCode] = useState('')
   const [copiedCode, setCopiedCode] = useState(false)
 
+  // Opponent UID for friend invite
+  const [opponentUid, setOpponentUid] = useState('')
+  const [showFriendList, setShowFriendList] = useState(false)
+  const [friends, setFriends] = useState<Array<{ friendId: string; name: string; avatar: string; inviteCode: string }>>([])
+
   // Join Room states
   const [joinSearching, setJoinSearching] = useState(false)
   const [joinOpponent, setJoinOpponent] = useState<typeof MOCK_OPPONENTS[0] | null>(null)
 
+  // Listen to friends list
+  useEffect(() => {
+    if (!isOpen || !playerId) return
+    const unsubscribe = onFriendsUpdate(playerId, (friendsList) => {
+      setFriends(friendsList.map(f => ({
+        friendId: f.friendId,
+        name: f.name,
+        avatar: f.avatar,
+        inviteCode: f.inviteCode,
+      })))
+    })
+    return () => unsubscribe()
+  }, [isOpen, playerId])
+
+  const getSelectedAbilityCount = useCallback(() => {
+    let count = 0
+    for (const betId of selectedBets) {
+      const item = ALL_BET_ITEMS.find(b => b.id === betId)
+      if (item && item.type === 'ability') count++
+    }
+    return count
+  }, [selectedBets])
+
   const toggleBet = useCallback((id: string) => {
     setSelectedBets(prev => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        // Check if adding an ability would exceed max 2
+        const item = ALL_BET_ITEMS.find(b => b.id === id)
+        if (item && item.type === 'ability') {
+          // Count current abilities
+          let currentAbilityCount = 0
+          for (const betId of prev) {
+            const existing = ALL_BET_ITEMS.find(b => b.id === betId)
+            if (existing && existing.type === 'ability') currentAbilityCount++
+          }
+          if (currentAbilityCount >= 2) {
+            // Will show notification outside setState
+            return prev
+          }
+        }
+        next.add(id)
+      }
       return next
     })
   }, [])
@@ -87,6 +171,20 @@ export function RoomFight({
     return false
   }, [hammerCount, magnetCount, blastCount, coins])
 
+  const handleBetClick = useCallback((id: string) => {
+    const item = ALL_BET_ITEMS.find(b => b.id === id)
+    if (!item || !canAffordBet(item)) return
+
+    // If selecting (not deselecting) an ability, check max 2 limit
+    if (!selectedBets.has(id) && item.type === 'ability') {
+      if (getSelectedAbilityCount() >= 2) {
+        onAddNotification('Max Abilities', 'You can select a maximum of 2 abilities.', 'system', '⚠️')
+        return
+      }
+    }
+    toggleBet(id)
+  }, [canAffordBet, selectedBets, getSelectedAbilityCount, toggleBet, onAddNotification])
+
   const handleCreateRoom = useCallback(() => {
     if (roomCardCount < 1) {
       onAddNotification('No Room Cards', 'You need at least 1 Room Card to create a room.', 'system', '🃏')
@@ -97,9 +195,15 @@ export function RoomFight({
       return
     }
 
+    // Check minimum 100 coins
+    if (coins < 100) {
+      onAddNotification('Insufficient Coins', 'Both players need at least 100 coins to play.', 'system', '💰')
+      return
+    }
+
     // Verify the user can afford all selected bets
     for (const betId of selectedBets) {
-      const item = BET_ITEMS.find(b => b.id === betId)
+      const item = ALL_BET_ITEMS.find(b => b.id === betId)
       if (item && !canAffordBet(item)) {
         onAddNotification('Not Enough', `You don't have enough ${item.label} to bet.`, 'system', '❌')
         return
@@ -112,7 +216,7 @@ export function RoomFight({
     setWaitingForOpponent(true)
     onUseRoomCard()
     onAddNotification('Room Created!', `Room ${code} created. Share the code with your opponent!`, 'system', '🏠')
-  }, [roomCardCount, selectedBets, roomPassword, onUseRoomCard, onAddNotification, canAffordBet])
+  }, [roomCardCount, selectedBets, roomPassword, onUseRoomCard, onAddNotification, canAffordBet, coins])
 
   const handleCopyRoomCode = useCallback(() => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -127,20 +231,27 @@ export function RoomFight({
       onAddNotification('Invalid Code', 'Please enter a valid 6-digit room code.', 'system', '❌')
       return
     }
+
+    // Check minimum 100 coins
+    if (coins < 100) {
+      onAddNotification('Insufficient Coins', 'Both players need at least 100 coins to play.', 'system', '💰')
+      return
+    }
+
     setJoinSearching(true)
     // Simulate finding the room and opponent
     setTimeout(() => {
       const opponent = MOCK_OPPONENTS[Math.floor(Math.random() * MOCK_OPPONENTS.length)]
       setJoinOpponent(opponent)
     }, 2000)
-  }, [joinCode, onAddNotification])
+  }, [joinCode, onAddNotification, coins])
 
   const handleAcceptJoin = useCallback(() => {
     if (!joinOpponent) return
     // Deduct the selected abilities/coins for joining
     const abilities: string[] = []
     for (const betId of selectedBets) {
-      const item = BET_ITEMS.find(b => b.id === betId)
+      const item = ALL_BET_ITEMS.find(b => b.id === betId)
       if (item) {
         if (item.type === 'ability' && item.abilityType) {
           onDeductAbility(item.abilityType, item.amount)
@@ -173,12 +284,14 @@ export function RoomFight({
     setCreatedRoomCode('')
     setRoomPassword('')
     setSelectedBets(new Set())
+    setOpponentUid('')
   }, [])
 
   const handleClose = useCallback(() => {
     handleCancelCreate()
     handleCancelJoin()
     setActiveTab('create')
+    setShowFriendList(false)
     onClose()
   }, [onClose, handleCancelCreate, handleCancelJoin])
 
@@ -239,19 +352,19 @@ export function RoomFight({
               {/* ===== CREATE ROOM TAB ===== */}
               {activeTab === 'create' && !waitingForOpponent && (
                 <div className="space-y-3">
-                  {/* Bet Selection */}
+                  {/* Coin Bet Selection */}
                   <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                     <div className="flex items-center gap-1.5 mb-2">
                       <Zap className="w-3 h-3" style={{ color: '#EDC22E' }} />
-                      <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>Select Bet Items</span>
+                      <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>Select Coin Bet</span>
                       <span className="text-[7px] ml-auto" style={{ color: 'rgba(255,255,255,0.3)' }}>{selectedBets.size} selected</span>
                     </div>
                     <div className="grid grid-cols-3 gap-1.5">
-                      {BET_ITEMS.map(item => {
+                      {COIN_OPTIONS.map(item => {
                         const isSelected = selectedBets.has(item.id)
                         const canAfford = canAffordBet(item)
                         return (
-                          <button key={item.id} onClick={() => canAfford && toggleBet(item.id)}
+                          <button key={item.id} onClick={() => canAfford && handleBetClick(item.id)}
                             className="flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg transition-all"
                             style={{
                               backgroundColor: isSelected ? 'rgba(237,194,46,0.15)' : canAfford ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.01)',
@@ -260,7 +373,36 @@ export function RoomFight({
                             }}>
                             <span className="text-sm">{item.emoji}</span>
                             <span className="text-[8px] font-bold" style={{ color: isSelected ? '#EDC22E' : 'rgba(255,255,255,0.6)' }}>{item.label}</span>
-                            {item.type === 'ability' && item.abilityType && (
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Ability Bet Selection */}
+                  <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Zap className="w-3 h-3" style={{ color: '#00E676' }} />
+                      <span className="text-[10px] font-bold" style={{ color: '#00E676' }}>Select Abilities (Max 2)</span>
+                      <span className="text-[7px] ml-auto" style={{ color: getSelectedAbilityCount() >= 2 ? '#F65E3B' : 'rgba(255,255,255,0.3)' }}>
+                        {getSelectedAbilityCount()}/2
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {ABILITY_OPTIONS.map(item => {
+                        const isSelected = selectedBets.has(item.id)
+                        const canAfford = canAffordBet(item)
+                        return (
+                          <button key={item.id} onClick={() => canAfford && handleBetClick(item.id)}
+                            className="flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg transition-all"
+                            style={{
+                              backgroundColor: isSelected ? 'rgba(0,230,118,0.15)' : canAfford ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.01)',
+                              border: isSelected ? '1.5px solid rgba(0,230,118,0.5)' : canAfford ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(255,255,255,0.03)',
+                              opacity: canAfford ? 1 : 0.35,
+                            }}>
+                            <span className="text-sm">{item.emoji}</span>
+                            <span className="text-[8px] font-bold" style={{ color: isSelected ? '#00E676' : 'rgba(255,255,255,0.6)' }}>{item.label}</span>
+                            {item.abilityType && (
                               <span className="text-[6px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
                                 x{item.abilityType === 'hammer' ? hammerCount : item.abilityType === 'magnet' ? magnetCount : blastCount}
                               </span>
@@ -268,6 +410,92 @@ export function RoomFight({
                           </button>
                         )
                       })}
+                    </div>
+                  </div>
+
+                  {/* Timer Selection */}
+                  <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Clock className="w-3 h-3" style={{ color: '#E040FB' }} />
+                      <span className="text-[10px] font-bold" style={{ color: '#E040FB' }}>Game Timer</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {TIMER_OPTIONS.map(opt => (
+                        <button key={opt.seconds} onClick={() => setSelectedTimer(opt.seconds)}
+                          className="flex-1 py-2 rounded-lg text-[10px] font-bold transition-all text-center"
+                          style={{
+                            backgroundColor: selectedTimer === opt.seconds ? 'rgba(224,64,251,0.2)' : 'rgba(255,255,255,0.04)',
+                            border: selectedTimer === opt.seconds ? '1px solid rgba(224,64,251,0.5)' : '1px solid rgba(255,255,255,0.08)',
+                            color: selectedTimer === opt.seconds ? '#E040FB' : 'rgba(255,255,255,0.5)',
+                          }}>
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Opponent UID with Friend Invite */}
+                  <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Users className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.4)' }} />
+                      <span className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>Opponent UID (Optional)</span>
+                    </div>
+                    <div className="relative">
+                      <div className="flex items-center gap-1.5">
+                        <input type="text" value={opponentUid} onChange={e => setOpponentUid(e.target.value)}
+                          placeholder="Enter opponent UID"
+                          className="flex-1 px-3 py-2 rounded-lg text-xs outline-none"
+                          style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }} />
+                        <button
+                          onClick={() => setShowFriendList(!showFriendList)}
+                          className="px-2.5 py-2 rounded-lg flex items-center gap-1 transition-transform active:scale-95"
+                          style={{ backgroundColor: showFriendList ? 'rgba(0,230,118,0.15)' : 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
+                        >
+                          <UserPlus className="w-3.5 h-3.5" style={{ color: showFriendList ? '#00E676' : 'rgba(255,255,255,0.5)' }} />
+                        </button>
+                      </div>
+
+                      {/* Friend List Dropdown */}
+                      <AnimatePresence>
+                        {showFriendList && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -5 }}
+                            className="absolute top-full left-0 right-0 mt-1 rounded-lg overflow-hidden z-20 max-h-40 overflow-y-auto"
+                            style={{ backgroundColor: '#1a0a30', border: '1px solid rgba(255,255,255,0.1)' }}
+                          >
+                            {friends.length === 0 ? (
+                              <div className="p-3 text-center">
+                                <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>No friends yet. Add friends to invite them!</p>
+                              </div>
+                            ) : (
+                              friends.map(friend => (
+                                <button
+                                  key={friend.friendId}
+                                  onClick={() => {
+                                    setOpponentUid(friend.inviteCode)
+                                    setShowFriendList(false)
+                                  }}
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors"
+                                  style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+                                  onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'}
+                                  onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                                >
+                                  <span className="text-sm">{friend.avatar || '👤'}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[9px] font-bold truncate" style={{ color: '#FFFFFF' }}>{friend.name}</p>
+                                    <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{friend.inviteCode}</p>
+                                  </div>
+                                  <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(0,230,118,0.15)', color: '#00E676' }}>
+                                    + Invite
+                                  </span>
+                                </button>
+                              ))
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
 
@@ -287,10 +515,10 @@ export function RoomFight({
                   <button onClick={handleCreateRoom}
                     className="w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
                     style={{
-                      background: roomCardCount >= 1 && selectedBets.size >= 1
+                      background: roomCardCount >= 1 && selectedBets.size >= 1 && coins >= 100
                         ? 'linear-gradient(135deg, #F65E3B, #FF7A00)' : 'rgba(255,255,255,0.06)',
-                      color: roomCardCount >= 1 && selectedBets.size >= 1 ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
-                      boxShadow: roomCardCount >= 1 && selectedBets.size >= 1 ? '0 4px 15px rgba(246,94,59,0.3)' : 'none',
+                      color: roomCardCount >= 1 && selectedBets.size >= 1 && coins >= 100 ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
+                      boxShadow: roomCardCount >= 1 && selectedBets.size >= 1 && coins >= 100 ? '0 4px 15px rgba(246,94,59,0.3)' : 'none',
                     }}>
                     <Swords className="w-4 h-4" />
                     CREATE ROOM (1 🃏)
@@ -299,6 +527,11 @@ export function RoomFight({
                   {roomCardCount < 1 && (
                     <p className="text-center text-[8px]" style={{ color: '#F65E3B' }}>
                       ⚠️ You need a Room Card to create a room. Get one from the Store!
+                    </p>
+                  )}
+                  {coins < 100 && (
+                    <p className="text-center text-[8px]" style={{ color: '#F65E3B' }}>
+                      ⚠️ You need at least 100 coins to play. Earn more coins!
                     </p>
                   )}
                 </div>
@@ -336,10 +569,17 @@ export function RoomFight({
                       </div>
                     )}
 
+                    {/* Timer display */}
+                    <div className="flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-lg"
+                      style={{ backgroundColor: 'rgba(224,64,251,0.08)', border: '1px solid rgba(224,64,251,0.15)' }}>
+                      <Clock className="w-3 h-3" style={{ color: '#E040FB' }} />
+                      <span className="text-[8px]" style={{ color: '#E040FB' }}>Timer: {selectedTimer}s</span>
+                    </div>
+
                     {/* Selected bets summary */}
                     <div className="flex items-center gap-1 mt-3">
                       {Array.from(selectedBets).map(betId => {
-                        const item = BET_ITEMS.find(b => b.id === betId)
+                        const item = ALL_BET_ITEMS.find(b => b.id === betId)
                         return item ? <span key={betId} className="text-sm">{item.emoji}</span> : null
                       })}
                     </div>
@@ -396,12 +636,13 @@ export function RoomFight({
                       <Zap className="w-3 h-3" style={{ color: '#EDC22E' }} />
                       <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>Your Bet</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {BET_ITEMS.map(item => {
+                    {/* Coin options */}
+                    <div className="grid grid-cols-3 gap-1.5 mb-2">
+                      {COIN_OPTIONS.map(item => {
                         const isSelected = selectedBets.has(item.id)
                         const canAfford = canAffordBet(item)
                         return (
-                          <button key={item.id} onClick={() => canAfford && toggleBet(item.id)}
+                          <button key={item.id} onClick={() => canAfford && handleBetClick(item.id)}
                             className="flex flex-col items-center gap-0.5 py-1.5 px-1 rounded-lg transition-all"
                             style={{
                               backgroundColor: isSelected ? 'rgba(237,194,46,0.15)' : 'rgba(255,255,255,0.03)',
@@ -414,18 +655,43 @@ export function RoomFight({
                         )
                       })}
                     </div>
+                    {/* Ability options */}
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {ABILITY_OPTIONS.map(item => {
+                        const isSelected = selectedBets.has(item.id)
+                        const canAfford = canAffordBet(item)
+                        return (
+                          <button key={item.id} onClick={() => canAfford && handleBetClick(item.id)}
+                            className="flex flex-col items-center gap-0.5 py-1.5 px-1 rounded-lg transition-all"
+                            style={{
+                              backgroundColor: isSelected ? 'rgba(0,230,118,0.15)' : 'rgba(255,255,255,0.03)',
+                              border: isSelected ? '1.5px solid rgba(0,230,118,0.5)' : '1px solid rgba(255,255,255,0.06)',
+                              opacity: canAfford ? 1 : 0.35,
+                            }}>
+                            <span className="text-xs">{item.emoji}</span>
+                            <span className="text-[7px] font-bold" style={{ color: isSelected ? '#00E676' : 'rgba(255,255,255,0.5)' }}>{item.label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
 
                   <button onClick={handleJoinRoom}
                     className="w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
                     style={{
-                      background: joinCode.length === 6 ? 'linear-gradient(135deg, #00E676, #00C853)' : 'rgba(255,255,255,0.06)',
-                      color: joinCode.length === 6 ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
-                      boxShadow: joinCode.length === 6 ? '0 4px 15px rgba(0,230,118,0.3)' : 'none',
+                      background: joinCode.length === 6 && coins >= 100 ? 'linear-gradient(135deg, #00E676, #00C853)' : 'rgba(255,255,255,0.06)',
+                      color: joinCode.length === 6 && coins >= 100 ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
+                      boxShadow: joinCode.length === 6 && coins >= 100 ? '0 4px 15px rgba(0,230,118,0.3)' : 'none',
                     }}>
                     <Users className="w-4 h-4" />
                     JOIN ROOM
                   </button>
+
+                  {coins < 100 && (
+                    <p className="text-center text-[8px]" style={{ color: '#F65E3B' }}>
+                      ⚠️ You need at least 100 coins to join a room.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -506,12 +772,13 @@ export function RoomFight({
                       <Zap className="w-3 h-3" style={{ color: '#EDC22E' }} />
                       <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>Your Bet</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {BET_ITEMS.map(item => {
+                    {/* Coin options */}
+                    <div className="grid grid-cols-3 gap-1.5 mb-2">
+                      {COIN_OPTIONS.map(item => {
                         const isSelected = selectedBets.has(item.id)
                         const canAfford = canAffordBet(item)
                         return (
-                          <button key={item.id} onClick={() => canAfford && toggleBet(item.id)}
+                          <button key={item.id} onClick={() => canAfford && handleBetClick(item.id)}
                             className="flex flex-col items-center gap-0.5 py-1.5 px-1 rounded-lg transition-all"
                             style={{
                               backgroundColor: isSelected ? 'rgba(237,194,46,0.15)' : canAfford ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.01)',
@@ -524,6 +791,25 @@ export function RoomFight({
                         )
                       })}
                     </div>
+                    {/* Ability options */}
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {ABILITY_OPTIONS.map(item => {
+                        const isSelected = selectedBets.has(item.id)
+                        const canAfford = canAffordBet(item)
+                        return (
+                          <button key={item.id} onClick={() => canAfford && handleBetClick(item.id)}
+                            className="flex flex-col items-center gap-0.5 py-1.5 px-1 rounded-lg transition-all"
+                            style={{
+                              backgroundColor: isSelected ? 'rgba(0,230,118,0.15)' : canAfford ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.01)',
+                              border: isSelected ? '1.5px solid rgba(0,230,118,0.5)' : canAfford ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(255,255,255,0.03)',
+                              opacity: canAfford ? 1 : 0.35,
+                            }}>
+                            <span className="text-sm">{item.emoji}</span>
+                            <span className="text-[8px] font-bold" style={{ color: isSelected ? '#00E676' : 'rgba(255,255,255,0.6)' }}>{item.label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
 
                   <button
@@ -532,13 +818,17 @@ export function RoomFight({
                         onAddNotification('No Room Cards', 'You need at least 1 Room Card for Random Match.', 'system', '🃏')
                         return
                       }
+                      if (coins < 100) {
+                        onAddNotification('Insufficient Coins', 'Both players need at least 100 coins to play.', 'system', '💰')
+                        return
+                      }
                       if (selectedBets.size < 1) {
                         onAddNotification('Select Bet', 'Please select at least 1 item to bet.', 'system', '🎯')
                         return
                       }
                       // Verify affordability
                       for (const betId of selectedBets) {
-                        const item = BET_ITEMS.find(b => b.id === betId)
+                        const item = ALL_BET_ITEMS.find(b => b.id === betId)
                         if (item && !canAffordBet(item)) {
                           onAddNotification('Not Enough', `You don't have enough ${item.label}.`, 'system', '❌')
                           return
@@ -547,7 +837,7 @@ export function RoomFight({
                       // Start random match
                       const abilities: string[] = []
                       for (const betId of selectedBets) {
-                        const item = BET_ITEMS.find(b => b.id === betId)
+                        const item = ALL_BET_ITEMS.find(b => b.id === betId)
                         if (item) {
                           if (item.type === 'ability' && item.abilityType) {
                             onDeductAbility(item.abilityType, item.amount)
@@ -564,10 +854,10 @@ export function RoomFight({
                     }}
                     className="w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
                     style={{
-                      background: roomCardCount >= 1 && selectedBets.size >= 1
+                      background: roomCardCount >= 1 && selectedBets.size >= 1 && coins >= 100
                         ? 'linear-gradient(135deg, #E040FB, #7C4DFF)' : 'rgba(255,255,255,0.06)',
-                      color: roomCardCount >= 1 && selectedBets.size >= 1 ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
-                      boxShadow: roomCardCount >= 1 && selectedBets.size >= 1 ? '0 4px 15px rgba(224,64,251,0.3)' : 'none',
+                      color: roomCardCount >= 1 && selectedBets.size >= 1 && coins >= 100 ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
+                      boxShadow: roomCardCount >= 1 && selectedBets.size >= 1 && coins >= 100 ? '0 4px 15px rgba(224,64,251,0.3)' : 'none',
                     }}>
                     🎲 FIND RANDOM OPPONENT (1 🃏)
                   </button>
@@ -575,6 +865,11 @@ export function RoomFight({
                   {roomCardCount < 1 && (
                     <p className="text-center text-[8px]" style={{ color: '#F65E3B' }}>
                       ⚠️ You need a Room Card. Get one from the Store!
+                    </p>
+                  )}
+                  {coins < 100 && (
+                    <p className="text-center text-[8px]" style={{ color: '#F65E3B' }}>
+                      ⚠️ You need at least 100 coins to play.
                     </p>
                   )}
                 </div>
@@ -587,10 +882,10 @@ export function RoomFight({
                   <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)' }}>
                     <div className="flex items-center gap-1.5 mb-2">
                       <AlertTriangle className="w-3.5 h-3.5" style={{ color: '#F65E3B' }} />
-                      <span className="text-[10px] font-bold" style={{ color: '#F65E3B' }}>20% Tax Applies</span>
+                      <span className="text-[10px] font-bold" style={{ color: '#F65E3B' }}>5% Tax Applies</span>
                     </div>
                     <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                      A 20% platform tax is applied to all room game winnings. This ensures fair play and server maintenance.
+                      A 5% platform tax is applied to all room game winnings. This ensures fair play and server maintenance.
                     </p>
                   </div>
 
@@ -600,10 +895,10 @@ export function RoomFight({
                     <div className="space-y-2">
                       {[
                         { step: '1', text: 'Create a room with 1 Room Card' },
-                        { step: '2', text: 'Select abilities or coins to bet' },
+                        { step: '2', text: 'Select coins or abilities to bet' },
                         { step: '3', text: 'Share the 6-digit code with your opponent' },
-                        { step: '4', text: 'Both players put 2 abilities each' },
-                        { step: '5', text: 'Winner takes all (minus 20% tax)' },
+                        { step: '4', text: 'Both players put up their bets' },
+                        { step: '5', text: 'Winner takes all (minus 5% tax)' },
                       ].map(item => (
                         <div key={item.step} className="flex items-start gap-2">
                           <span className="w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold flex-shrink-0"
@@ -618,9 +913,9 @@ export function RoomFight({
 
                   {/* Example */}
                   <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.12)' }}>
-                    <p className="text-[10px] font-bold mb-1.5" style={{ color: '#00E676' }}>💡 Example: ₹55 Game</p>
+                    <p className="text-[10px] font-bold mb-1.5" style={{ color: '#00E676' }}>💡 Example: Coin Bet Game</p>
                     <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                      Each player puts 2 abilities. Winner gets all 4 abilities minus 20% tax. Fair play guaranteed!
+                      Each player bets coins. Winner gets all coins minus 5% tax. Fair play guaranteed!
                     </p>
                   </div>
 
@@ -636,6 +931,8 @@ export function RoomFight({
                         'Both players must accept before starting',
                         'Room codes expire after 10 minutes',
                         'Disconnections result in automatic loss',
+                        'Minimum 100 coins required to play',
+                        'Max 2 abilities can be selected per game',
                       ].map((rule, i) => (
                         <li key={i} className="flex items-center gap-1.5">
                           <ChevronRight className="w-2.5 h-2.5" style={{ color: 'rgba(255,255,255,0.2)' }} />

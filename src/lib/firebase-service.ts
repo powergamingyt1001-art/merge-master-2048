@@ -38,6 +38,7 @@ export interface FirebasePlayer {
   joinedAt: number
   totalBattlesPlayed: number
   totalBattlesWon: number
+  likes?: number
 }
 
 export interface FirebaseReferral {
@@ -1251,7 +1252,7 @@ export function onOrdersUpdate(callback: (orders: FirebaseStoreOrder[]) => void)
   }
 }
 
-// Update order status (approve/reject)
+// Update order status (approve/reject) - auto-delivers items on approval, notifies on rejection
 export async function updateOrderStatus(orderId: string, status: 'approved' | 'rejected'): Promise<void> {
   try {
     const orderRef = ref(db, `orders/${orderId}`)
@@ -1260,6 +1261,90 @@ export async function updateOrderStatus(orderId: string, status: 'approved' | 'r
       updates.approvedAt = Date.now()
     }
     await update(orderRef, updates)
+
+    // If approved, auto-deliver items and notify user
+    if (status === 'approved') {
+      const orderSnapshot = await get(orderRef)
+      if (orderSnapshot.exists()) {
+        const order = orderSnapshot.val()
+        // Parse items from the order and deliver them
+        const deliveryItems: {
+          coins?: number
+          abilities?: Array<{ type: string; count: number }>
+          roomCards?: number
+          spinTickets?: number
+        } = {}
+
+        if (order.items && Array.isArray(order.items)) {
+          for (const item of order.items) {
+            // Add coins
+            if (item.name?.includes('Coins') || item.name?.includes('💰')) {
+              const coinMatch = item.name.match(/[\d,]+/)
+              if (coinMatch) {
+                const coins = parseInt(coinMatch[0].replace(/,/g, ''))
+                if (coins > 0) {
+                  deliveryItems.coins = (deliveryItems.coins || 0) + coins
+                }
+              }
+            }
+            // Add abilities based on name
+            if (item.name?.includes('Hammer') || item.name?.includes('🔨')) {
+              if (!deliveryItems.abilities) deliveryItems.abilities = []
+              deliveryItems.abilities.push({ type: 'hammer', count: (item.quantity || 1) * 5 })
+            }
+            if (item.name?.includes('Magnet') || item.name?.includes('🧲')) {
+              if (!deliveryItems.abilities) deliveryItems.abilities = []
+              deliveryItems.abilities.push({ type: 'magnet', count: (item.quantity || 1) * 5 })
+            }
+            if (item.name?.includes('Bomb') || item.name?.includes('💣') || item.name?.includes('Blast')) {
+              if (!deliveryItems.abilities) deliveryItems.abilities = []
+              deliveryItems.abilities.push({ type: 'blast', count: (item.quantity || 1) * 5 })
+            }
+            if (item.name?.includes('5x') || item.name?.includes('⚡')) {
+              if (!deliveryItems.abilities) deliveryItems.abilities = []
+              deliveryItems.abilities.push({ type: 'multiplier5x', count: (item.quantity || 1) * 5 })
+            }
+            if (item.name?.includes('2.5x') || item.name?.includes('🔥')) {
+              if (!deliveryItems.abilities) deliveryItems.abilities = []
+              deliveryItems.abilities.push({ type: 'multiplier2_5x', count: (item.quantity || 1) * 5 })
+            }
+            if (item.name?.includes('Timer') || item.name?.includes('⏱️')) {
+              if (!deliveryItems.abilities) deliveryItems.abilities = []
+              deliveryItems.abilities.push({ type: 'extraTime', count: (item.quantity || 1) * 5 })
+            }
+            if (item.name?.includes('Room') || item.name?.includes('🃏')) {
+              deliveryItems.roomCards = (deliveryItems.roomCards || 0) + (item.quantity || 1)
+            }
+            if (item.name?.includes('Spin') || item.name?.includes('🎫')) {
+              deliveryItems.spinTickets = (deliveryItems.spinTickets || 0) + (item.quantity || 1)
+            }
+          }
+        }
+
+        // Deliver items via the existing delivery system
+        if (order.playerId) {
+          await deliverOrderItems(orderId, order.playerId, deliveryItems)
+        }
+      }
+    }
+
+    // If rejected, notify user
+    if (status === 'rejected') {
+      const orderSnapshot = await get(orderRef)
+      if (orderSnapshot.exists()) {
+        const order = orderSnapshot.val()
+        if (order.playerId) {
+          const notifRef = push(ref(db, `userNotifications/${order.playerId}`))
+          await set(notifRef, {
+            type: 'order_rejected',
+            orderId,
+            message: `Your payment was not verified. Order cancelled.`,
+            deliveredAt: Date.now(),
+            delivered: false,
+          })
+        }
+      }
+    }
   } catch (err) {
     console.warn('Firebase updateOrderStatus failed:', err)
   }
@@ -1569,5 +1654,82 @@ export async function checkAdminPassword(password: string): Promise<boolean> {
   } catch (err) {
     console.warn('Firebase checkAdminPassword failed:', err)
     return false
+  }
+}
+
+// ============================================================
+// LIKE SYSTEM - Firebase real-time sync
+// ============================================================
+
+// Add a like from one player to another
+export async function addLike(
+  fromPlayerId: string,
+  toPlayerId: string
+): Promise<void> {
+  try {
+    // Set the like in the likes collection (prevents duplicate likes)
+    await set(ref(db, `likes/${toPlayerId}/${fromPlayerId}`), {
+      timestamp: Date.now()
+    })
+    // Increment the like count on the target player
+    const playerRef = ref(db, `players/${toPlayerId}`)
+    const snapshot = await get(playerRef)
+    if (snapshot.exists()) {
+      const currentLikes = snapshot.val().likes || 0
+      await update(playerRef, { likes: currentLikes + 1 })
+    }
+  } catch (err) {
+    console.warn('Firebase addLike failed:', err)
+  }
+}
+
+// Remove a like
+export async function removeLike(
+  fromPlayerId: string,
+  toPlayerId: string
+): Promise<void> {
+  try {
+    await set(ref(db, `likes/${toPlayerId}/${fromPlayerId}`), null)
+    const playerRef = ref(db, `players/${toPlayerId}`)
+    const snapshot = await get(playerRef)
+    if (snapshot.exists()) {
+      const currentLikes = snapshot.val().likes || 0
+      await update(playerRef, { likes: Math.max(0, currentLikes - 1) })
+    }
+  } catch (err) {
+    console.warn('Firebase removeLike failed:', err)
+  }
+}
+
+// Check if a player has liked another player
+export async function hasLiked(
+  fromPlayerId: string,
+  toPlayerId: string
+): Promise<boolean> {
+  try {
+    const likeRef = ref(db, `likes/${toPlayerId}/${fromPlayerId}`)
+    const snapshot = await get(likeRef)
+    return snapshot.exists()
+  } catch (err) {
+    console.warn('Firebase hasLiked failed:', err)
+    return false
+  }
+}
+
+// Listen to likes count for a player in real-time
+export function onLikesUpdate(
+  playerId: string,
+  callback: (count: number) => void
+): () => void {
+  try {
+    const likesRef = ref(db, `players/${playerId}/likes`)
+    const handler = onValue(likesRef, (snapshot) => {
+      callback(snapshot.exists() ? snapshot.val() : 0)
+    })
+    return () => off(likesRef, 'value', handler)
+  } catch (err) {
+    console.warn('Firebase onLikesUpdate failed:', err)
+    callback(0)
+    return () => {}
   }
 }

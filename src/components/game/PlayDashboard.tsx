@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Swords, Clock, Trophy, Coins, Crown, Bell, Lock, Search, Loader2, Users } from 'lucide-react'
+import { Play, Swords, Clock, Trophy, Coins, Crown, Bell, Lock, Search, Loader2, Users, X, UserPlus, ChevronDown } from 'lucide-react'
 import { SpinWheel, SpinPrize } from './SpinWheel'
 import { LoginStreak } from './LoginStreak'
 import { WelcomeGift } from './WelcomeGift'
@@ -22,6 +22,7 @@ import {
   getDashboardBigBannerSlot,
 } from '@/components/ads/AdsterraAds'
 import { PowerUp, Notification, DailyTask, DailyTaskReward, GameHistoryEntry, getLevelInfo } from '@/hooks/useGame'
+import { sendFriendRequest, getFriendRequests, onFriendRequestsUpdate, acceptFriendRequest, declineFriendRequest, getFriends, onFriendsUpdate, searchPlayerByUserCode, removeFriend, type FriendData, type FriendRequestData } from '@/lib/firebase-service'
 
 
 interface PlayDashboardProps {
@@ -97,6 +98,8 @@ interface PlayDashboardProps {
   gameHistory: GameHistoryEntry[]
   streakWeek: number
   onAddRoomCards: (count: number) => void
+  onDeleteGameHistory?: (id: string) => void
+  onClearGameHistory?: () => void
 }
 
 const COIN_GAME_MODES = [
@@ -140,6 +143,7 @@ export function PlayDashboard({
   weeklyBonusClaimed = false, onClaimWeeklyBonus,
   userCode, totalCoinsEarned, winningCoins, roomCardCount, gameHistory,
   streakWeek = 1, onAddRoomCards,
+  onDeleteGameHistory, onClearGameHistory,
 }: PlayDashboardProps) {
   const [showSpin, setShowSpin] = useState(false)
   const [showStreak, setShowStreak] = useState(false)
@@ -157,7 +161,16 @@ export function PlayDashboard({
   const [showStore, setShowStore] = useState(false)
   const [showCoupon, setShowCoupon] = useState(false)
   const [showRoomFight, setShowRoomFight] = useState(false)
+  const [showFriends, setShowFriends] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
+  // Friends state
+  const [friendsList, setFriendsList] = useState<Array<{ friendId: string } & FriendData>>([])
+  const [friendRequests, setFriendRequests] = useState<Array<{ fromPlayerId: string } & FriendRequestData>>([])
+  const [friendSearchUid, setFriendSearchUid] = useState('')
+  const [friendSearchResult, setFriendSearchResult] = useState<{ id: string; name: string; avatar: string; level: number; userCode: string } | null>(null)
+  const [friendSearchLoading, setFriendSearchLoading] = useState(false)
+  const [friendPlayMenu, setFriendPlayMenu] = useState<string | null>(null)
+  const [friendRequestSending, setFriendRequestSending] = useState(false)
   // Searching animation for Battle/Coin modes
   const [searching, setSearching] = useState<{ active: boolean; type: 'battle' | 'coins'; timeLimit?: number; coinFee?: number; opponent?: { name: string; avatar: string } } | null>(null)
   const searchTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -167,6 +180,52 @@ export function PlayDashboard({
   const unreadNotifications = notifications.filter(n => !n.read).length
   const gamesLeft = maxGamesPerDay - gamesPlayedToday
   const isGameLimitReached = gamesLeft <= 0
+
+  // Friends real-time listeners
+  useEffect(() => {
+    if (!playerId) return
+    const unsubFriends = onFriendsUpdate(playerId, (friends) => setFriendsList(friends))
+    const unsubRequests = onFriendRequestsUpdate(playerId, (requests) => setFriendRequests(requests))
+    return () => { unsubFriends(); unsubRequests() }
+  }, [playerId])
+
+  // Search friend by UID
+  const handleFriendSearch = useCallback(async () => {
+    if (!friendSearchUid.trim()) return
+    setFriendSearchLoading(true)
+    setFriendSearchResult(null)
+    try {
+      const player = await searchPlayerByUserCode(friendSearchUid.trim())
+      if (player && player.id !== playerId) {
+        setFriendSearchResult({ id: player.id, name: player.name || 'Player', avatar: player.avatar || '😎', level: player.level || 1, userCode: player.userCode || '' })
+      }
+    } catch { /* ignore */ }
+    setFriendSearchLoading(false)
+  }, [friendSearchUid, playerId])
+
+  // Send friend request
+  const handleSendFriendReq = useCallback(async (targetPlayerId: string) => {
+    setFriendRequestSending(true)
+    try {
+      const result = await sendFriendRequest(playerId, playerName, playerAvatar, playerLevel, userCode, targetPlayerId)
+      if (result.success) {
+        onAddNotification('Friend Request Sent! 🎉', `Request sent successfully!`, 'invite', '👤')
+      } else {
+        onAddNotification('Friend Request', result.reason || 'Could not send request', 'system', '⚠️')
+      }
+    } catch { /* ignore */ }
+    setFriendRequestSending(false)
+  }, [playerId, playerName, playerAvatar, playerLevel, userCode, onAddNotification])
+
+  // Accept/decline friend request
+  const handleAcceptRequest = useCallback(async (fromPlayerId: string) => {
+    await acceptFriendRequest(playerId, fromPlayerId)
+    onAddNotification('New Friend! 🤝', 'Friend request accepted!', 'invite', '🤝')
+  }, [playerId, onAddNotification])
+
+  const handleDeclineRequest = useCallback(async (fromPlayerId: string) => {
+    await declineFriendRequest(playerId, fromPlayerId)
+  }, [playerId])
 
   // Show welcome gift for new users
   useEffect(() => {
@@ -294,6 +353,18 @@ export function PlayDashboard({
             </div>
 
             <div className="flex items-center gap-1">
+              {/* Friend Requests Indicator */}
+              <button onClick={() => setShowFriends(true)}
+                className="relative w-7 h-7 rounded-lg flex items-center justify-center transition-transform active:scale-95"
+                style={{ backgroundColor: 'var(--game-glass)', border: '1px solid var(--game-glass-border)' }}>
+                <Users className="w-3.5 h-3.5" style={{ color: friendRequests.length > 0 ? '#00E676' : 'rgba(255,255,255,0.4)' }} />
+                {friendRequests.length > 0 && (
+                  <div className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[6px] font-bold"
+                    style={{ backgroundColor: '#00E676', color: '#FFFFFF' }}>
+                    {friendRequests.length > 9 ? '9+' : friendRequests.length}
+                  </div>
+                )}
+              </button>
               <button onClick={() => setShowNotifications(true)}
                 className="relative w-7 h-7 rounded-lg flex items-center justify-center transition-transform active:scale-95"
                 style={{ backgroundColor: 'var(--game-glass)', border: '1px solid var(--game-glass-border)' }}>
@@ -517,8 +588,8 @@ export function PlayDashboard({
             </button>
           </div>
 
-          {/* Quick Actions Row 2: Rank + Invite (wider) */}
-          <div className="w-full grid grid-cols-2 gap-1.5">
+          {/* Quick Actions Row 2: Rank + Invite + Friends */}
+          <div className="w-full grid grid-cols-3 gap-1.5">
             <button onClick={() => setShowLeaderboard(true)}
               className="flex items-center justify-center gap-1.5 py-3 rounded-lg transition-transform active:scale-95"
               style={{ backgroundColor: 'rgba(246,94,59,0.06)', border: '1px solid rgba(246,94,59,0.12)' }}>
@@ -536,6 +607,21 @@ export function PlayDashboard({
                 <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>Invite</p>
                 <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>20% Win / 2% Loss</p>
               </div>
+            </button>
+            <button onClick={() => setShowFriends(true)}
+              className="flex items-center justify-center gap-1.5 py-3 rounded-lg transition-transform active:scale-95 relative"
+              style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.12)' }}>
+              <span className="text-lg">👥</span>
+              <div className="text-left">
+                <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>Friends</p>
+                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{friendsList.length} friends</p>
+              </div>
+              {friendRequests.length > 0 && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[6px] font-bold"
+                  style={{ backgroundColor: '#F65E3B', color: '#FFFFFF' }}>
+                  {friendRequests.length}
+                </div>
+              )}
             </button>
           </div>
 
@@ -743,6 +829,206 @@ export function PlayDashboard({
         )}
       </AnimatePresence>
 
+      {/* Friends Panel Modal */}
+      <AnimatePresence>
+        {showFriends && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[250] flex items-center justify-center px-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
+          >
+            <motion.div
+              initial={{ scale: 0.8, y: 30 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.8 }}
+              className="w-full max-w-sm rounded-2xl overflow-hidden max-h-[85vh] overflow-y-auto"
+              style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 pb-2 sticky top-0 z-10" style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)' }}>
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4" style={{ color: '#00E676' }} />
+                  <h3 className="text-lg font-bold" style={{ color: '#FFFFFF' }}>Friends</h3>
+                  <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(0,230,118,0.15)', color: '#00E676' }}>
+                    {friendsList.length}
+                  </span>
+                </div>
+                <button onClick={() => { setShowFriends(false); setFriendPlayMenu(null) }} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
+                  <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                </button>
+              </div>
+
+              <div className="px-4 pb-4">
+                {/* Search by UID */}
+                <div className="mb-3">
+                  <p className="text-[9px] font-bold mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>🔍 Search by UID to Add Friend</p>
+                  <div className="flex gap-1.5">
+                    <input
+                      value={friendSearchUid}
+                      onChange={(e) => setFriendSearchUid(e.target.value)}
+                      placeholder="Enter UID..."
+                      className="flex-1 px-3 py-2 rounded-lg text-xs font-mono"
+                      style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF', outline: 'none' }}
+                      onKeyDown={(e) => e.key === 'Enter' && handleFriendSearch()}
+                    />
+                    <button onClick={handleFriendSearch}
+                      className="px-3 py-2 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                      style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF' }}>
+                      {friendSearchLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  {/* Search Result */}
+                  {friendSearchResult && (
+                    <div className="mt-2 p-2.5 rounded-lg flex items-center justify-between"
+                      style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.15)' }}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center"
+                          style={{ backgroundColor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}>
+                          <span className="text-sm">{friendSearchResult.avatar}</span>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>{friendSearchResult.name}</p>
+                          <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Lv.{friendSearchResult.level} • UID: {friendSearchResult.userCode}</p>
+                        </div>
+                      </div>
+                      <button onClick={() => handleSendFriendReq(friendSearchResult.id)} disabled={friendRequestSending}
+                        className="flex items-center gap-0.5 px-2 py-1 rounded-lg text-[8px] font-bold transition-transform active:scale-95"
+                        style={{ backgroundColor: 'rgba(0,230,118,0.15)', border: '1px solid rgba(0,230,118,0.3)', color: '#00E676' }}>
+                        <UserPlus className="w-2.5 h-2.5" />
+                        Add
+                      </button>
+                    </div>
+                  )}
+                  {friendSearchUid && !friendSearchLoading && !friendSearchResult && (
+                    <p className="text-[8px] mt-1.5" style={{ color: 'rgba(255,255,255,0.25)' }}>No player found with this UID</p>
+                  )}
+                </div>
+
+                {/* Friend Requests */}
+                {friendRequests.length > 0 && (
+                  <div className="mb-3">
+                    <p className="text-[9px] font-bold mb-1.5" style={{ color: '#EDC22E' }}>📨 Friend Requests ({friendRequests.length})</p>
+                    <div className="space-y-1.5">
+                      {friendRequests.map((req) => (
+                        <div key={req.fromPlayerId}
+                          className="p-2.5 rounded-lg flex items-center justify-between"
+                          style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.15)' }}>
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center"
+                              style={{ backgroundColor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}>
+                              <span className="text-sm">{req.avatar}</span>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>{req.name}</p>
+                              <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Lv.{req.level}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-1">
+                            <button onClick={() => handleAcceptRequest(req.fromPlayerId)}
+                              className="px-2 py-1 rounded-lg text-[8px] font-bold transition-transform active:scale-95"
+                              style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF' }}>
+                              ✓ Accept
+                            </button>
+                            <button onClick={() => handleDeclineRequest(req.fromPlayerId)}
+                              className="px-2 py-1 rounded-lg text-[8px] font-bold transition-transform active:scale-95"
+                              style={{ backgroundColor: 'rgba(246,94,59,0.15)', border: '1px solid rgba(246,94,59,0.3)', color: '#F65E3B' }}>
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Friends List */}
+                <div>
+                  <p className="text-[9px] font-bold mb-1.5" style={{ color: '#00E676' }}>👥 Friends ({friendsList.length})</p>
+                  {friendsList.length === 0 ? (
+                    <div className="text-center py-6">
+                      <span className="text-2xl">👥</span>
+                      <p className="text-[10px] mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>No friends yet</p>
+                      <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.2)' }}>Search by UID to add friends!</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-60 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+                      {friendsList.map((friend) => (
+                        <div key={friend.friendId}
+                          className="p-2.5 rounded-lg"
+                          style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-full flex items-center justify-center"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}>
+                                <span className="text-sm">{friend.avatar}</span>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>{friend.name}</p>
+                                <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Lv.{friend.level}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {/* Invite / + button */}
+                              <button
+                                onClick={() => handleSendFriendReq(friend.friendId)}
+                                className="w-6 h-6 rounded-lg flex items-center justify-center transition-transform active:scale-95"
+                                style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)' }}
+                                title="Invite to game">
+                                <span className="text-[10px] font-bold" style={{ color: '#00E676' }}>+</span>
+                              </button>
+                              {/* Play button with dropdown */}
+                              <div className="relative">
+                                <button onClick={() => setFriendPlayMenu(friendPlayMenu === friend.friendId ? null : friend.friendId)}
+                                  className="px-2.5 py-1 rounded-lg text-[8px] font-bold transition-transform active:scale-95 flex items-center gap-0.5"
+                                  style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
+                                  ▶ Play
+                                  <ChevronDown className="w-2.5 h-2.5" />
+                                </button>
+                                {/* Play mode dropdown */}
+                                <AnimatePresence>
+                                  {friendPlayMenu === friend.friendId && (
+                                    <motion.div
+                                      initial={{ opacity: 0, y: -5 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      exit={{ opacity: 0, y: -5 }}
+                                      className="absolute right-0 top-8 z-50 rounded-lg overflow-hidden"
+                                      style={{ backgroundColor: '#1a0533', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+                                      <button onClick={() => { setFriendPlayMenu(null); handleBattleMode(120) }}
+                                        className="w-full px-3 py-2 text-[9px] font-bold text-left flex items-center gap-1.5 hover:bg-white/5 transition-colors"
+                                        style={{ color: '#F65E3B' }}>
+                                        ⚔️ Battle
+                                        <span className="text-[7px] font-normal" style={{ color: 'rgba(255,255,255,0.3)' }}>2m</span>
+                                      </button>
+                                      <button onClick={() => { setFriendPlayMenu(null); handlePlayClassic() }}
+                                        className="w-full px-3 py-2 text-[9px] font-bold text-left flex items-center gap-1.5 hover:bg-white/5 transition-colors"
+                                        style={{ color: '#00E676' }}>
+                                        🎮 Classic
+                                      </button>
+                                      <button onClick={() => { setFriendPlayMenu(null); handleCoinGame(50) }}
+                                        className="w-full px-3 py-2 text-[9px] font-bold text-left flex items-center gap-1.5 hover:bg-white/5 transition-colors"
+                                        style={{ color: '#EDC22E' }}>
+                                        🪙 Coin
+                                        <span className="text-[7px] font-normal" style={{ color: 'rgba(255,255,255,0.3)' }}>₹50</span>
+                                      </button>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Modals */}
       <SpinWheel isOpen={showSpin} onClose={() => setShowSpin(false)} spinTickets={spinTickets}
         onUseTicket={onUseSpinTicket} onWinPrize={handleSpinPrize} onWatchAdForSpin={() => { onAddSpinTickets(1) }} isOnline={isOnline} coins={coins} onDeductCoins={onDeductCoins} onAddSpinTickets={onAddSpinTickets}
@@ -784,7 +1070,10 @@ export function PlayDashboard({
         battleBestScore={gameHistory.filter(g => g.mode === 'bot' || g.mode === 'coins' || g.mode === 'tournament').reduce((max, g) => Math.max(max, g.score), 0)}
         gameHistory={gameHistory}
         onOpenRoomFight={() => { setShowProfile(false); setShowRoomFight(true) }}
-        onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} />
+        onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)}
+        onDeleteGameHistory={onDeleteGameHistory}
+        onClearGameHistory={onClearGameHistory}
+        playerId={playerId} viewerPlayerId={playerId} />
       <NotificationsPanel isOpen={showNotifications} onClose={() => setShowNotifications(false)}
         notifications={notifications} onMarkRead={onMarkNotificationRead} onMarkAllRead={onMarkAllNotificationsRead}
         onDeleteNotification={onDeleteNotification} onDeleteReadNotifications={onDeleteReadNotifications} />
@@ -810,6 +1099,7 @@ export function PlayDashboard({
         onStartRoomGame={(betAmount, abilities) => {
           onAddNotification('Room Game!', `Starting room game (bet: ${betAmount}). Abilities: ${abilities.join(', ')}`, 'system', '🏠')
         }}
+        playerId={playerId}
       />
     </div>
   )

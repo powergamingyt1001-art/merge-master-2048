@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users, TrendingUp, Percent, Gift, Trash2, Sun, Moon, Copy, DoorOpen, History, Search, Lock, Heart, UserPlus } from 'lucide-react'
 import { Notification, PLAYER_AVATARS, getLevelInfo, getLevelThreshold, MAX_LEVEL, GameHistoryEntry } from '@/hooks/useGame'
+import { addLike, removeLike, hasLiked, onLikesUpdate } from '@/lib/firebase-service'
 import { AdsterraBanner320x50 } from '@/components/ads/AdsterraAds'
 import { useTheme } from 'next-themes'
 
@@ -53,6 +54,10 @@ interface ProfilePanelProps {
   isLiked?: boolean
   onToggleLike?: () => void
   onAddNotification?: (title: string, message: string, type: string, emoji: string) => void
+  playerId?: string
+  viewerPlayerId?: string
+  onDeleteGameHistory?: (id: string) => void
+  onClearGameHistory?: () => void
 }
 
 // Coin count formatter: 1000→1K, 2500→2.5K, 1000000→1M
@@ -130,6 +135,8 @@ export function ProfilePanel({
   onOpenRoomFight, onStartRoomGame,
   skillPoints, isOwnProfile = true, likeCount = 0, isLiked = false, onToggleLike,
   onAddNotification,
+  playerId, viewerPlayerId,
+  onDeleteGameHistory, onClearGameHistory,
 }: ProfilePanelProps) {
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState(playerName)
@@ -160,26 +167,37 @@ export function ProfilePanel({
     setLocalLikeCount(likeCount)
   }, [isLiked, likeCount])
 
-  // Load like state from localStorage on mount
+  // Firebase real-time likes listener for own profile
   useEffect(() => {
-    const stored = localStorage.getItem(`profile-like-${userCode}`)
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored)
-        setLocalLiked(parsed.liked ?? false)
-        setLocalLikeCount(parsed.count ?? likeCount)
-      } catch {
-        // ignore
-      }
-    }
-  }, [userCode, likeCount])
+    const targetId = playerId || ''
+    if (!targetId) return
+    const unsubscribe = onLikesUpdate(targetId, (count) => {
+      setLocalLikeCount(count)
+    })
+    return unsubscribe
+  }, [playerId])
 
-  const handleToggleLike = () => {
+  // Check if viewer has liked this profile on mount
+  useEffect(() => {
+    const targetId = playerId || ''
+    const viewerId = viewerPlayerId || ''
+    if (!targetId || !viewerId || targetId === viewerId) return
+    hasLiked(viewerId, targetId).then((alreadyLiked) => {
+      setLocalLiked(alreadyLiked)
+    })
+  }, [playerId, viewerPlayerId])
+
+  const handleToggleLike = async () => {
+    const targetId = playerId || ''
+    const viewerId = viewerPlayerId || ''
+    if (!targetId || !viewerId || targetId === viewerId) return
     const newLiked = !localLiked
-    const newCount = newLiked ? localLikeCount + 1 : Math.max(0, localLikeCount - 1)
     setLocalLiked(newLiked)
-    setLocalLikeCount(newCount)
-    localStorage.setItem(`profile-like-${userCode}`, JSON.stringify({ liked: newLiked, count: newCount }))
+    if (newLiked) {
+      await addLike(viewerId, targetId)
+    } else {
+      await removeLike(viewerId, targetId)
+    }
     onToggleLike?.()
   }
 
@@ -1060,9 +1078,18 @@ export function ProfilePanel({
                         {gameHistory.length}
                       </span>
                     </div>
-                    <button onClick={() => setShowGameHistory(false)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform active:scale-95" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
-                      <X className="w-4 h-4" style={{ color: 'rgba(255,255,255,0.6)' }} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {gameHistory.length > 0 && onClearGameHistory && (
+                        <button onClick={onClearGameHistory}
+                          className="flex items-center gap-0.5 px-2 py-1 rounded-lg text-[8px] font-bold transition-transform active:scale-95"
+                          style={{ backgroundColor: 'rgba(246,94,59,0.12)', border: '1px solid rgba(246,94,59,0.25)', color: '#F65E3B' }}>
+                          🗑️ Clear All
+                        </button>
+                      )}
+                      <button onClick={() => setShowGameHistory(false)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform active:scale-95" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
+                        <X className="w-4 h-4" style={{ color: 'rgba(255,255,255,0.6)' }} />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Tab Sliders */}
@@ -1100,11 +1127,19 @@ export function ProfilePanel({
                       }
                       return filtered.map((entry) => (
                         <div key={entry.id}
-                          className="p-3 rounded-xl"
+                          className="p-3 rounded-xl relative"
                           style={{
                             backgroundColor: entry.result === 'win' ? 'rgba(0,230,118,0.06)' : entry.result === 'lose' ? 'rgba(246,94,59,0.06)' : 'rgba(255,255,255,0.03)',
                             border: `1px solid ${entry.result === 'win' ? 'rgba(0,230,118,0.15)' : entry.result === 'lose' ? 'rgba(246,94,59,0.15)' : 'rgba(255,255,255,0.06)'}`,
                           }}>
+                          {/* Delete button */}
+                          {onDeleteGameHistory && (
+                            <button onClick={() => onDeleteGameHistory(entry.id)}
+                              className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center transition-transform active:scale-90"
+                              style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                              <X className="w-2.5 h-2.5" style={{ color: 'rgba(255,255,255,0.4)' }} />
+                            </button>
+                          )}
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
                               <span className="text-lg">{getModeIcon(entry.mode)}</span>

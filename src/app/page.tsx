@@ -225,6 +225,8 @@ export default function Home() {
                 onClaimDailyTask={game.claimDailyTask}
                 onCompleteVisitWebsiteTask={game.completeVisitWebsiteTask}
                 onResetAllData={game.resetAllData}
+                onDeleteGameHistory={game.deleteGameHistory}
+                onClearGameHistory={game.clearGameHistory}
                 weeklyBonusClaimed={game.weeklyBonusClaimed}
                 onClaimWeeklyBonus={game.claimWeeklyBonus}
                 userCode={game.userCode}

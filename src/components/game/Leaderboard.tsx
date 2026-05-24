@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Crown, Medal, Star, Trophy, Swords, Coins, Wifi, WifiOff, Target, ChevronRight, Heart, Zap, Shield, UserPlus, Copy } from 'lucide-react'
-import { getLeaderboardPlayers, onLeaderboardUpdate, type FirebasePlayer } from '@/lib/firebase-service'
+import { getLeaderboardPlayers, onLeaderboardUpdate, addLike, removeLike, hasLiked, onLikesUpdate, type FirebasePlayer } from '@/lib/firebase-service'
 import { getLevelInfo, getLevelThreshold } from '@/hooks/useGame'
 
 interface LeaderboardProps {
@@ -45,26 +45,7 @@ function formatCoinCount(count: number): string {
   return count.toString()
 }
 
-// Get likes count for a player from localStorage
-function getPlayerLikes(playerId: string): number {
-  try {
-    const likesMap = JSON.parse(localStorage.getItem('mergeMaster2048_playerLikes') || '{}')
-    return likesMap[playerId] || 0
-  } catch {
-    return 0
-  }
-}
-
-// Set likes count for a player in localStorage
-function setPlayerLikes(playerId: string, count: number): void {
-  try {
-    const likesMap = JSON.parse(localStorage.getItem('mergeMaster2048_playerLikes') || '{}')
-    likesMap[playerId] = count
-    localStorage.setItem('mergeMaster2048_playerLikes', JSON.stringify(likesMap))
-  } catch {
-    // ignore
-  }
-}
+// Like system now uses Firebase real-time sync (no more localStorage)
 
 // Offline rank players - progressive, beat one to advance
 const OFFLINE_RANKS = [
@@ -193,20 +174,25 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
   const [copiedUid, setCopiedUid] = useState(false)
 
   // Wrapper to reset liked when selectedPlayer changes
-  const setSelectedPlayer = (player: LeaderboardEntry | null) => {
+  const setSelectedPlayer = async (player: LeaderboardEntry | null) => {
     setSelectedPlayerRaw(player)
-    setLiked(false)
-    if (player?.playerId) {
-      setLikeCount(getPlayerLikes(player.playerId))
+    setCopiedUid(false)
+    if (player?.playerId && player.playerId !== playerId) {
+      // Check if current player has already liked this player via Firebase
+      const alreadyLiked = await hasLiked(playerId, player.playerId)
+      setLiked(alreadyLiked)
+      // Get current likes count from Firebase
+      const fbPlayer = firebasePlayers.find(p => p.id === player.playerId)
+      setLikeCount(fbPlayer?.likes || 0)
     } else {
+      setLiked(false)
       setLikeCount(0)
     }
-    setCopiedUid(false)
   }
 
   const handleCopyUid = () => {
     if (!selectedPlayer?.playerId) return
-    const uid = selectedPlayer.playerId.slice(-8)
+    const uid = selectedFirebasePlayer?.userCode || selectedPlayer.playerId.slice(-8)
     navigator.clipboard.writeText(uid).catch(() => {
       const textArea = document.createElement('textarea')
       textArea.value = uid
@@ -223,7 +209,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
     if (!selectedPlayer?.playerId) return
     try {
       const requests = JSON.parse(localStorage.getItem('mergeMaster2048_friendRequests') || '[]')
-      const uid = selectedPlayer.playerId.slice(-8)
+      const uid = selectedFirebasePlayer?.userCode || selectedPlayer.playerId.slice(-8)
       const existingIndex = requests.findIndex((r: { uid: string }) => r.uid === uid)
       if (existingIndex >= 0) {
         return
@@ -336,9 +322,38 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
                         {modesEntries[2] && <PodiumSlot entry={modesEntries[2]} place={3} onClick={() => setSelectedPlayer(modesEntries[2])} />}
                       </div>
 
-                      {/* List below */}
+                      {/* 4th-6th Position Boxes */}
+                      {modesEntries.length > 3 && (
+                        <div className="grid grid-cols-3 gap-1.5 mb-2">
+                          {[4, 5, 6].map(pos => {
+                            const entry = modesEntries[pos - 1]
+                            if (!entry) return (
+                              <div key={pos} className="p-2 rounded-lg text-center"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                                <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.2)' }}>#{pos}</p>
+                                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.15)' }}>Empty</p>
+                              </div>
+                            )
+                            return (
+                              <div key={pos} className="p-2 rounded-lg text-center cursor-pointer transition-transform active:scale-95"
+                                onClick={() => setSelectedPlayer(entry)}
+                                style={{
+                                  backgroundColor: entry.isPlayer ? 'rgba(246,94,59,0.1)' : 'rgba(255,255,255,0.04)',
+                                  border: entry.isPlayer ? '1px solid rgba(246,94,59,0.2)' : '1px solid rgba(255,255,255,0.08)',
+                                }}>
+                                <span className="text-sm">{entry.avatar}</span>
+                                <p className="text-[8px] font-bold truncate" style={{ color: '#F65E3B' }}>#{pos}</p>
+                                <p className="text-[7px] font-bold truncate" style={{ color: entry.isPlayer ? '#F65E3B' : 'rgba(255,255,255,0.6)' }}>{entry.name}</p>
+                                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{entry.value.toLocaleString()}</p>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {/* List from 7th onwards */}
                       <div className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
-                        {modesEntries.slice(3).map((entry) => (
+                        {modesEntries.slice(6).map((entry) => (
                           <RankRow key={entry.rank} entry={entry} color="#F65E3B" onClick={() => setSelectedPlayer(entry)} />
                         ))}
                       </div>
@@ -369,9 +384,38 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
                         {coinsEntries[2] && <PodiumSlot entry={coinsEntries[2]} place={3} onClick={() => setSelectedPlayer(coinsEntries[2])} />}
                       </div>
 
-                      {/* List below */}
+                      {/* 4th-6th Position Boxes */}
+                      {coinsEntries.length > 3 && (
+                        <div className="grid grid-cols-3 gap-1.5 mb-2">
+                          {[4, 5, 6].map(pos => {
+                            const entry = coinsEntries[pos - 1]
+                            if (!entry) return (
+                              <div key={pos} className="p-2 rounded-lg text-center"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                                <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.2)' }}>#{pos}</p>
+                                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.15)' }}>Empty</p>
+                              </div>
+                            )
+                            return (
+                              <div key={pos} className="p-2 rounded-lg text-center cursor-pointer transition-transform active:scale-95"
+                                onClick={() => setSelectedPlayer(entry)}
+                                style={{
+                                  backgroundColor: entry.isPlayer ? 'rgba(237,194,46,0.1)' : 'rgba(255,255,255,0.04)',
+                                  border: entry.isPlayer ? '1px solid rgba(237,194,46,0.2)' : '1px solid rgba(255,255,255,0.08)',
+                                }}>
+                                <span className="text-sm">{entry.avatar}</span>
+                                <p className="text-[8px] font-bold truncate" style={{ color: '#EDC22E' }}>#{pos}</p>
+                                <p className="text-[7px] font-bold truncate" style={{ color: entry.isPlayer ? '#EDC22E' : 'rgba(255,255,255,0.6)' }}>{entry.name}</p>
+                                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{formatCoinCount(entry.value)}</p>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {/* List from 7th onwards */}
                       <div className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
-                        {coinsEntries.slice(3).map((entry) => (
+                        {coinsEntries.slice(6).map((entry) => (
                           <RankRow key={entry.rank} entry={entry} color="#EDC22E" onClick={() => setSelectedPlayer(entry)} />
                         ))}
                       </div>
@@ -525,7 +569,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
                       <div className="flex items-center gap-1 px-2 py-0.5 rounded-md"
                         style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
                         <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>ID:</span>
-                        <span className="text-[9px] font-mono font-bold" style={{ color: '#00FFFF' }}>{selectedPlayer.playerId?.slice(-8) || '?'}</span>
+                        <span className="text-[9px] font-mono font-bold" style={{ color: '#00FFFF' }}>{selectedFirebasePlayer?.userCode || selectedPlayer.playerId?.slice(-8) || '?'}</span>
                         <button onClick={handleCopyUid} className="w-4 h-4 rounded flex items-center justify-center"
                           style={{ backgroundColor: copiedUid ? 'rgba(0,230,118,0.2)' : 'rgba(255,255,255,0.08)' }}>
                           <Copy className="w-2 h-2" style={{ color: copiedUid ? '#00E676' : 'rgba(255,255,255,0.5)' }} />
@@ -624,14 +668,18 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
                     </div>
 
                     {/* Like Button */}
-                    <button onClick={() => {
+                    <button onClick={async () => {
+                      const pid = selectedPlayer?.playerId || ''
+                      if (!pid || pid === playerId) return
                       const newLiked = !liked
                       setLiked(newLiked)
-                      const pid = selectedPlayer?.playerId || ''
-                      const currentCount = getPlayerLikes(pid)
-                      const newCount = newLiked ? currentCount + 1 : Math.max(0, currentCount - 1)
-                      setPlayerLikes(pid, newCount)
-                      setLikeCount(newCount)
+                      if (newLiked) {
+                        await addLike(playerId, pid)
+                        setLikeCount(prev => prev + 1)
+                      } else {
+                        await removeLike(playerId, pid)
+                        setLikeCount(prev => Math.max(0, prev - 1))
+                      }
                     }}
                       className="w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
                       style={{
