@@ -36,7 +36,7 @@ interface InvitePanelProps {
   playerName?: string
   playerAvatar?: string
   playerLevel?: number
-  onAddNotification?: (title: string, message: string, type: string, emoji: string) => void
+  onAddNotification?: (title: string, message: string, type: 'reward' | 'rank' | 'invite' | 'commission' | 'system' | 'battle' | 'friend_request', emoji: string) => void
 }
 
 type InviteTab = 'refer' | 'friends' | 'requests'

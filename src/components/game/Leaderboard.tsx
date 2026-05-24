@@ -18,6 +18,11 @@ interface LeaderboardProps {
   playerAvatar: string
   playerId: string
   tournamentPoints: number
+  classicBestScore?: number
+  tournamentBestScore?: number
+  battleBestScore?: number
+  onLikeProfile?: (targetPlayerId: string) => void
+  likedProfileId?: string | null
 }
 
 type TabType = 'modesScore' | 'coinsRank' | 'offlineRank'
@@ -165,7 +170,7 @@ function getOfflineRank(playerBestScore: number): { currentRank: number; nextTar
   }
 }
 
-export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, totalCoinsEarned, winningCoins, playerName, playerAvatar, playerId, tournamentPoints }: LeaderboardProps) {
+export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, totalCoinsEarned, winningCoins, playerName, playerAvatar, playerId, tournamentPoints, classicBestScore = 0, tournamentBestScore = 0, battleBestScore = 0, onLikeProfile, likedProfileId = null }: LeaderboardProps) {
   const [tab, setTab] = useState<TabType>('modesScore')
   const [firebasePlayers, setFirebasePlayers] = useState<FirebasePlayer[]>([])
   const [selectedPlayer, setSelectedPlayerRaw] = useState<LeaderboardEntry | null>(null)
@@ -307,58 +312,50 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
                   <div className="flex items-center justify-center gap-1.5 mb-2 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.12)' }}>
                     <span className="text-[8px] font-bold" style={{ color: '#F65E3B' }}>⚔️ Battle Mode — Resets every Monday</span>
                   </div>
-                  {modesEntries.length <= 1 && !modesEntries.some(e => !e.isPlayer) ? (
-                    <div className="flex flex-col items-center justify-center py-8">
-                      <span className="text-3xl mb-2">⚔️</span>
-                      <p className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>No players yet</p>
-                      <p className="text-[9px] mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>Play battles to rank up!</p>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Top 3 Podium */}
-                      <div className="flex items-end justify-center gap-2 mb-3">
-                        {modesEntries[1] && <PodiumSlot entry={modesEntries[1]} place={2} onClick={() => setSelectedPlayer(modesEntries[1])} />}
-                        {modesEntries[0] && <PodiumSlot entry={modesEntries[0]} place={1} onClick={() => setSelectedPlayer(modesEntries[0])} />}
-                        {modesEntries[2] && <PodiumSlot entry={modesEntries[2]} place={3} onClick={() => setSelectedPlayer(modesEntries[2])} />}
-                      </div>
+                  {/* Top 3 Podium */}
+                  <div className="flex items-end justify-center gap-2 mb-3">
+                    <PodiumSlot entry={modesEntries[1] || null} place={2} onClick={modesEntries[1] ? () => setSelectedPlayer(modesEntries[1]) : undefined} />
+                    <PodiumSlot entry={modesEntries[0] || null} place={1} onClick={modesEntries[0] ? () => setSelectedPlayer(modesEntries[0]) : undefined} />
+                    <PodiumSlot entry={modesEntries[2] || null} place={3} onClick={modesEntries[2] ? () => setSelectedPlayer(modesEntries[2]) : undefined} />
+                  </div>
 
-                      {/* 4th-6th Position Boxes */}
-                      {modesEntries.length > 3 && (
-                        <div className="grid grid-cols-3 gap-1.5 mb-2">
-                          {[4, 5, 6].map(pos => {
-                            const entry = modesEntries[pos - 1]
-                            if (!entry) return (
-                              <div key={pos} className="p-2 rounded-lg text-center"
-                                style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)' }}>
-                                <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.2)' }}>#{pos}</p>
-                                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.15)' }}>Empty</p>
-                              </div>
-                            )
-                            return (
-                              <div key={pos} className="p-2 rounded-lg text-center cursor-pointer transition-transform active:scale-95"
-                                onClick={() => setSelectedPlayer(entry)}
-                                style={{
-                                  backgroundColor: entry.isPlayer ? 'rgba(246,94,59,0.1)' : 'rgba(255,255,255,0.04)',
-                                  border: entry.isPlayer ? '1px solid rgba(246,94,59,0.2)' : '1px solid rgba(255,255,255,0.08)',
-                                }}>
+                  {/* 4th-6th Position Number Line */}
+                  <div className="mb-2">
+                    {[4, 5, 6].map(pos => {
+                      const entry = modesEntries[pos - 1]
+                      return (
+                        <div key={pos} className="flex items-center mb-1.5 cursor-pointer transition-transform active:scale-[0.98]"
+                          onClick={() => entry && setSelectedPlayer(entry)}>
+                          <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                            style={{ backgroundColor: entry ? 'rgba(246,94,59,0.15)' : 'rgba(255,255,255,0.04)', border: entry ? '1px solid rgba(246,94,59,0.3)' : '1px dashed rgba(255,255,255,0.1)' }}>
+                            <span className="text-[9px] font-bold" style={{ color: entry ? '#F65E3B' : 'rgba(255,255,255,0.2)' }}>{pos}</span>
+                          </div>
+                          <div className="flex-1 mx-2" style={{ height: '1px', background: entry ? 'rgba(246,94,59,0.3)' : 'rgba(255,255,255,0.06)' }} />
+                          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg flex-1"
+                            style={{ backgroundColor: entry ? (entry.isPlayer ? 'rgba(246,94,59,0.1)' : 'rgba(255,255,255,0.04)') : 'rgba(255,255,255,0.02)', border: entry ? (entry.isPlayer ? '1px solid rgba(246,94,59,0.2)' : '1px solid rgba(255,255,255,0.08)') : '1px dashed rgba(255,255,255,0.08)' }}>
+                            {entry ? (
+                              <>
                                 <span className="text-sm">{entry.avatar}</span>
-                                <p className="text-[8px] font-bold truncate" style={{ color: '#F65E3B' }}>#{pos}</p>
-                                <p className="text-[7px] font-bold truncate" style={{ color: entry.isPlayer ? '#F65E3B' : 'rgba(255,255,255,0.6)' }}>{entry.name}</p>
-                                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{entry.value.toLocaleString()}</p>
-                              </div>
-                            )
-                          })}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[8px] font-bold truncate" style={{ color: entry.isPlayer ? '#F65E3B' : 'rgba(255,255,255,0.7)' }}>{entry.name}</p>
+                                  <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{entry.value.toLocaleString()}</p>
+                                </div>
+                              </>
+                            ) : (
+                              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.15)' }}>Empty</p>
+                            )}
+                          </div>
                         </div>
-                      )}
+                      )
+                    })}
+                  </div>
 
-                      {/* List from 7th onwards */}
-                      <div className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
-                        {modesEntries.slice(6).map((entry) => (
-                          <RankRow key={entry.rank} entry={entry} color="#F65E3B" onClick={() => setSelectedPlayer(entry)} />
-                        ))}
-                      </div>
-                    </>
-                  )}
+                  {/* List from 7th onwards */}
+                  <div className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+                    {modesEntries.slice(6).map((entry) => (
+                      <RankRow key={entry.rank} entry={entry} color="#F65E3B" onClick={() => setSelectedPlayer(entry)} />
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -369,58 +366,50 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
                   <div className="flex items-center justify-center gap-1.5 mb-2 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.08)', border: '1px solid rgba(237,194,46,0.12)' }}>
                     <span className="text-[8px] font-bold" style={{ color: '#EDC22E' }}>🔄 Winning Coins Only — Resets 1st of every month</span>
                   </div>
-                  {coinsEntries.length <= 1 && !coinsEntries.some(e => !e.isPlayer) ? (
-                    <div className="flex flex-col items-center justify-center py-8">
-                      <span className="text-3xl mb-2">💰</span>
-                      <p className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>No players yet</p>
-                      <p className="text-[9px] mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>Earn coins to rank up!</p>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Top 3 Podium */}
-                      <div className="flex items-end justify-center gap-2 mb-3">
-                        {coinsEntries[1] && <PodiumSlot entry={coinsEntries[1]} place={2} onClick={() => setSelectedPlayer(coinsEntries[1])} />}
-                        {coinsEntries[0] && <PodiumSlot entry={coinsEntries[0]} place={1} onClick={() => setSelectedPlayer(coinsEntries[0])} />}
-                        {coinsEntries[2] && <PodiumSlot entry={coinsEntries[2]} place={3} onClick={() => setSelectedPlayer(coinsEntries[2])} />}
-                      </div>
+                  {/* Top 3 Podium */}
+                  <div className="flex items-end justify-center gap-2 mb-3">
+                    <PodiumSlot entry={coinsEntries[1] || null} place={2} onClick={coinsEntries[1] ? () => setSelectedPlayer(coinsEntries[1]) : undefined} />
+                    <PodiumSlot entry={coinsEntries[0] || null} place={1} onClick={coinsEntries[0] ? () => setSelectedPlayer(coinsEntries[0]) : undefined} />
+                    <PodiumSlot entry={coinsEntries[2] || null} place={3} onClick={coinsEntries[2] ? () => setSelectedPlayer(coinsEntries[2]) : undefined} />
+                  </div>
 
-                      {/* 4th-6th Position Boxes */}
-                      {coinsEntries.length > 3 && (
-                        <div className="grid grid-cols-3 gap-1.5 mb-2">
-                          {[4, 5, 6].map(pos => {
-                            const entry = coinsEntries[pos - 1]
-                            if (!entry) return (
-                              <div key={pos} className="p-2 rounded-lg text-center"
-                                style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)' }}>
-                                <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.2)' }}>#{pos}</p>
-                                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.15)' }}>Empty</p>
-                              </div>
-                            )
-                            return (
-                              <div key={pos} className="p-2 rounded-lg text-center cursor-pointer transition-transform active:scale-95"
-                                onClick={() => setSelectedPlayer(entry)}
-                                style={{
-                                  backgroundColor: entry.isPlayer ? 'rgba(237,194,46,0.1)' : 'rgba(255,255,255,0.04)',
-                                  border: entry.isPlayer ? '1px solid rgba(237,194,46,0.2)' : '1px solid rgba(255,255,255,0.08)',
-                                }}>
+                  {/* 4th-6th Position Number Line */}
+                  <div className="mb-2">
+                    {[4, 5, 6].map(pos => {
+                      const entry = coinsEntries[pos - 1]
+                      return (
+                        <div key={pos} className="flex items-center mb-1.5 cursor-pointer transition-transform active:scale-[0.98]"
+                          onClick={() => entry && setSelectedPlayer(entry)}>
+                          <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                            style={{ backgroundColor: entry ? 'rgba(237,194,46,0.15)' : 'rgba(255,255,255,0.04)', border: entry ? '1px solid rgba(237,194,46,0.3)' : '1px dashed rgba(255,255,255,0.1)' }}>
+                            <span className="text-[9px] font-bold" style={{ color: entry ? '#EDC22E' : 'rgba(255,255,255,0.2)' }}>{pos}</span>
+                          </div>
+                          <div className="flex-1 mx-2" style={{ height: '1px', background: entry ? 'rgba(237,194,46,0.3)' : 'rgba(255,255,255,0.06)' }} />
+                          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg flex-1"
+                            style={{ backgroundColor: entry ? (entry.isPlayer ? 'rgba(237,194,46,0.1)' : 'rgba(255,255,255,0.04)') : 'rgba(255,255,255,0.02)', border: entry ? (entry.isPlayer ? '1px solid rgba(237,194,46,0.2)' : '1px solid rgba(255,255,255,0.08)') : '1px dashed rgba(255,255,255,0.08)' }}>
+                            {entry ? (
+                              <>
                                 <span className="text-sm">{entry.avatar}</span>
-                                <p className="text-[8px] font-bold truncate" style={{ color: '#EDC22E' }}>#{pos}</p>
-                                <p className="text-[7px] font-bold truncate" style={{ color: entry.isPlayer ? '#EDC22E' : 'rgba(255,255,255,0.6)' }}>{entry.name}</p>
-                                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{formatCoinCount(entry.value)}</p>
-                              </div>
-                            )
-                          })}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[8px] font-bold truncate" style={{ color: entry.isPlayer ? '#EDC22E' : 'rgba(255,255,255,0.7)' }}>{entry.name}</p>
+                                  <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{formatCoinCount(entry.value)}</p>
+                                </div>
+                              </>
+                            ) : (
+                              <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.15)' }}>Empty</p>
+                            )}
+                          </div>
                         </div>
-                      )}
+                      )
+                    })}
+                  </div>
 
-                      {/* List from 7th onwards */}
-                      <div className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
-                        {coinsEntries.slice(6).map((entry) => (
-                          <RankRow key={entry.rank} entry={entry} color="#EDC22E" onClick={() => setSelectedPlayer(entry)} />
-                        ))}
-                      </div>
-                    </>
-                  )}
+                  {/* List from 7th onwards */}
+                  <div className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+                    {coinsEntries.slice(6).map((entry) => (
+                      <RankRow key={entry.rank} entry={entry} color="#EDC22E" onClick={() => setSelectedPlayer(entry)} />
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -676,6 +665,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
                       if (newLiked) {
                         await addLike(playerId, pid)
                         setLikeCount(prev => prev + 1)
+                        onLikeProfile?.(pid)
                       } else {
                         await removeLike(playerId, pid)
                         setLikeCount(prev => Math.max(0, prev - 1))
@@ -701,18 +691,35 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
   )
 }
 
-function PodiumSlot({ entry, place, onClick }: { entry: LeaderboardEntry; place: 1 | 2 | 3; onClick?: () => void }) {
+function PodiumSlot({ entry, place, onClick }: { entry: LeaderboardEntry | null; place: 1 | 2 | 3; onClick?: () => void }) {
   const medalColor = place === 1 ? '#FFD700' : place === 2 ? '#C0C0C0' : '#CD7F32'
+
+  // Handle empty podium slot
+  if (!entry) {
+    const emptyBg = place === 1 ? 'rgba(255,215,0,0.04)' : place === 2 ? 'rgba(192,192,192,0.04)' : 'rgba(205,127,50,0.04)'
+    const height = place === 1 ? 'py-2.5' : 'py-1.5'
+    return (
+      <div className="flex flex-col items-center" style={{ minWidth: place === 1 ? 90 : 75 }}>
+        <div className={`${height} px-3 rounded-xl text-center w-full`}
+          style={{ backgroundColor: emptyBg, border: `1px dashed ${medalColor}30` }}>
+          <div className="w-10 h-10 rounded-full mx-auto mb-1 flex items-center justify-center" style={{ backgroundColor: `${medalColor}15`, border: `1px dashed ${medalColor}30` }}>
+            <span className="text-[9px] font-bold" style={{ color: `${medalColor}50` }}>{place}</span>
+          </div>
+          <p className="text-[7px]" style={{ color: `${medalColor}40` }}>Empty</p>
+        </div>
+      </div>
+    )
+  }
+
   const bgColor = entry.isPlayer ? 'rgba(237,194,46,0.2)' : place === 1 ? 'rgba(255,215,0,0.12)' : place === 2 ? 'rgba(192,192,192,0.12)' : 'rgba(205,127,50,0.12)'
   const borderColor = entry.isPlayer ? 'rgba(237,194,46,0.3)' : `${medalColor}30`
   const height = place === 1 ? 'py-2.5' : 'py-1.5'
-  const avatarSize = place === 1 ? 'text-3xl' : 'text-2xl'
   const playerOnline = isOnline(entry.lastActive)
 
   return (
     <div className="flex flex-col items-center cursor-pointer" style={{ minWidth: place === 1 ? 80 : 68 }} onClick={onClick}>
       <div className="relative">
-        <span className={`${avatarSize} mb-0.5`}>{entry.avatar}</span>
+        <span className={`${place === 1 ? 'text-3xl' : 'text-2xl'} mb-0.5`}>{entry.avatar}</span>
         {/* Online indicator dot on avatar */}
         {!entry.isPlayer && (
           <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"

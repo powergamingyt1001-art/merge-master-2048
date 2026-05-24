@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { syncPlayerToFirebase, processReferral, processCommissionForReferrer, getReferrals, onReferralsUpdate, getCommissionNotifications, claimCommissionNotification, type FirebaseReferral, joinMatchmaking, leaveMatchmaking, findMatch, onMatchmakingUpdate, cleanupStaleMatchmaking, createBattle, joinBattle, onBattleUpdate, updateBattleScore, finishBattle, leaveBattle as firebaseLeaveBattle, markMatched, type MatchmakingEntry, type FirebaseBattle, onUserNotificationsUpdate, markNotificationDelivered } from '@/lib/firebase-service'
+import { syncPlayerToFirebase, processReferral, processCommissionForReferrer, getReferrals, onReferralsUpdate, getCommissionNotifications, claimCommissionNotification, type FirebaseReferral, joinMatchmaking, leaveMatchmaking, findMatch, onMatchmakingUpdate, cleanupStaleMatchmaking, createBattle, joinBattle, onBattleUpdate, updateBattleScore, finishBattle, leaveBattle as firebaseLeaveBattle, markMatched, type MatchmakingEntry, type FirebaseBattle, onUserNotificationsUpdate, markNotificationDelivered, transferLike } from '@/lib/firebase-service'
 
 export type Direction = 'up' | 'down' | 'left' | 'right'
 export type PowerUp = 'hammer' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x' | 'extraTime'
@@ -185,6 +185,14 @@ export interface GameState {
   isRealTimeBattle: boolean // Whether this is a real-time battle vs real player
   // Like system - Firebase synced
   likes: number
+  // Which profile the user currently has their like on (one like per user)
+  likedProfileId: string | null
+  // Mode-specific best scores (only update in their respective modes)
+  classicBestScore: number // Classic mode only
+  tournamentBestScore: number // Tournament mode only
+  battleBestScore: number // Battle/Bot mode, shown on profile
+  // Auto-save control (admin can disable, default true for backward compat)
+  autoSaveEnabled: boolean
   // WELCOME60 auto-coupon claimed flag
   welcomeCouponClaimed: boolean
 }
@@ -894,6 +902,11 @@ export function useGame() {
       realTimeOpponentFinished: false,
       isRealTimeBattle: false,
       likes: 0,
+      likedProfileId: null,
+      classicBestScore: 0,
+      tournamentBestScore: 0,
+      battleBestScore: 0,
+      autoSaveEnabled: true,
       welcomeCouponClaimed: false,
     }
 
@@ -1117,7 +1130,12 @@ export function useGame() {
       extraTimeCount: saved.extraTimeCount ?? 0,
       activeMultiplier: 1,
       multiplierTimeLeft: 0,
-      userCode: saved.userCode || generateUserCode(),
+      // Validate userCode is numeric; if not, regenerate
+      userCode: (() => {
+        const code = saved.userCode || ''
+        if (code && /^\d{6}$/.test(code)) return code
+        return generateUserCode()
+      })(),
       totalCoinsEarned: saved.totalCoinsEarned ?? 0,
       winningCoins: saved.winningCoins ?? 0,
       roomCardCount: saved.roomCardCount ?? 0,
@@ -1131,72 +1149,100 @@ export function useGame() {
       realTimeOpponentScore: 0,
       realTimeOpponentFinished: false,
       isRealTimeBattle: false,
+      likedProfileId: saved.likedProfileId ?? null,
+      classicBestScore: saved.classicBestScore ?? 0,
+      tournamentBestScore: saved.tournamentBestScore ?? 0,
+      battleBestScore: saved.battleBestScore ?? saved.modBestScore ?? 0, // Migrate from modBestScore
+      autoSaveEnabled: saved.autoSaveEnabled ?? true,
       welcomeCouponClaimed: saved.welcomeCouponClaimed ?? true,
     }
   })
 
   const prevState = useRef<GameState | null>(null)
 
-  // Save data
-  useEffect(() => {
+  // Build save data object from current state
+  const buildSaveData = useCallback((s: GameState) => {
     const now = new Date()
     const start = new Date(2025, 0, 6)
     const currentWeek = Math.floor((now.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
 
-    const data = {
-      bestScore: state.bestScore,
-      spinTickets: state.spinTickets,
-      streakDay: state.streakDay,
-      lastLoginDate: state.lastLoginDate,
-      streakClaimed: state.streakClaimed,
-      welcomeClaimed: state.welcomeClaimed,
-      hammerCount: state.hammerCount,
-      magnetCount: state.magnetCount,
-      blastCount: state.blastCount,
-      undoTotal: state.undoTotal,
-      coins: state.coins,
-      gamePoints: state.gamePoints,
-      modBestScore: state.modBestScore,
-      inviteCode: state.inviteCode,
-      invitedBy: state.invitedBy,
-      invitedUsers: state.invitedUsers,
-      commissionBalance: state.commissionBalance,
-      commissionClaimed: state.commissionClaimed,
-      autoClaimCommission: state.autoClaimCommission,
-      gamesPlayedToday: state.gamesPlayedToday,
-      lastPlayDate: state.lastPlayDate,
-      notifications: state.notifications.slice(0, 50),
-      playerName: state.playerName,
-      playerAvatar: state.playerAvatar,
-      playerLevel: state.playerLevel,
-      playerId: state.playerId,
-      totalBattlesPlayed: state.totalBattlesPlayed,
-      totalBattlesWon: state.totalBattlesWon,
-      tournamentJoined: state.tournamentJoined,
-      tournamentPoints: state.tournamentPoints,
-      tournamentCarryOver: state.tournamentCarryOver,
-      tournamentGamesPlayed: state.tournamentGamesPlayed,
-      levelXP: state.levelXP,
+    return {
+      bestScore: s.bestScore,
+      spinTickets: s.spinTickets,
+      streakDay: s.streakDay,
+      lastLoginDate: s.lastLoginDate,
+      streakClaimed: s.streakClaimed,
+      welcomeClaimed: s.welcomeClaimed,
+      hammerCount: s.hammerCount,
+      magnetCount: s.magnetCount,
+      blastCount: s.blastCount,
+      undoTotal: s.undoTotal,
+      coins: s.coins,
+      gamePoints: s.gamePoints,
+      modBestScore: s.modBestScore,
+      inviteCode: s.inviteCode,
+      invitedBy: s.invitedBy,
+      invitedUsers: s.invitedUsers,
+      commissionBalance: s.commissionBalance,
+      commissionClaimed: s.commissionClaimed,
+      autoClaimCommission: s.autoClaimCommission,
+      gamesPlayedToday: s.gamesPlayedToday,
+      lastPlayDate: s.lastPlayDate,
+      notifications: s.notifications.slice(0, 50),
+      playerName: s.playerName,
+      playerAvatar: s.playerAvatar,
+      playerLevel: s.playerLevel,
+      playerId: s.playerId,
+      totalBattlesPlayed: s.totalBattlesPlayed,
+      totalBattlesWon: s.totalBattlesWon,
+      tournamentJoined: s.tournamentJoined,
+      tournamentPoints: s.tournamentPoints,
+      tournamentCarryOver: s.tournamentCarryOver,
+      tournamentGamesPlayed: s.tournamentGamesPlayed,
+      levelXP: s.levelXP,
       tournamentWeek: currentWeek,
-      gameHistory: state.gameHistory.slice(0, 30),
-      weeklyBonusClaimed: state.weeklyBonusClaimed,
-      leaderboardMonth: state.leaderboardMonth,
-      leaderboardYear: state.leaderboardYear,
-      dailyTasks: state.dailyTasks,
-      multiplier5xCount: state.multiplier5xCount,
-      multiplier2_5xCount: state.multiplier2_5xCount,
-      extraTimeCount: state.extraTimeCount,
-      userCode: state.userCode,
-      totalCoinsEarned: state.totalCoinsEarned,
-      winningCoins: state.winningCoins,
-      roomCardCount: state.roomCardCount,
-      streakWeek: state.streakWeek,
-      skillPoints: state.skillPoints,
-      spRemainder: state.spRemainder,
-      welcomeCouponClaimed: state.welcomeCouponClaimed,
+      gameHistory: s.gameHistory.slice(0, 30),
+      weeklyBonusClaimed: s.weeklyBonusClaimed,
+      leaderboardMonth: s.leaderboardMonth,
+      leaderboardYear: s.leaderboardYear,
+      dailyTasks: s.dailyTasks,
+      multiplier5xCount: s.multiplier5xCount,
+      multiplier2_5xCount: s.multiplier2_5xCount,
+      extraTimeCount: s.extraTimeCount,
+      userCode: s.userCode,
+      totalCoinsEarned: s.totalCoinsEarned,
+      winningCoins: s.winningCoins,
+      roomCardCount: s.roomCardCount,
+      streakWeek: s.streakWeek,
+      skillPoints: s.skillPoints,
+      spRemainder: s.spRemainder,
+      welcomeCouponClaimed: s.welcomeCouponClaimed,
+      likedProfileId: s.likedProfileId,
+      classicBestScore: s.classicBestScore,
+      tournamentBestScore: s.tournamentBestScore,
+      battleBestScore: s.battleBestScore,
+      autoSaveEnabled: s.autoSaveEnabled,
     }
+  }, [])
+
+  // Save data (auto-save, conditional on autoSaveEnabled)
+  useEffect(() => {
+    if (!state.autoSaveEnabled) return
+    const data = buildSaveData(state)
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount, state.userCode, state.totalCoinsEarned, state.winningCoins, state.roomCardCount, state.streakWeek, state.skillPoints, state.spRemainder, state.welcomeCouponClaimed])
+  }, [state.autoSaveEnabled, state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount, state.userCode, state.totalCoinsEarned, state.winningCoins, state.roomCardCount, state.streakWeek, state.skillPoints, state.spRemainder, state.welcomeCouponClaimed, state.likedProfileId, state.classicBestScore, state.tournamentBestScore, state.battleBestScore, buildSaveData])
+
+  // Manual save: save current state to localStorage
+  const saveGame = useCallback(() => {
+    const data = buildSaveData(state)
+    localStorage.setItem('mergeMaster2048', JSON.stringify(data))
+  }, [state, buildSaveData])
+
+  // Manual save all: force save regardless of autoSaveEnabled
+  const saveAll = useCallback(() => {
+    const data = buildSaveData(state)
+    localStorage.setItem('mergeMaster2048', JSON.stringify(data))
+  }, [state, buildSaveData])
 
   // ============================================================
   // FIREBASE SYNC - Sync player data to Firebase RTDB
@@ -1218,6 +1264,7 @@ export function useGame() {
         levelXP: state.levelXP,
         bestScore: state.bestScore,
         modBestScore: state.modBestScore,
+        battleBestScore: state.battleBestScore,
         coins: state.coins,
         totalCoinsEarned: state.totalCoinsEarned,
         winningCoins: state.winningCoins,
@@ -1225,10 +1272,12 @@ export function useGame() {
         totalBattlesPlayed: state.totalBattlesPlayed,
         totalBattlesWon: state.totalBattlesWon,
         likes: state.likes,
+        classicBestScore: state.classicBestScore,
+        tournamentBestScore: state.tournamentBestScore,
       }).catch(() => {/* silent fail */})
     }, 2000) // 2 second debounce
     return () => clearTimeout(timer)
-  }, [state.playerId, state.playerName, state.playerAvatar, state.inviteCode, state.userCode, state.tournamentPoints, state.levelXP, state.bestScore, state.modBestScore, state.coins, state.totalCoinsEarned, state.playerLevel, state.totalBattlesPlayed, state.totalBattlesWon])
+  }, [state.playerId, state.playerName, state.playerAvatar, state.inviteCode, state.userCode, state.tournamentPoints, state.levelXP, state.bestScore, state.modBestScore, state.battleBestScore, state.coins, state.totalCoinsEarned, state.playerLevel, state.totalBattlesPlayed, state.totalBattlesWon, state.likes, state.classicBestScore, state.tournamentBestScore])
 
   // Listen to referrals in real-time (people who used MY invite code)
   useEffect(() => {
@@ -1583,10 +1632,18 @@ export function useGame() {
       // Bot battle result variables
       let botBattleResult = prev.botBattleResult
       let modBestScore = prev.modBestScore
+      let battleBestScore = prev.battleBestScore
+      let classicBestScore = prev.classicBestScore
+      let tournamentBestScore = prev.tournamentBestScore
       let coinGameWon = prev.coinGameWon
       let totalBattlesPlayed = prev.totalBattlesPlayed
       let totalBattlesWon = prev.totalBattlesWon
       let botOpponent = prev.botOpponent // Will be updated with final score at game end
+
+      // Classic mode: update classicBestScore on every move (if score beats it)
+      if (prev.gameMode === 'classic') {
+        classicBestScore = Math.max(classicBestScore, newScore)
+      }
 
       // Bot battle check - generate fair bot score at game end
       // For real-time battles, score comparison is handled by Firebase listener
@@ -1599,6 +1656,7 @@ export function useGame() {
             totalBattlesPlayed++
             if (botBattleResult === 'win') {
               modBestScore = Math.max(modBestScore, newScore)
+              battleBestScore = Math.max(battleBestScore, newScore)
               totalBattlesWon++
             }
           }
@@ -1613,6 +1671,7 @@ export function useGame() {
           totalBattlesPlayed++
           if (coinGameWon) {
             modBestScore = Math.max(modBestScore, newScore)
+            battleBestScore = Math.max(battleBestScore, newScore)
             totalBattlesWon++
           }
         }
@@ -1623,8 +1682,10 @@ export function useGame() {
           botBattleResult = newScore > botFinalScore ? 'win' : 'lose'
           botOpponent = prev.botOpponent ? { ...prev.botOpponent, finalScore: botFinalScore } : null
           totalBattlesPlayed++
+          tournamentBestScore = Math.max(tournamentBestScore, newScore)
           if (botBattleResult === 'win') {
             modBestScore = Math.max(modBestScore, newScore)
+            battleBestScore = Math.max(battleBestScore, newScore)
             totalBattlesWon++
           }
         }
@@ -1659,6 +1720,9 @@ export function useGame() {
         botOpponent,
         botBattleResult,
         modBestScore,
+        battleBestScore,
+        classicBestScore,
+        tournamentBestScore,
         consecutiveMerges: newConsecutiveMerges,
         comboBonus: newComboBonus,
         comboMultiplier: comboMultiplier,
@@ -1715,6 +1779,7 @@ export function useGame() {
         const isWin = winnerId === state.playerId
         setState(prev => {
           if (prev.botBattleResult) return prev // Already resolved
+          const newBattleBestScore = isWin ? Math.max(prev.battleBestScore, prev.score) : prev.battleBestScore
           return {
             ...prev,
             botBattleResult: isWin ? 'win' : 'lose',
@@ -1724,6 +1789,7 @@ export function useGame() {
             totalBattlesPlayed: prev.totalBattlesPlayed + 1,
             totalBattlesWon: isWin ? prev.totalBattlesWon + 1 : prev.totalBattlesWon,
             modBestScore: isWin ? Math.max(prev.modBestScore, prev.score) : prev.modBestScore,
+            battleBestScore: newBattleBestScore,
           }
         })
       }
@@ -2466,6 +2532,8 @@ export function useGame() {
           botOpponent: prev.botOpponent ? { ...prev.botOpponent, finalScore: botFinalScore } : null,
           gameOver: true,
           modBestScore: newModBest,
+          battleBestScore: result === 'win' ? Math.max(prev.battleBestScore, prev.score) : prev.battleBestScore,
+          tournamentBestScore: prev.gameMode === 'tournament' ? Math.max(prev.tournamentBestScore, prev.score) : prev.tournamentBestScore,
           coinGameWon,
           totalBattlesPlayed: prev.totalBattlesPlayed + 1,
           totalBattlesWon: result === 'win' ? prev.totalBattlesWon + 1 : prev.totalBattlesWon,
@@ -2957,6 +3025,13 @@ export function useGame() {
       realTimeOpponentScore: 0,
       realTimeOpponentFinished: false,
       isRealTimeBattle: false,
+      likes: 0,
+      likedProfileId: null,
+      classicBestScore: 0,
+      tournamentBestScore: 0,
+      battleBestScore: 0,
+      autoSaveEnabled: true,
+      welcomeCouponClaimed: false,
     })
   }, [])
 
@@ -2966,6 +3041,30 @@ export function useGame() {
       ...prev,
       roomCardCount: prev.roomCardCount + count,
     }))
+  }, [])
+
+  // Use room card - deducts 1 room card
+  const onUseRoomCard = useCallback(() => {
+    setState(prev => {
+      if (prev.roomCardCount <= 0) return prev
+      return { ...prev, roomCardCount: prev.roomCardCount - 1 }
+    })
+  }, [])
+
+  // Like a profile - uses transferLike from Firebase (one like per user)
+  const likeProfile = useCallback((targetPlayerId: string) => {
+    if (!state.playerId || state.playerId === targetPlayerId) return
+    transferLike(state.playerId, targetPlayerId).then(() => {
+      setState(prev => ({
+        ...prev,
+        likedProfileId: targetPlayerId,
+      }))
+    }).catch(() => {/* silent */})
+  }, [state.playerId])
+
+  // Set auto-save enabled/disabled (admin can set false)
+  const setAutoSaveEnabled = useCallback((enabled: boolean) => {
+    setState(prev => ({ ...prev, autoSaveEnabled: enabled }))
   }, [])
 
   const multiplierTick = useCallback(() => {
@@ -3036,6 +3135,11 @@ export function useGame() {
     claimDailyTask,
     resetAllData,
     addRoomCards,
+    onUseRoomCard,
+    likeProfile,
+    setAutoSaveEnabled,
+    saveGame,
+    saveAll,
     multiplierTick,
     completeVisitWebsiteTask: useCallback(() => {
       setState(prev => {

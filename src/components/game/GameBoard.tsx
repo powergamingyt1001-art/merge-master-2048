@@ -273,7 +273,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   // Open direct link for ad revenue - wait for user to return before reviving
   const openAdAndRevive = useCallback(() => {
     if (isOnline) {
-      try { window.open(getRandomLink(), '_blank') } catch { /* popup blocked */ }
+      try { const link = getRandomLink(); if (link) window.open(link, '_blank') } catch { /* popup blocked */ }
       setWaitingForReturn(true)
     } else {
       // Offline - just revive immediately

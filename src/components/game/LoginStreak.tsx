@@ -104,7 +104,7 @@ export function LoginStreak({ isOpen, onClose, streakDay, streakClaimed, onClaim
   const handleAdBonusClick = useCallback(() => {
     if (adBonusClaimed || adBonusPending) return
     try {
-      window.open(getRandomLink(), '_blank')
+      const link = getRandomLink(); if (link) window.open(link, '_blank')
       adOpenedRef.current = true
       setAdBonusPending(true)
     } catch {

@@ -30,6 +30,7 @@ export interface FirebasePlayer {
   levelXP: number
   bestScore: number
   modBestScore: number
+  battleBestScore: number
   coins: number
   totalCoinsEarned: number
   winningCoins: number
@@ -50,6 +51,42 @@ export interface FirebaseReferral {
 }
 
 // ============================================================
+// UID CONSISTENCY UTILITIES
+// ============================================================
+
+/**
+ * Validates and returns only digits from a userCode string.
+ * Ensures userCode is always stored as a numeric string in Firebase.
+ */
+export function ensureNumericUserCode(userCode: string): string {
+  if (!userCode) return ''
+  return String(userCode).replace(/[^0-9]/g, '')
+}
+
+/**
+ * Look up a player by their numeric userCode using the userCodes mapping.
+ * This is a direct lookup (faster than searchPlayerByUserCode which has fallbacks).
+ */
+export async function getPlayerByUserCode(userCode: string): Promise<FirebasePlayer | null> {
+  try {
+    const numericCode = ensureNumericUserCode(userCode)
+    if (!numericCode) return null
+
+    const mappingRef = ref(db, `userCodes/${numericCode}`)
+    const mappingSnapshot = await get(mappingRef)
+    if (mappingSnapshot.exists()) {
+      const mapping = mappingSnapshot.val()
+      const player = await getPlayer(mapping.playerId)
+      if (player) return player
+    }
+    return null
+  } catch (err) {
+    console.warn('Firebase getPlayerByUserCode failed:', err)
+    return null
+  }
+}
+
+// ============================================================
 // PLAYER OPERATIONS
 // ============================================================
 
@@ -64,17 +101,25 @@ export async function syncPlayerToFirebase(playerData: {
   levelXP: number
   bestScore: number
   modBestScore: number
+  battleBestScore: number
   coins: number
   totalCoinsEarned: number
   winningCoins: number
   level: number
   totalBattlesPlayed: number
   totalBattlesWon: number
+  likes?: number
+  classicBestScore?: number
+  tournamentBestScore?: number
 }): Promise<void> {
   try {
+    // Ensure userCode is always stored as a numeric string
+    const safeUserCode = ensureNumericUserCode(playerData.userCode)
+
     const playerRef = ref(db, `players/${playerData.id}`)
     await update(playerRef, {
       ...playerData,
+      userCode: safeUserCode,
       lastActive: Date.now(),
     })
     // Also store the invite code mapping
@@ -84,8 +129,8 @@ export async function syncPlayerToFirebase(playerData: {
       referrerName: playerData.name,
     })
     // Also store userCode mapping for UID search
-    if (playerData.userCode) {
-      const userCodeRef = ref(db, `userCodes/${playerData.userCode}`)
+    if (safeUserCode) {
+      const userCodeRef = ref(db, `userCodes/${safeUserCode}`)
       await set(userCodeRef, {
         playerId: playerData.id,
         playerName: playerData.name,
@@ -436,7 +481,7 @@ export async function getTotalUserCount(): Promise<number> {
     const playersRef = ref(db, 'players')
     const snapshot = await get(playersRef)
     if (snapshot.exists()) {
-      return snapshot.numChildren()
+      return Object.keys(snapshot.val() || {}).length
     }
     return 0
   } catch (err) {
@@ -1206,6 +1251,7 @@ export interface FirebaseStoreOrder {
   upiId: string
   createdAt: number
   approvedAt: number | null
+  paymentType?: 'inr' | 'coins'  // Distinguish between INR and coin purchases
 }
 
 // Place a new order in Firebase
@@ -1217,9 +1263,86 @@ export async function placeOrder(order: Omit<FirebaseStoreOrder, 'createdAt' | '
       createdAt: Date.now(),
       approvedAt: null,
     })
+
+    // For coin purchases, auto-deliver items immediately
+    if (order.paymentType === 'coins') {
+      const deliveryItems = parseOrderItemsForDelivery(order.items)
+      if (order.playerId) {
+        await deliverOrderItems(order.id, order.playerId, deliveryItems)
+        // Auto-approve coin purchases
+        await update(orderRef, {
+          status: 'approved',
+          approvedAt: Date.now(),
+        })
+      }
+    }
+    // For INR purchases, items go to admin panel for approval (status stays 'pending')
   } catch (err) {
     console.warn('Firebase placeOrder failed:', err)
   }
+}
+
+// Helper: Parse order items into delivery format
+function parseOrderItemsForDelivery(items: Array<{ name: string; quantity: number; price: number }>): {
+  coins?: number
+  abilities?: Array<{ type: string; count: number }>
+  roomCards?: number
+  spinTickets?: number
+} {
+  const deliveryItems: {
+    coins?: number
+    abilities?: Array<{ type: string; count: number }>
+    roomCards?: number
+    spinTickets?: number
+  } = {}
+
+  if (!items || !Array.isArray(items)) return deliveryItems
+
+  for (const item of items) {
+    // Add coins
+    if (item.name?.includes('Coins') || item.name?.includes('💰')) {
+      const coinMatch = item.name.match(/[\d,]+/)
+      if (coinMatch) {
+        const coins = parseInt(coinMatch[0].replace(/,/g, ''))
+        if (coins > 0) {
+          deliveryItems.coins = (deliveryItems.coins || 0) + coins
+        }
+      }
+    }
+    // Add abilities based on name
+    if (item.name?.includes('Hammer') || item.name?.includes('🔨')) {
+      if (!deliveryItems.abilities) deliveryItems.abilities = []
+      deliveryItems.abilities.push({ type: 'hammer', count: (item.quantity || 1) * 5 })
+    }
+    if (item.name?.includes('Magnet') || item.name?.includes('🧲')) {
+      if (!deliveryItems.abilities) deliveryItems.abilities = []
+      deliveryItems.abilities.push({ type: 'magnet', count: (item.quantity || 1) * 5 })
+    }
+    if (item.name?.includes('Bomb') || item.name?.includes('💣') || item.name?.includes('Blast')) {
+      if (!deliveryItems.abilities) deliveryItems.abilities = []
+      deliveryItems.abilities.push({ type: 'blast', count: (item.quantity || 1) * 5 })
+    }
+    if (item.name?.includes('5x') || item.name?.includes('⚡')) {
+      if (!deliveryItems.abilities) deliveryItems.abilities = []
+      deliveryItems.abilities.push({ type: 'multiplier5x', count: (item.quantity || 1) * 5 })
+    }
+    if (item.name?.includes('2.5x') || item.name?.includes('🔥')) {
+      if (!deliveryItems.abilities) deliveryItems.abilities = []
+      deliveryItems.abilities.push({ type: 'multiplier2_5x', count: (item.quantity || 1) * 5 })
+    }
+    if (item.name?.includes('Timer') || item.name?.includes('⏱️')) {
+      if (!deliveryItems.abilities) deliveryItems.abilities = []
+      deliveryItems.abilities.push({ type: 'extraTime', count: (item.quantity || 1) * 5 })
+    }
+    if (item.name?.includes('Room') || item.name?.includes('🃏')) {
+      deliveryItems.roomCards = (deliveryItems.roomCards || 0) + (item.quantity || 1)
+    }
+    if (item.name?.includes('Spin') || item.name?.includes('🎫')) {
+      deliveryItems.spinTickets = (deliveryItems.spinTickets || 0) + (item.quantity || 1)
+    }
+  }
+
+  return deliveryItems
 }
 
 // Listen for all orders (for admin panel)
@@ -1253,6 +1376,8 @@ export function onOrdersUpdate(callback: (orders: FirebaseStoreOrder[]) => void)
 }
 
 // Update order status (approve/reject) - auto-delivers items on approval, notifies on rejection
+// Note: This is primarily for INR purchases that need admin approval.
+// Coin purchases are auto-approved in placeOrder().
 export async function updateOrderStatus(orderId: string, status: 'approved' | 'rejected'): Promise<void> {
   try {
     const orderRef = ref(db, `orders/${orderId}`)
@@ -1268,58 +1393,7 @@ export async function updateOrderStatus(orderId: string, status: 'approved' | 'r
       if (orderSnapshot.exists()) {
         const order = orderSnapshot.val()
         // Parse items from the order and deliver them
-        const deliveryItems: {
-          coins?: number
-          abilities?: Array<{ type: string; count: number }>
-          roomCards?: number
-          spinTickets?: number
-        } = {}
-
-        if (order.items && Array.isArray(order.items)) {
-          for (const item of order.items) {
-            // Add coins
-            if (item.name?.includes('Coins') || item.name?.includes('💰')) {
-              const coinMatch = item.name.match(/[\d,]+/)
-              if (coinMatch) {
-                const coins = parseInt(coinMatch[0].replace(/,/g, ''))
-                if (coins > 0) {
-                  deliveryItems.coins = (deliveryItems.coins || 0) + coins
-                }
-              }
-            }
-            // Add abilities based on name
-            if (item.name?.includes('Hammer') || item.name?.includes('🔨')) {
-              if (!deliveryItems.abilities) deliveryItems.abilities = []
-              deliveryItems.abilities.push({ type: 'hammer', count: (item.quantity || 1) * 5 })
-            }
-            if (item.name?.includes('Magnet') || item.name?.includes('🧲')) {
-              if (!deliveryItems.abilities) deliveryItems.abilities = []
-              deliveryItems.abilities.push({ type: 'magnet', count: (item.quantity || 1) * 5 })
-            }
-            if (item.name?.includes('Bomb') || item.name?.includes('💣') || item.name?.includes('Blast')) {
-              if (!deliveryItems.abilities) deliveryItems.abilities = []
-              deliveryItems.abilities.push({ type: 'blast', count: (item.quantity || 1) * 5 })
-            }
-            if (item.name?.includes('5x') || item.name?.includes('⚡')) {
-              if (!deliveryItems.abilities) deliveryItems.abilities = []
-              deliveryItems.abilities.push({ type: 'multiplier5x', count: (item.quantity || 1) * 5 })
-            }
-            if (item.name?.includes('2.5x') || item.name?.includes('🔥')) {
-              if (!deliveryItems.abilities) deliveryItems.abilities = []
-              deliveryItems.abilities.push({ type: 'multiplier2_5x', count: (item.quantity || 1) * 5 })
-            }
-            if (item.name?.includes('Timer') || item.name?.includes('⏱️')) {
-              if (!deliveryItems.abilities) deliveryItems.abilities = []
-              deliveryItems.abilities.push({ type: 'extraTime', count: (item.quantity || 1) * 5 })
-            }
-            if (item.name?.includes('Room') || item.name?.includes('🃏')) {
-              deliveryItems.roomCards = (deliveryItems.roomCards || 0) + (item.quantity || 1)
-            }
-            if (item.name?.includes('Spin') || item.name?.includes('🎫')) {
-              deliveryItems.spinTickets = (deliveryItems.spinTickets || 0) + (item.quantity || 1)
-            }
-          }
-        }
+        const deliveryItems = parseOrderItemsForDelivery(order.items)
 
         // Deliver items via the existing delivery system
         if (order.playerId) {
@@ -1545,7 +1619,6 @@ export interface PartnerData {
   password: string
   permissions: string[] // view_orders, approve_orders, manage_coupons, manage_prices, view_users, ban_users
   createdAt: number
-  lastUsedAt: number | null
   active: boolean
 }
 
@@ -1575,10 +1648,21 @@ export async function setAdminPassword(newPassword: string): Promise<void> {
   }
 }
 
-// Get all partners
+// Check admin password (for login)
+export async function checkAdminPassword(password: string): Promise<boolean> {
+  try {
+    const adminPwd = await getAdminPassword()
+    return password === adminPwd
+  } catch (err) {
+    console.warn('Firebase checkAdminPassword failed:', err)
+    return false
+  }
+}
+
+// Get all partners (stored at partners/{partnerId})
 export async function getPartners(): Promise<Array<{ id: string } & PartnerData>> {
   try {
-    const ref_ = ref(db, 'adminConfig/partners')
+    const ref_ = ref(db, 'partners')
     const snapshot = await get(ref_)
     if (snapshot.exists()) {
       const partners: Array<{ id: string } & PartnerData> = []
@@ -1594,10 +1678,10 @@ export async function getPartners(): Promise<Array<{ id: string } & PartnerData>
   }
 }
 
-// Create or update a partner
+// Create or update a partner (stored at partners/{partnerId})
 export async function savePartner(partnerId: string, data: PartnerData): Promise<void> {
   try {
-    await set(ref(db, `adminConfig/partners/${partnerId}`), data)
+    await set(ref(db, `partners/${partnerId}`), data)
   } catch (err) {
     console.warn('Firebase savePartner failed:', err)
   }
@@ -1606,7 +1690,7 @@ export async function savePartner(partnerId: string, data: PartnerData): Promise
 // Delete a partner
 export async function deletePartner(partnerId: string): Promise<void> {
   try {
-    await set(ref(db, `adminConfig/partners/${partnerId}`), null)
+    await set(ref(db, `partners/${partnerId}`), null)
   } catch (err) {
     console.warn('Firebase deletePartner failed:', err)
   }
@@ -1615,7 +1699,7 @@ export async function deletePartner(partnerId: string): Promise<void> {
 // Authenticate as a partner (check password)
 export async function authenticatePartner(password: string): Promise<{ id: string; data: PartnerData } | null> {
   try {
-    const ref_ = ref(db, 'adminConfig/partners')
+    const ref_ = ref(db, 'partners')
     const snapshot = await get(ref_)
     if (snapshot.exists()) {
       let found: { id: string; data: PartnerData } | null = null
@@ -1626,17 +1710,12 @@ export async function authenticatePartner(password: string): Promise<{ id: strin
           password: data.password as string,
           permissions: data.permissions as string[],
           createdAt: data.createdAt as number,
-          lastUsedAt: data.lastUsedAt as number | null,
           active: data.active as boolean,
         }
         if (partnerData.password === password && partnerData.active) {
           found = { id: child.key as string, data: partnerData }
         }
       })
-      // Update lastUsedAt if found
-      if (found) {
-        await update(ref(db, `adminConfig/partners/${found.id}`), { lastUsedAt: Date.now() })
-      }
       return found
     }
     return null
@@ -1646,31 +1725,61 @@ export async function authenticatePartner(password: string): Promise<{ id: strin
   }
 }
 
-// Check admin password (for login)
-export async function checkAdminPassword(password: string): Promise<boolean> {
+// ============================================================
+// LIKE SYSTEM - Firebase real-time sync
+// One like per user: a user can only like one profile at a time.
+// If they like a new profile, their previous like is removed.
+// ============================================================
+
+/**
+ * Find which player the given user has currently liked.
+ * Returns the player ID of the liked profile, or null if none.
+ */
+async function getCurrentLikedPlayer(fromPlayerId: string): Promise<string | null> {
   try {
-    const adminPwd = await getAdminPassword()
-    return password === adminPwd
+    const userLikeRef = ref(db, `userLikes/${fromPlayerId}`)
+    const snapshot = await get(userLikeRef)
+    if (snapshot.exists()) {
+      return snapshot.val().toPlayerId || null
+    }
+    return null
   } catch (err) {
-    console.warn('Firebase checkAdminPassword failed:', err)
-    return false
+    console.warn('Firebase getCurrentLikedPlayer failed:', err)
+    return null
   }
 }
 
-// ============================================================
-// LIKE SYSTEM - Firebase real-time sync
-// ============================================================
-
-// Add a like from one player to another
+// Add a like from one player to another (enforces one-like-per-user)
 export async function addLike(
   fromPlayerId: string,
   toPlayerId: string
 ): Promise<void> {
   try {
-    // Set the like in the likes collection (prevents duplicate likes)
+    // Don't allow self-like
+    if (fromPlayerId === toPlayerId) return
+
+    // Check if this user already liked someone else
+    const currentLikedId = await getCurrentLikedPlayer(fromPlayerId)
+
+    // If they already liked this same player, do nothing
+    if (currentLikedId === toPlayerId) return
+
+    // If they liked a different player, remove the old like first
+    if (currentLikedId) {
+      await removeLike(fromPlayerId, currentLikedId)
+    }
+
+    // Set the like in the likes collection
     await set(ref(db, `likes/${toPlayerId}/${fromPlayerId}`), {
       timestamp: Date.now()
     })
+
+    // Track which player this user has liked (for one-like enforcement)
+    await set(ref(db, `userLikes/${fromPlayerId}`), {
+      toPlayerId: toPlayerId,
+      timestamp: Date.now()
+    })
+
     // Increment the like count on the target player
     const playerRef = ref(db, `players/${toPlayerId}`)
     const snapshot = await get(playerRef)
@@ -1689,7 +1798,13 @@ export async function removeLike(
   toPlayerId: string
 ): Promise<void> {
   try {
+    // Remove the like entry
     await set(ref(db, `likes/${toPlayerId}/${fromPlayerId}`), null)
+
+    // Clear the user's current like tracking
+    await set(ref(db, `userLikes/${fromPlayerId}`), null)
+
+    // Decrement the like count on the target player
     const playerRef = ref(db, `players/${toPlayerId}`)
     const snapshot = await get(playerRef)
     if (snapshot.exists()) {
@@ -1701,7 +1816,81 @@ export async function removeLike(
   }
 }
 
-// Check if a player has liked another player
+/**
+ * Transfer a like from one player to another atomically.
+ * Removes the previous like (if any) and adds a new one.
+ * This is the recommended way to "move" a like between profiles.
+ */
+export async function transferLike(
+  fromPlayerId: string,
+  toPlayerId: string
+): Promise<void> {
+  try {
+    // Don't allow self-like
+    if (fromPlayerId === toPlayerId) return
+
+    // Check current like
+    const currentLikedId = await getCurrentLikedPlayer(fromPlayerId)
+
+    // If already liking this player, nothing to do
+    if (currentLikedId === toPlayerId) return
+
+    // If liking someone else, remove old like and add new one
+    if (currentLikedId) {
+      // Remove old like
+      await set(ref(db, `likes/${currentLikedId}/${fromPlayerId}`), null)
+
+      // Decrement old player's like count
+      const oldPlayerRef = ref(db, `players/${currentLikedId}`)
+      const oldSnapshot = await get(oldPlayerRef)
+      if (oldSnapshot.exists()) {
+        const oldLikes = oldSnapshot.val().likes || 0
+        await update(oldPlayerRef, { likes: Math.max(0, oldLikes - 1) })
+      }
+    }
+
+    // Add new like
+    await set(ref(db, `likes/${toPlayerId}/${fromPlayerId}`), {
+      timestamp: Date.now()
+    })
+
+    // Update user's like tracking
+    await set(ref(db, `userLikes/${fromPlayerId}`), {
+      toPlayerId: toPlayerId,
+      timestamp: Date.now()
+    })
+
+    // Increment new player's like count
+    const newPlayerRef = ref(db, `players/${toPlayerId}`)
+    const newSnapshot = await get(newPlayerRef)
+    if (newSnapshot.exists()) {
+      const newLikes = newSnapshot.val().likes || 0
+      await update(newPlayerRef, { likes: newLikes + 1 })
+    }
+  } catch (err) {
+    console.warn('Firebase transferLike failed:', err)
+  }
+}
+
+// Listen to a player's like count in real-time
+export function onLikeCountUpdate(
+  playerId: string,
+  callback: (count: number) => void
+): () => void {
+  try {
+    const likeRef = ref(db, `players/${playerId}/likes`)
+    const handler = onValue(likeRef, (snapshot) => {
+      callback(snapshot.exists() ? (snapshot.val() || 0) : 0)
+    })
+    return () => off(likeRef, 'value', handler)
+  } catch (err) {
+    console.warn('Firebase onLikeCountUpdate failed:', err)
+    callback(0)
+    return () => {}
+  }
+}
+
+// Check if a viewer (fromPlayerId) has liked the target (toPlayerId)
 export async function hasLiked(
   fromPlayerId: string,
   toPlayerId: string
@@ -1731,5 +1920,211 @@ export function onLikesUpdate(
     console.warn('Firebase onLikesUpdate failed:', err)
     callback(0)
     return () => {}
+  }
+}
+
+// ============================================================
+// ROOM SYSTEM - Firebase support for 2-4 player rooms
+// ============================================================
+
+export interface FirebaseRoomOpponent {
+  id: string
+  name: string
+  avatar: string
+  level: number
+  userCode: string
+  status: 'pending' | 'accepted' | 'declined'
+}
+
+export interface FirebaseRoom {
+  id: string
+  creatorId: string
+  creatorName: string
+  creatorAvatar: string
+  creatorLevel: number
+  creatorUserCode: string
+  opponentIds: FirebaseRoomOpponent[]
+  coinAmount: number
+  timeLimit: number
+  mode: 'coin' | 'time'
+  abilities: string[]
+  status: 'waiting' | 'playing' | 'finished'
+  createdAt: number
+  winnerId: string | null
+  taxAmount: number
+}
+
+// Create a new room
+export async function createRoom(roomData: {
+  creatorId: string
+  creatorName: string
+  creatorAvatar: string
+  creatorLevel: number
+  creatorUserCode: string
+  coinAmount: number
+  timeLimit: number
+  mode: 'coin' | 'time'
+  abilities: string[]
+  opponentIds: FirebaseRoomOpponent[]
+  taxAmount: number
+}): Promise<string> {
+  try {
+    const roomRef = push(ref(db, 'rooms'))
+    const roomId = roomRef.key!
+
+    const room: FirebaseRoom = {
+      id: roomId,
+      creatorId: roomData.creatorId,
+      creatorName: roomData.creatorName,
+      creatorAvatar: roomData.creatorAvatar,
+      creatorLevel: roomData.creatorLevel,
+      creatorUserCode: roomData.creatorUserCode,
+      opponentIds: roomData.opponentIds,
+      coinAmount: roomData.coinAmount,
+      timeLimit: roomData.timeLimit,
+      mode: roomData.mode,
+      abilities: roomData.abilities,
+      status: 'waiting',
+      createdAt: Date.now(),
+      winnerId: null,
+      taxAmount: roomData.taxAmount,
+    }
+
+    await set(roomRef, room)
+    return roomId
+  } catch (err) {
+    console.warn('Firebase createRoom failed:', err)
+    return ''
+  }
+}
+
+// Join a room as an opponent (accept invitation)
+export async function joinRoom(
+  roomId: string,
+  playerId: string
+): Promise<{ success: boolean; reason?: string }> {
+  try {
+    const roomRef = ref(db, `rooms/${roomId}`)
+    const snapshot = await get(roomRef)
+    if (!snapshot.exists()) {
+      return { success: false, reason: 'Room not found' }
+    }
+
+    const room = snapshot.val() as FirebaseRoom
+    if (room.status !== 'waiting') {
+      return { success: false, reason: 'Room is no longer waiting' }
+    }
+
+    // Check if player is in the opponent list
+    const opponentIndex = room.opponentIds?.findIndex(o => o.id === playerId) ?? -1
+    if (opponentIndex === -1) {
+      return { success: false, reason: 'You are not invited to this room' }
+    }
+
+    // Update opponent status to accepted
+    const updatedOpponents = [...(room.opponentIds || [])]
+    updatedOpponents[opponentIndex] = {
+      ...updatedOpponents[opponentIndex],
+      status: 'accepted' as const,
+    }
+
+    // Check if all opponents have accepted (room can start)
+    const allAccepted = updatedOpponents.every(o => o.status === 'accepted')
+    const newStatus = allAccepted ? 'playing' as const : 'waiting' as const
+
+    await update(roomRef, {
+      opponentIds: updatedOpponents,
+      status: newStatus,
+    })
+
+    return { success: true }
+  } catch (err) {
+    console.warn('Firebase joinRoom failed:', err)
+    return { success: false, reason: 'Network error' }
+  }
+}
+
+// Listen to room state changes in real-time
+export function onRoomUpdate(
+  roomId: string,
+  callback: (room: FirebaseRoom | null) => void
+): () => void {
+  try {
+    const roomRef = ref(db, `rooms/${roomId}`)
+    const handler = onValue(roomRef, (snapshot) => {
+      if (snapshot.exists()) {
+        callback(snapshot.val() as FirebaseRoom)
+      } else {
+        callback(null)
+      }
+    })
+    return () => off(roomRef, 'value', handler)
+  } catch (err) {
+    console.warn('Firebase onRoomUpdate failed:', err)
+    callback(null)
+    return () => {}
+  }
+}
+
+// Update room status
+export async function updateRoomStatus(
+  roomId: string,
+  status: 'waiting' | 'playing' | 'finished',
+  winnerId?: string
+): Promise<void> {
+  try {
+    const updates: Record<string, unknown> = { status }
+    if (winnerId) {
+      updates.winnerId = winnerId
+    }
+    await update(ref(db, `rooms/${roomId}`), updates)
+  } catch (err) {
+    console.warn('Firebase updateRoomStatus failed:', err)
+  }
+}
+
+// Leave a room (decline invitation or leave during waiting)
+export async function leaveRoom(
+  roomId: string,
+  playerId: string
+): Promise<void> {
+  try {
+    const roomRef = ref(db, `rooms/${roomId}`)
+    const snapshot = await get(roomRef)
+    if (!snapshot.exists()) return
+
+    const room = snapshot.val() as FirebaseRoom
+
+    // If the creator leaves, delete the room
+    if (room.creatorId === playerId) {
+      await set(roomRef, null)
+      return
+    }
+
+    // If an opponent leaves, mark them as declined
+    const updatedOpponents = (room.opponentIds || []).map(o => {
+      if (o.id === playerId) {
+        return { ...o, status: 'declined' as const }
+      }
+      return o
+    })
+
+    await update(roomRef, { opponentIds: updatedOpponents })
+  } catch (err) {
+    console.warn('Firebase leaveRoom failed:', err)
+  }
+}
+
+// Get room by ID
+export async function getRoom(roomId: string): Promise<FirebaseRoom | null> {
+  try {
+    const snapshot = await get(ref(db, `rooms/${roomId}`))
+    if (snapshot.exists()) {
+      return snapshot.val() as FirebaseRoom
+    }
+    return null
+  } catch (err) {
+    console.warn('Firebase getRoom failed:', err)
+    return null
   }
 }

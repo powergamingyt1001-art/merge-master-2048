@@ -20,6 +20,9 @@ interface RoomFightProps {
   onDeductAbility: (type: 'hammer' | 'magnet' | 'blast', count: number) => void
   onStartRoomGame: (betAmount: number, abilities: string[]) => void
   playerId: string
+  playerName?: string
+  playerAvatar?: string
+  playerLevel?: number
 }
 
 type RoomTab = 'create' | 'join' | 'random' | 'info'
@@ -44,12 +47,15 @@ interface AbilityOption {
 type BetItem = CoinOption | AbilityOption
 
 const COIN_OPTIONS: CoinOption[] = [
-  { id: 'coins1000', label: '1,000', emoji: '💰', type: 'coins', amount: 1000 },
-  { id: 'coins10000', label: '10,000', emoji: '💰', type: 'coins', amount: 10000 },
-  { id: 'coins20000', label: '20,000', emoji: '💰', type: 'coins', amount: 20000 },
-  { id: 'coins50000', label: '50,000', emoji: '💰', type: 'coins', amount: 50000 },
-  { id: 'coins75000', label: '75,000', emoji: '💰', type: 'coins', amount: 75000 },
-  { id: 'coins100000', label: '1,00,000', emoji: '💰', type: 'coins', amount: 100000 },
+  { id: 'coins1000', label: '1K', emoji: '💰', type: 'coins', amount: 1000 },
+  { id: 'coins5000', label: '5K', emoji: '💰', type: 'coins', amount: 5000 },
+  { id: 'coins10000', label: '10K', emoji: '💰', type: 'coins', amount: 10000 },
+  { id: 'coins15000', label: '15K', emoji: '💰', type: 'coins', amount: 15000 },
+  { id: 'coins20000', label: '20K', emoji: '💰', type: 'coins', amount: 20000 },
+  { id: 'coins30000', label: '30K', emoji: '💰', type: 'coins', amount: 30000 },
+  { id: 'coins50000', label: '50K', emoji: '💰', type: 'coins', amount: 50000 },
+  { id: 'coins75000', label: '75K', emoji: '💰', type: 'coins', amount: 75000 },
+  { id: 'coins100000', label: '1L', emoji: '💰', type: 'coins', amount: 100000 },
 ]
 
 const ABILITY_OPTIONS: AbilityOption[] = [
@@ -66,6 +72,14 @@ const TIMER_OPTIONS = [
   { label: '90s', seconds: 90 },
   { label: '120s', seconds: 120 },
 ]
+
+const TIME_MODE_OPTIONS = [
+  { label: '1 min', seconds: 60 },
+  { label: '2 min', seconds: 120 },
+  { label: '3 min', seconds: 180 },
+]
+
+type GameMode = 'coin' | 'time'
 
 // Mock opponent data for the "searching" animation
 const MOCK_OPPONENTS = [
@@ -84,7 +98,7 @@ export function RoomFight({
   isOpen, onClose, roomCardCount, userCode, coins,
   hammerCount, magnetCount, blastCount,
   onUseRoomCard, onAddNotification, onDeductCoins, onDeductAbility, onStartRoomGame,
-  playerId,
+  playerId, playerName, playerAvatar, playerLevel,
 }: RoomFightProps) {
   const [activeTab, setActiveTab] = useState<RoomTab>('create')
   const [selectedBets, setSelectedBets] = useState<Set<string>>(new Set())
@@ -103,9 +117,17 @@ export function RoomFight({
   const [createdRoomCode, setCreatedRoomCode] = useState('')
   const [copiedCode, setCopiedCode] = useState(false)
 
-  // Opponent UID for friend invite
-  const [opponentUid, setOpponentUid] = useState('')
+  // Game mode selector
+  const [gameMode, setGameMode] = useState<GameMode>('coin')
+  const [selectedTimeMode, setSelectedTimeMode] = useState(60)
+
+  // Player count (2-4)
+  const [playerCount, setPlayerCount] = useState(2)
+
+  // Opponent UIDs for friend invite (multi-player)
+  const [invitedFriends, setInvitedFriends] = useState<Array<{ friendId: string; name: string; avatar: string; inviteCode: string; status: 'pending' | 'accepted' | 'cancelled' }>>([])
   const [showFriendList, setShowFriendList] = useState(false)
+  const [activeSlotIndex, setActiveSlotIndex] = useState(0)
   const [friends, setFriends] = useState<Array<{ friendId: string; name: string; avatar: string; inviteCode: string }>>([])
 
   // Join Room states
@@ -185,6 +207,24 @@ export function RoomFight({
     toggleBet(id)
   }, [canAffordBet, selectedBets, getSelectedAbilityCount, toggleBet, onAddNotification])
 
+  // Calculate 5% tax on coin bets
+  const getCoinBetTotal = useCallback(() => {
+    let total = 0
+    for (const betId of selectedBets) {
+      const item = ALL_BET_ITEMS.find(b => b.id === betId)
+      if (item && item.type === 'coins') total += item.amount
+    }
+    return total
+  }, [selectedBets])
+
+  const getTaxAmount = useCallback(() => {
+    return Math.ceil(getCoinBetTotal() * 0.05)
+  }, [getCoinBetTotal])
+
+  const getTotalWithTax = useCallback(() => {
+    return getCoinBetTotal() + getTaxAmount()
+  }, [getCoinBetTotal, getTaxAmount])
+
   const handleCreateRoom = useCallback(() => {
     if (roomCardCount < 1) {
       onAddNotification('No Room Cards', 'You need at least 1 Room Card to create a room.', 'system', '🃏')
@@ -197,7 +237,16 @@ export function RoomFight({
 
     // Check minimum 100 coins
     if (coins < 100) {
-      onAddNotification('Insufficient Coins', 'Both players need at least 100 coins to play.', 'system', '💰')
+      onAddNotification('Insufficient Coins', 'All players need at least 100 coins to play.', 'system', '💰')
+      return
+    }
+
+    // Verify the user can afford all selected bets + 5% tax on coins
+    const coinTotal = getCoinBetTotal()
+    const tax = Math.ceil(coinTotal * 0.05)
+    const totalCoinCost = coinTotal + tax
+    if (coinTotal > 0 && coins < totalCoinCost) {
+      onAddNotification('Not Enough', `You need ${totalCoinCost.toLocaleString()} coins (incl. 5% tax). You have ${coins.toLocaleString()}.`, 'system', '❌')
       return
     }
 
@@ -215,8 +264,12 @@ export function RoomFight({
     setCreatedRoom({ code, password: roomPassword })
     setWaitingForOpponent(true)
     onUseRoomCard()
-    onAddNotification('Room Created!', `Room ${code} created. Share the code with your opponent!`, 'system', '🏠')
-  }, [roomCardCount, selectedBets, roomPassword, onUseRoomCard, onAddNotification, canAffordBet, coins])
+    // Deduct 5% tax immediately on room creation
+    if (coinTotal > 0) {
+      onDeductCoins(tax)
+    }
+    onAddNotification('Room Created!', `Room ${code} created. Share the code with your opponent!${tax > 0 ? ` (5% tax: ${tax.toLocaleString()} 💰)` : ''}`, 'system', '🏠')
+  }, [roomCardCount, selectedBets, roomPassword, onUseRoomCard, onAddNotification, canAffordBet, coins, getCoinBetTotal, onDeductCoins])
 
   const handleCopyRoomCode = useCallback(() => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -284,7 +337,7 @@ export function RoomFight({
     setCreatedRoomCode('')
     setRoomPassword('')
     setSelectedBets(new Set())
-    setOpponentUid('')
+    setInvitedFriends([])
   }, [])
 
   const handleClose = useCallback(() => {
@@ -352,6 +405,61 @@ export function RoomFight({
               {/* ===== CREATE ROOM TAB ===== */}
               {activeTab === 'create' && !waitingForOpponent && (
                 <div className="space-y-3">
+                  {/* Own UID Display */}
+                  <div className="p-2.5 rounded-xl flex items-center gap-2" style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.12)' }}>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(0,230,118,0.15)', border: '1px solid rgba(0,230,118,0.3)' }}>
+                      <span className="text-sm">🎮</span>
+                    </div>
+                    <div>
+                      <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Your UID</p>
+                      <p className="text-[11px] font-mono font-bold" style={{ color: '#00E676' }}>{userCode || '—'}</p>
+                    </div>
+                    <span className="text-[7px] ml-auto px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(0,230,118,0.15)', color: '#00E676' }}>YOU</span>
+                  </div>
+
+                  {/* Mode Selector - Coin vs Time */}
+                  <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Zap className="w-3 h-3" style={{ color: '#E040FB' }} />
+                      <span className="text-[10px] font-bold" style={{ color: '#E040FB' }}>Game Mode</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button onClick={() => setGameMode('coin')}
+                        className="flex-1 py-2 rounded-lg text-[10px] font-bold transition-all text-center"
+                        style={{
+                          backgroundColor: gameMode === 'coin' ? 'rgba(237,194,46,0.2)' : 'rgba(255,255,255,0.04)',
+                          border: gameMode === 'coin' ? '1px solid rgba(237,194,46,0.5)' : '1px solid rgba(255,255,255,0.08)',
+                          color: gameMode === 'coin' ? '#EDC22E' : 'rgba(255,255,255,0.5)',
+                        }}>
+                        💰 Coin Mode
+                      </button>
+                      <button onClick={() => setGameMode('time')}
+                        className="flex-1 py-2 rounded-lg text-[10px] font-bold transition-all text-center"
+                        style={{
+                          backgroundColor: gameMode === 'time' ? 'rgba(224,64,251,0.2)' : 'rgba(255,255,255,0.04)',
+                          border: gameMode === 'time' ? '1px solid rgba(224,64,251,0.5)' : '1px solid rgba(255,255,255,0.08)',
+                          color: gameMode === 'time' ? '#E040FB' : 'rgba(255,255,255,0.5)',
+                        }}>
+                        ⏱️ Time Mode
+                      </button>
+                    </div>
+                    {gameMode === 'time' && (
+                      <div className="flex items-center gap-1.5 mt-2">
+                        {TIME_MODE_OPTIONS.map(opt => (
+                          <button key={opt.seconds} onClick={() => setSelectedTimeMode(opt.seconds)}
+                            className="flex-1 py-2 rounded-lg text-[10px] font-bold transition-all text-center"
+                            style={{
+                              backgroundColor: selectedTimeMode === opt.seconds ? 'rgba(224,64,251,0.2)' : 'rgba(255,255,255,0.04)',
+                              border: selectedTimeMode === opt.seconds ? '1px solid rgba(224,64,251,0.5)' : '1px solid rgba(255,255,255,0.08)',
+                              color: selectedTimeMode === opt.seconds ? '#E040FB' : 'rgba(255,255,255,0.5)',
+                            }}>
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Coin Bet Selection */}
                   <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                     <div className="flex items-center gap-1.5 mb-2">
@@ -377,6 +485,14 @@ export function RoomFight({
                         )
                       })}
                     </div>
+                    {/* 5% Tax Info */}
+                    {getCoinBetTotal() > 0 && (
+                      <div className="mt-2 p-2 rounded-lg flex items-center justify-between" style={{ backgroundColor: 'rgba(246,94,59,0.06)', border: '1px solid rgba(246,94,59,0.12)' }}>
+                        <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.5)' }}>💰 Bet: {getCoinBetTotal().toLocaleString()}</span>
+                        <span className="text-[8px]" style={{ color: '#F65E3B' }}>+5% tax: {getTaxAmount().toLocaleString()}</span>
+                        <span className="text-[8px] font-bold" style={{ color: '#EDC22E' }}>Total: {getTotalWithTax().toLocaleString()}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Ability Bet Selection */}
@@ -403,8 +519,8 @@ export function RoomFight({
                             <span className="text-sm">{item.emoji}</span>
                             <span className="text-[8px] font-bold" style={{ color: isSelected ? '#00E676' : 'rgba(255,255,255,0.6)' }}>{item.label}</span>
                             {item.abilityType && (
-                              <span className="text-[6px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                                x{item.abilityType === 'hammer' ? hammerCount : item.abilityType === 'magnet' ? magnetCount : blastCount}
+                              <span className="text-[6px]" style={{ color: canAfford ? 'rgba(255,255,255,0.3)' : 'rgba(246,94,59,0.5)' }}>
+                                {canAfford ? `x${item.abilityType === 'hammer' ? hammerCount : item.abilityType === 'magnet' ? magnetCount : blastCount}` : 'Unavailable'}
                               </span>
                             )}
                           </button>
@@ -434,69 +550,129 @@ export function RoomFight({
                     </div>
                   </div>
 
-                  {/* Opponent UID with Friend Invite */}
+                  {/* Player Count Selector */}
+                  <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Users className="w-3 h-3" style={{ color: '#00E676' }} />
+                      <span className="text-[10px] font-bold" style={{ color: '#00E676' }}>Players</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {[2, 3, 4].map(count => (
+                        <button key={count} onClick={() => setPlayerCount(count)}
+                          className="flex-1 py-2 rounded-lg text-[10px] font-bold transition-all text-center"
+                          style={{
+                            backgroundColor: playerCount === count ? 'rgba(0,230,118,0.2)' : 'rgba(255,255,255,0.04)',
+                            border: playerCount === count ? '1px solid rgba(0,230,118,0.5)' : '1px solid rgba(255,255,255,0.08)',
+                            color: playerCount === count ? '#00E676' : 'rgba(255,255,255,0.5)',
+                          }}>
+                          {count}P 🎮
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Opponent Slots with Friend Invite */}
                   <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                     <div className="flex items-center gap-1.5 mb-2">
                       <Users className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.4)' }} />
-                      <span className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>Opponent UID (Optional)</span>
+                      <span className="text-[10px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>Invite Opponents ({invitedFriends.filter(f => f.status !== 'cancelled').length}/{playerCount - 1})</span>
                     </div>
-                    <div className="relative">
-                      <div className="flex items-center gap-1.5">
-                        <input type="text" value={opponentUid} onChange={e => setOpponentUid(e.target.value)}
-                          placeholder="Enter opponent UID"
-                          className="flex-1 px-3 py-2 rounded-lg text-xs outline-none"
-                          style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }} />
-                        <button
-                          onClick={() => setShowFriendList(!showFriendList)}
-                          className="px-2.5 py-2 rounded-lg flex items-center gap-1 transition-transform active:scale-95"
-                          style={{ backgroundColor: showFriendList ? 'rgba(0,230,118,0.15)' : 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
-                        >
-                          <UserPlus className="w-3.5 h-3.5" style={{ color: showFriendList ? '#00E676' : 'rgba(255,255,255,0.5)' }} />
-                        </button>
-                      </div>
-
-                      {/* Friend List Dropdown */}
-                      <AnimatePresence>
-                        {showFriendList && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -5 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -5 }}
-                            className="absolute top-full left-0 right-0 mt-1 rounded-lg overflow-hidden z-20 max-h-40 overflow-y-auto"
-                            style={{ backgroundColor: '#1a0a30', border: '1px solid rgba(255,255,255,0.1)' }}
-                          >
-                            {friends.length === 0 ? (
-                              <div className="p-3 text-center">
-                                <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>No friends yet. Add friends to invite them!</p>
+                    <div className="space-y-1.5">
+                      {Array.from({ length: playerCount - 1 }).map((_, idx) => {
+                        const invited = invitedFriends.find((f, i) => f.status !== 'cancelled' && invitedFriends.indexOf(f) === idx) || invitedFriends[idx]
+                        return (
+                          <div key={idx} className="relative">
+                            {invited && invited.status !== 'cancelled' ? (
+                              <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg"
+                                style={{ backgroundColor: invited.status === 'accepted' ? 'rgba(0,230,118,0.08)' : 'rgba(237,194,46,0.08)', border: `1px solid ${invited.status === 'accepted' ? 'rgba(0,230,118,0.2)' : 'rgba(237,194,46,0.2)'}` }}>
+                                <span className="text-sm">{invited.avatar || '👤'}</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[9px] font-bold truncate" style={{ color: '#FFFFFF' }}>{invited.name}</p>
+                                  <p className="text-[7px]" style={{ color: invited.status === 'accepted' ? '#00E676' : '#EDC22E' }}>
+                                    {invited.status === 'accepted' ? '✓ Accepted' : '⏳ Pending...'}
+                                  </p>
+                                </div>
+                                <div className="flex gap-1">
+                                  {invited.status === 'pending' && (
+                                    <button onClick={() => {
+                                      setInvitedFriends(prev => prev.map((f, i) => i === idx ? { ...f, status: 'accepted' as const } : f))
+                                    }} className="px-1.5 py-0.5 rounded text-[7px] font-bold" style={{ backgroundColor: 'rgba(0,230,118,0.15)', color: '#00E676' }}>
+                                      Accept
+                                    </button>
+                                  )}
+                                  <button onClick={() => {
+                                    setInvitedFriends(prev => prev.map((f, i) => i === idx ? { ...f, status: 'cancelled' as const } : f))
+                                  }} className="px-1.5 py-0.5 rounded text-[7px] font-bold" style={{ backgroundColor: 'rgba(246,94,59,0.15)', color: '#F65E3B' }}>
+                                    Cancel
+                                  </button>
+                                </div>
                               </div>
                             ) : (
-                              friends.map(friend => (
-                                <button
-                                  key={friend.friendId}
-                                  onClick={() => {
-                                    setOpponentUid(friend.inviteCode)
-                                    setShowFriendList(false)
-                                  }}
-                                  className="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors"
-                                  style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
-                                  onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'}
-                                  onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                                >
-                                  <span className="text-sm">{friend.avatar || '👤'}</span>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-[9px] font-bold truncate" style={{ color: '#FFFFFF' }}>{friend.name}</p>
-                                    <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{friend.inviteCode}</p>
-                                  </div>
-                                  <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(0,230,118,0.15)', color: '#00E676' }}>
-                                    + Invite
-                                  </span>
-                                </button>
-                              ))
+                              <button
+                                onClick={() => { setActiveSlotIndex(idx); setShowFriendList(true) }}
+                                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg transition-all"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.15)' }}>
+                                <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}>
+                                  <UserPlus className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.3)' }} />
+                                </div>
+                                <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Tap to invite friend</span>
+                                <span className="text-[10px] ml-auto font-bold" style={{ color: 'rgba(0,230,118,0.4)' }}>+</span>
+                              </button>
                             )}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                          </div>
+                        )
+                      })}
                     </div>
+
+                    {/* Friend List Dropdown */}
+                    <AnimatePresence>
+                      {showFriendList && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -5 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -5 }}
+                          className="mt-2 rounded-lg overflow-hidden z-20 max-h-40 overflow-y-auto"
+                          style={{ backgroundColor: '#1a0a30', border: '1px solid rgba(255,255,255,0.1)' }}
+                        >
+                          {friends.length === 0 ? (
+                            <div className="p-3 text-center">
+                              <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>No friends yet. Add friends to invite them!</p>
+                            </div>
+                          ) : (
+                            friends.filter(f => !invitedFriends.some(inv => inv.friendId === f.friendId && inv.status !== 'cancelled')).map(friend => (
+                              <button
+                                key={friend.friendId}
+                                onClick={() => {
+                                  const newInvited = [...invitedFriends]
+                                  newInvited[activeSlotIndex] = { ...friend, status: 'pending' }
+                                  setInvitedFriends(newInvited)
+                                  setShowFriendList(false)
+                                }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors"
+                                style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+                                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'}
+                                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                              >
+                                <span className="text-sm">{friend.avatar || '👤'}</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[9px] font-bold truncate" style={{ color: '#FFFFFF' }}>{friend.name}</p>
+                                  <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{friend.inviteCode}</p>
+                                </div>
+                                <span className="text-[12px] px-2 py-1 rounded-full font-bold" style={{ backgroundColor: 'rgba(0,230,118,0.15)', color: '#00E676' }}>
+                                  +
+                                </span>
+                              </button>
+                            ))
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* No Rank Points Info */}
+                  <div className="p-2 rounded-lg flex items-center gap-1.5" style={{ backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <AlertTriangle className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.3)' }} />
+                    <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Room Fight mode does not award rank points</span>
                   </div>
 
                   {/* Password */}
@@ -515,10 +691,10 @@ export function RoomFight({
                   <button onClick={handleCreateRoom}
                     className="w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
                     style={{
-                      background: roomCardCount >= 1 && selectedBets.size >= 1 && coins >= 100
+                      background: roomCardCount >= 1 && selectedBets.size >= 1 && coins >= 100 && coins >= getTotalWithTax()
                         ? 'linear-gradient(135deg, #F65E3B, #FF7A00)' : 'rgba(255,255,255,0.06)',
-                      color: roomCardCount >= 1 && selectedBets.size >= 1 && coins >= 100 ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
-                      boxShadow: roomCardCount >= 1 && selectedBets.size >= 1 && coins >= 100 ? '0 4px 15px rgba(246,94,59,0.3)' : 'none',
+                      color: roomCardCount >= 1 && selectedBets.size >= 1 && coins >= 100 && coins >= getTotalWithTax() ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
+                      boxShadow: roomCardCount >= 1 && selectedBets.size >= 1 && coins >= 100 && coins >= getTotalWithTax() ? '0 4px 15px rgba(246,94,59,0.3)' : 'none',
                     }}>
                     <Swords className="w-4 h-4" />
                     CREATE ROOM (1 🃏)
@@ -534,22 +710,32 @@ export function RoomFight({
                       ⚠️ You need at least 100 coins to play. Earn more coins!
                     </p>
                   )}
+                  {coins >= 100 && coins < getTotalWithTax() && getCoinBetTotal() > 0 && (
+                    <p className="text-center text-[8px]" style={{ color: '#F65E3B' }}>
+                      ⚠️ You need {getTotalWithTax().toLocaleString()} coins (incl. 5% tax) to create this room.
+                    </p>
+                  )}
                 </div>
               )}
 
-              {/* Waiting for Opponent */}
+              {/* Waiting for Opponent / Searching Animation */}
               {activeTab === 'create' && waitingForOpponent && (
                 <div className="space-y-3">
                   <div className="flex flex-col items-center py-4">
                     <motion.div
                       animate={{ rotate: 360 }}
                       transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-                      className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
-                      style={{ background: 'linear-gradient(135deg, #F65E3B, #FF7A00)', boxShadow: '0 0 20px rgba(246,94,59,0.4)' }}>
-                      <Search className="w-6 h-6" style={{ color: '#FFFFFF' }} />
+                      className="w-14 h-14 rounded-full flex items-center justify-center mb-3"
+                      style={{ background: 'linear-gradient(135deg, #F65E3B, #FF7A00)', boxShadow: '0 0 25px rgba(246,94,59,0.5)' }}>
+                      <Search className="w-7 h-7" style={{ color: '#FFFFFF' }} />
                     </motion.div>
-                    <p className="text-sm font-bold" style={{ color: '#FFFFFF' }}>Waiting for opponent...</p>
-                    <p className="text-[9px] mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Share this room code:</p>
+                    <motion.p
+                      animate={{ opacity: [0.5, 1, 0.5] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                      className="text-sm font-bold" style={{ color: '#FFFFFF' }}>
+                      Searching for players...
+                    </motion.p>
+                    <p className="text-[9px] mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Waiting for {playerCount - 1} opponent{playerCount > 2 ? 's' : ''} • Share code:</p>
 
                     {/* Room Code Display */}
                     <div className="flex items-center gap-2 mt-2 px-4 py-2 rounded-xl"
@@ -573,7 +759,14 @@ export function RoomFight({
                     <div className="flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-lg"
                       style={{ backgroundColor: 'rgba(224,64,251,0.08)', border: '1px solid rgba(224,64,251,0.15)' }}>
                       <Clock className="w-3 h-3" style={{ color: '#E040FB' }} />
-                      <span className="text-[8px]" style={{ color: '#E040FB' }}>Timer: {selectedTimer}s</span>
+                      <span className="text-[8px]" style={{ color: '#E040FB' }}>Timer: {selectedTimer}s • Mode: {gameMode === 'coin' ? '💰 Coin' : '⏱️ Time'}</span>
+                    </div>
+
+                    {/* Players display */}
+                    <div className="flex items-center gap-1.5 mt-1 px-3 py-1.5 rounded-lg"
+                      style={{ backgroundColor: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.15)' }}>
+                      <Users className="w-3 h-3" style={{ color: '#00E676' }} />
+                      <span className="text-[8px]" style={{ color: '#00E676' }}>Players: {playerCount}P • No rank points</span>
                     </div>
 
                     {/* Selected bets summary */}
@@ -701,11 +894,16 @@ export function RoomFight({
                   <motion.div
                     animate={{ rotate: 360 }}
                     transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
-                    className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
-                    style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', boxShadow: '0 0 20px rgba(0,230,118,0.4)' }}>
-                    <Search className="w-6 h-6" style={{ color: '#FFFFFF' }} />
+                    className="w-14 h-14 rounded-full flex items-center justify-center mb-3"
+                    style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', boxShadow: '0 0 25px rgba(0,230,118,0.5)' }}>
+                    <Search className="w-7 h-7" style={{ color: '#FFFFFF' }} />
                   </motion.div>
-                  <p className="text-sm font-bold" style={{ color: '#FFFFFF' }}>Searching...</p>
+                  <motion.p
+                    animate={{ opacity: [0.5, 1, 0.5] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                    className="text-sm font-bold" style={{ color: '#FFFFFF' }}>
+                    Searching for players...
+                  </motion.p>
                   <p className="text-[9px] mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Connecting to room {joinCode}</p>
                 </div>
               )}

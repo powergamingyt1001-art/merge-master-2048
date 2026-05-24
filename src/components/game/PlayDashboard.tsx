@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Swords, Clock, Trophy, Coins, Crown, Bell, Lock, Search, Loader2, Users, X, UserPlus, ChevronDown } from 'lucide-react'
+import { Play, Swords, Clock, Trophy, Coins, Crown, Bell, Lock, Search, Loader2, Users, X, UserPlus, Heart } from 'lucide-react'
 import { SpinWheel, SpinPrize } from './SpinWheel'
 import { LoginStreak } from './LoginStreak'
 import { WelcomeGift } from './WelcomeGift'
@@ -22,7 +22,7 @@ import {
   getDashboardBigBannerSlot,
 } from '@/components/ads/AdsterraAds'
 import { PowerUp, Notification, DailyTask, DailyTaskReward, GameHistoryEntry, getLevelInfo } from '@/hooks/useGame'
-import { sendFriendRequest, getFriendRequests, onFriendRequestsUpdate, acceptFriendRequest, declineFriendRequest, getFriends, onFriendsUpdate, searchPlayerByUserCode, removeFriend, type FriendData, type FriendRequestData } from '@/lib/firebase-service'
+import { sendFriendRequest, getFriendRequests, onFriendRequestsUpdate, acceptFriendRequest, declineFriendRequest, getFriends, onFriendsUpdate, searchPlayerByUserCode, removeFriend, onLikeCountUpdate, type FriendData, type FriendRequestData } from '@/lib/firebase-service'
 
 
 interface PlayDashboardProps {
@@ -100,6 +100,16 @@ interface PlayDashboardProps {
   onAddRoomCards: (count: number) => void
   onDeleteGameHistory?: (id: string) => void
   onClearGameHistory?: () => void
+  likeCount?: number
+  onLikeProfile?: (targetPlayerId: string) => void
+  likedProfileId?: string | null
+  classicBestScore?: number
+  tournamentBestScore?: number
+  battleBestScore?: number
+  skillPoints?: number
+  saveGame?: () => void
+  saveAll?: () => void
+  setAutoSaveEnabled?: (enabled: boolean) => void
 }
 
 const COIN_GAME_MODES = [
@@ -144,6 +154,9 @@ export function PlayDashboard({
   userCode, totalCoinsEarned, winningCoins, roomCardCount, gameHistory,
   streakWeek = 1, onAddRoomCards,
   onDeleteGameHistory, onClearGameHistory,
+  likeCount = 0, onLikeProfile,
+  likedProfileId = null, classicBestScore = 0, tournamentBestScore = 0, battleBestScore = 0,
+  skillPoints = 0, saveGame, saveAll, setAutoSaveEnabled,
 }: PlayDashboardProps) {
   const [showSpin, setShowSpin] = useState(false)
   const [showStreak, setShowStreak] = useState(false)
@@ -169,10 +182,15 @@ export function PlayDashboard({
   const [friendSearchUid, setFriendSearchUid] = useState('')
   const [friendSearchResult, setFriendSearchResult] = useState<{ id: string; name: string; avatar: string; level: number; userCode: string } | null>(null)
   const [friendSearchLoading, setFriendSearchLoading] = useState(false)
-  const [friendPlayMenu, setFriendPlayMenu] = useState<string | null>(null)
   const [friendRequestSending, setFriendRequestSending] = useState(false)
-  // Searching animation for Battle/Coin modes
-  const [searching, setSearching] = useState<{ active: boolean; type: 'battle' | 'coins'; timeLimit?: number; coinFee?: number; opponent?: { name: string; avatar: string } } | null>(null)
+  // Friend mode selection modal - stores the friend ID when selecting a mode
+  const [friendModeSelect, setFriendModeSelect] = useState<{ friendId: string; friendName: string; friendAvatar: string } | null>(null)
+  // Friend request popup on dashboard
+  const [showFriendRequestPopup, setShowFriendRequestPopup] = useState(false)
+  // Local like count from Firebase
+  const [localLikeCount, setLocalLikeCount] = useState(likeCount)
+  // Searching animation for Battle/Coin/Classic modes
+  const [searching, setSearching] = useState<{ active: boolean; type: 'battle' | 'coins' | 'classic'; timeLimit?: number; coinFee?: number; opponent?: { name: string; avatar: string } } | null>(null)
   const searchTimerRef = useRef<NodeJS.Timeout | null>(null)
   // Decide which big banner to show (only 1 per session) - lazy init
   const [bigBannerSlot] = useState<string>(() => getDashboardBigBannerSlot())
@@ -187,6 +205,21 @@ export function PlayDashboard({
     const unsubFriends = onFriendsUpdate(playerId, (friends) => setFriendsList(friends))
     const unsubRequests = onFriendRequestsUpdate(playerId, (requests) => setFriendRequests(requests))
     return () => { unsubFriends(); unsubRequests() }
+  }, [playerId])
+
+  // Show friend request popup when new requests arrive
+  useEffect(() => {
+    if (friendRequests.length > 0 && !showFriends && !showFriendRequestPopup) {
+      const timer = setTimeout(() => setShowFriendRequestPopup(true), 500)
+      return () => clearTimeout(timer)
+    }
+  }, [friendRequests.length, showFriends])
+
+  // Real-time like count listener
+  useEffect(() => {
+    if (!playerId) return
+    const unsub = onLikeCountUpdate(playerId, (count) => setLocalLikeCount(count))
+    return unsub
   }, [playerId])
 
   // Search friend by UID
@@ -301,6 +334,10 @@ export function PlayDashboard({
       onStartCoinGame(searching.coinFee)
       const timer = setTimeout(() => setSearching(null), 6000)
       searchTimerRef.current = timer
+    } else if (searching.type === 'classic') {
+      onPlayClassic()
+      const timer = setTimeout(() => setSearching(null), 6000)
+      searchTimerRef.current = timer
     }
     return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current) }
   }, [searching?.active])
@@ -329,7 +366,7 @@ export function PlayDashboard({
           {/* Top bar: Profile + Title + Bell */}
           <div className="w-full flex items-center justify-between">
             <button onClick={() => setShowProfile(true)}
-              className="flex items-center gap-1 px-1.5 py-1 rounded-lg transition-transform active:scale-95"
+              className="flex items-center gap-1 px-1.5 py-1 rounded-lg transition-transform active:scale-95 relative"
               style={{ backgroundColor: 'var(--game-glass)', border: '1px solid var(--game-glass-border)' }}>
               <div className="w-7 h-7 rounded-full flex items-center justify-center"
                 style={{
@@ -342,6 +379,14 @@ export function PlayDashboard({
                 <p className="text-[8px] font-bold leading-tight" style={{ color: '#FFFFFF' }}>{playerName}</p>
                 <p className="text-[6px] leading-tight" style={{ color: getLevelInfo(playerLevel).color }}>Lv.{playerLevel} {getLevelInfo(playerLevel).icon}</p>
               </div>
+              {/* Like count badge */}
+              {localLikeCount > 0 && (
+                <div className="absolute -top-1 -right-1 flex items-center gap-0.5 px-1 py-0 rounded-full"
+                  style={{ backgroundColor: 'rgba(246,94,59,0.9)', border: '1px solid rgba(255,255,255,0.3)' }}>
+                  <Heart className="w-2 h-2" fill="white" style={{ color: '#FFFFFF' }} />
+                  <span className="text-[6px] font-bold" style={{ color: '#FFFFFF' }}>{localLikeCount > 99 ? '99+' : localLikeCount}</span>
+                </div>
+              )}
             </button>
 
             <div className="text-center">
@@ -807,11 +852,14 @@ export function PlayDashboard({
 
               {/* Mode info */}
               <div className="text-center">
-                <p className="text-xs font-bold" style={{ color: searching.type === 'battle' ? '#F65E3B' : '#EDC22E' }}>
-                  {searching.type === 'battle' ? `⚔️ Battle Mode` : `🪙 Coin Game`}
+                <p className="text-xs font-bold" style={{ color: searching.type === 'battle' ? '#F65E3B' : searching.type === 'classic' ? '#00E676' : '#EDC22E' }}>
+                  {searching.type === 'battle' ? `⚔️ Battle Mode` : searching.type === 'classic' ? `🎮 Classic Mode` : `🪙 Coin Game`}
                 </p>
                 {searching.type === 'battle' && searching.timeLimit && (
                   <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{searching.timeLimit}s Time Limit</p>
+                )}
+                {searching.type === 'classic' && (
+                  <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Finding opponent...</p>
                 )}
                 {searching.type === 'coins' && searching.coinFee && (
                   <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Entry: {searching.coinFee} coins</p>
@@ -855,7 +903,7 @@ export function PlayDashboard({
                     {friendsList.length}
                   </span>
                 </div>
-                <button onClick={() => { setShowFriends(false); setFriendPlayMenu(null) }} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
+                <button onClick={() => { setShowFriends(false); setFriendModeSelect(null) }} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
                   <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
                 </button>
               </div>
@@ -970,51 +1018,13 @@ export function PlayDashboard({
                               </div>
                             </div>
                             <div className="flex items-center gap-1">
-                              {/* Invite / + button */}
-                              <button
-                                onClick={() => handleSendFriendReq(friend.friendId)}
-                                className="w-6 h-6 rounded-lg flex items-center justify-center transition-transform active:scale-95"
-                                style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)' }}
-                                title="Invite to game">
-                                <span className="text-[10px] font-bold" style={{ color: '#00E676' }}>+</span>
-                              </button>
-                              {/* Play button with dropdown */}
+                              {/* Play button - opens mode selection modal */}
                               <div className="relative">
-                                <button onClick={() => setFriendPlayMenu(friendPlayMenu === friend.friendId ? null : friend.friendId)}
+                                <button onClick={() => setFriendModeSelect({ friendId: friend.friendId, friendName: friend.name, friendAvatar: friend.avatar })}
                                   className="px-2.5 py-1 rounded-lg text-[8px] font-bold transition-transform active:scale-95 flex items-center gap-0.5"
                                   style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF' }}>
                                   ▶ Play
-                                  <ChevronDown className="w-2.5 h-2.5" />
                                 </button>
-                                {/* Play mode dropdown */}
-                                <AnimatePresence>
-                                  {friendPlayMenu === friend.friendId && (
-                                    <motion.div
-                                      initial={{ opacity: 0, y: -5 }}
-                                      animate={{ opacity: 1, y: 0 }}
-                                      exit={{ opacity: 0, y: -5 }}
-                                      className="absolute right-0 top-8 z-50 rounded-lg overflow-hidden"
-                                      style={{ backgroundColor: '#1a0533', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
-                                      <button onClick={() => { setFriendPlayMenu(null); handleBattleMode(120) }}
-                                        className="w-full px-3 py-2 text-[9px] font-bold text-left flex items-center gap-1.5 hover:bg-white/5 transition-colors"
-                                        style={{ color: '#F65E3B' }}>
-                                        ⚔️ Battle
-                                        <span className="text-[7px] font-normal" style={{ color: 'rgba(255,255,255,0.3)' }}>2m</span>
-                                      </button>
-                                      <button onClick={() => { setFriendPlayMenu(null); handlePlayClassic() }}
-                                        className="w-full px-3 py-2 text-[9px] font-bold text-left flex items-center gap-1.5 hover:bg-white/5 transition-colors"
-                                        style={{ color: '#00E676' }}>
-                                        🎮 Classic
-                                      </button>
-                                      <button onClick={() => { setFriendPlayMenu(null); handleCoinGame(50) }}
-                                        className="w-full px-3 py-2 text-[9px] font-bold text-left flex items-center gap-1.5 hover:bg-white/5 transition-colors"
-                                        style={{ color: '#EDC22E' }}>
-                                        🪙 Coin
-                                        <span className="text-[7px] font-normal" style={{ color: 'rgba(255,255,255,0.3)' }}>₹50</span>
-                                      </button>
-                                    </motion.div>
-                                  )}
-                                </AnimatePresence>
                               </div>
                             </div>
                           </div>
@@ -1038,7 +1048,10 @@ export function PlayDashboard({
       <WelcomeGift isOpen={showWelcome} onClose={() => setShowWelcome(false)} onClaim={() => { onClaimWelcome(); setShowWelcome(false) }} />
       <Leaderboard isOpen={showLeaderboard} onClose={() => setShowLeaderboard(false)}
         gamePoints={gamePoints} bestScore={bestScore} coins={coins} totalCoinsEarned={totalCoinsEarned} winningCoins={winningCoins}
-        playerName={playerName} playerAvatar={playerAvatar} playerId={playerId} tournamentPoints={tournamentPoints} />
+        playerName={playerName} playerAvatar={playerAvatar} playerId={playerId} tournamentPoints={tournamentPoints}
+        classicBestScore={classicBestScore} tournamentBestScore={tournamentBestScore} battleBestScore={battleBestScore}
+        onLikeProfile={onLikeProfile} likedProfileId={likedProfileId}
+      />
       <Tournament isOpen={showTournament} onClose={() => setShowTournament(false)}
         coins={coins}
         tournamentJoined={tournamentJoined}
@@ -1058,7 +1071,7 @@ export function PlayDashboard({
         onToggleAutoClaim={onToggleAutoClaim}
         firebaseReferrals={firebaseReferrals} firebaseCommissionPending={firebaseCommissionPending}
         playerId={playerId} playerName={playerName} playerAvatar={playerAvatar} playerLevel={playerLevel}
-        onAddNotification={onAddNotification} />
+        onAddNotification={onAddNotification as (title: string, message: string, type: string, emoji: string) => void} />
       <ProfilePanel isOpen={showProfile} onClose={() => setShowProfile(false)}
         playerName={playerName} playerAvatar={playerAvatar} playerLevel={playerLevel}
         gamePoints={gamePoints} levelXP={levelXP} bestScore={bestScore} modBestScore={modBestScore}
@@ -1067,13 +1080,20 @@ export function PlayDashboard({
         totalBattlesPlayed={totalBattlesPlayed} totalBattlesWon={totalBattlesWon}
         onResetAllData={onResetAllData}
         userCode={userCode} totalCoinsEarned={totalCoinsEarned} roomCardCount={roomCardCount}
-        battleBestScore={gameHistory.filter(g => g.mode === 'bot' || g.mode === 'coins' || g.mode === 'tournament').reduce((max, g) => Math.max(max, g.score), 0)}
+        battleBestScore={battleBestScore}
+        classicBestScore={classicBestScore}
+        tournamentBestScore={tournamentBestScore}
         gameHistory={gameHistory}
         onOpenRoomFight={() => { setShowProfile(false); setShowRoomFight(true) }}
         onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)}
         onDeleteGameHistory={onDeleteGameHistory}
         onClearGameHistory={onClearGameHistory}
-        playerId={playerId} viewerPlayerId={playerId} />
+        playerId={playerId} viewerPlayerId={playerId}
+        likeCount={localLikeCount}
+        isLiked={likedProfileId === playerId}
+        onToggleLike={() => onLikeProfile?.(playerId)}
+        skillPoints={skillPoints}
+      />
       <NotificationsPanel isOpen={showNotifications} onClose={() => setShowNotifications(false)}
         notifications={notifications} onMarkRead={onMarkNotificationRead} onMarkAllRead={onMarkAllNotificationsRead}
         onDeleteNotification={onDeleteNotification} onDeleteReadNotifications={onDeleteReadNotifications} />
@@ -1081,7 +1101,7 @@ export function PlayDashboard({
       <AboutPage isOpen={showAbout} onClose={() => setShowAbout(false)} />
       <ContactPage isOpen={showContact} onClose={() => setShowContact(false)} />
       <Store isOpen={showStore} onClose={() => setShowStore(false)} playerId={playerId} playerName={playerName} userCode={userCode} coins={coins} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} onDeductCoins={onDeductCoins} onAddPowerUp={onAddPowerUp} onAddUndos={onAddUndos} onAddRoomCards={onAddRoomCards} onAddSpinTickets={onAddSpinTickets} />
-      <CouponCode isOpen={showCoupon} onClose={() => setShowCoupon(false)} coins={coins} hammerCount={hammerCount} magnetCount={magnetCount} blastCount={blastCount} spinTickets={spinTickets} onAddCoins={onAddCoins} onAddPowerUp={onAddPowerUp} onAddSpinTickets={onAddSpinTickets} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} />
+      <CouponCode isOpen={showCoupon} onClose={() => setShowCoupon(false)} coins={coins} hammerCount={hammerCount} magnetCount={magnetCount} blastCount={blastCount} spinTickets={spinTickets} onAddCoins={onAddCoins} onAddPowerUp={onAddPowerUp} onAddSpinTickets={onAddSpinTickets} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} saveGame={saveGame} saveAll={saveAll} setAutoSaveEnabled={setAutoSaveEnabled} />
 
       <RoomFight
         isOpen={showRoomFight}
@@ -1100,7 +1120,173 @@ export function PlayDashboard({
           onAddNotification('Room Game!', `Starting room game (bet: ${betAmount}). Abilities: ${abilities.join(', ')}`, 'system', '🏠')
         }}
         playerId={playerId}
+        playerName={playerName}
+        playerAvatar={playerAvatar}
+        playerLevel={playerLevel}
       />
+      <AnimatePresence>
+        {friendModeSelect && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] flex items-center justify-center px-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.85)' }}
+            onClick={() => setFriendModeSelect(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.8, y: 30 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.8 }}
+              className="w-full max-w-xs rounded-2xl overflow-hidden"
+              style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1px solid rgba(255,255,255,0.1)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header with friend info */}
+              <div className="p-4 pb-2 text-center">
+                <div className="w-14 h-14 rounded-full mx-auto flex items-center justify-center mb-2"
+                  style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', border: '2px solid rgba(255,255,255,0.3)' }}>
+                  <span className="text-2xl">{friendModeSelect.friendAvatar}</span>
+                </div>
+                <p className="text-sm font-bold" style={{ color: '#FFFFFF' }}>Play with {friendModeSelect.friendName}</p>
+                <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Select game mode</p>
+              </div>
+
+              {/* Mode buttons */}
+              <div className="px-4 pb-4 flex flex-col gap-2">
+                {/* Battle Mode */}
+                <button onClick={() => {
+                  setFriendModeSelect(null)
+                  if (isOnline && !isGameLimitReached) {
+                    setSearching({ active: true, type: 'battle', timeLimit: 120 })
+                  }
+                }}
+                  className="w-full py-3 rounded-xl text-sm font-bold flex items-center gap-3 transition-transform active:scale-95"
+                  style={{ background: 'linear-gradient(135deg, rgba(246,94,59,0.15), rgba(246,94,59,0.05))', border: '1.5px solid rgba(246,94,59,0.3)', color: '#F65E3B' }}>
+                  <span className="text-lg">⚔️</span>
+                  <div className="text-left">
+                    <p className="text-xs font-bold" style={{ color: '#F65E3B' }}>Battle Mode</p>
+                    <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>1v1 timed battle • 2 min</p>
+                  </div>
+                </button>
+
+                {/* Classic Mode */}
+                <button onClick={() => {
+                  setFriendModeSelect(null)
+                  if (!isGameLimitReached) {
+                    if (isOnline) {
+                      setSearching({ active: true, type: 'classic' })
+                    } else {
+                      onPlayClassic()
+                    }
+                  }
+                }}
+                  className="w-full py-3 rounded-xl text-sm font-bold flex items-center gap-3 transition-transform active:scale-95"
+                  style={{ background: 'linear-gradient(135deg, rgba(0,230,118,0.12), rgba(0,230,118,0.03))', border: '1.5px solid rgba(0,230,118,0.25)', color: '#00E676' }}>
+                  <span className="text-lg">🎮</span>
+                  <div className="text-left">
+                    <p className="text-xs font-bold" style={{ color: '#00E676' }}>Classic Mode</p>
+                    <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Relaxed play • No timer</p>
+                  </div>
+                </button>
+
+                {/* Coin Mode */}
+                <button onClick={() => {
+                  setFriendModeSelect(null)
+                  if (isOnline && !isGameLimitReached && coins >= 50) {
+                    setSearching({ active: true, type: 'coins', coinFee: 50 })
+                  }
+                }}
+                  className="w-full py-3 rounded-xl text-sm font-bold flex items-center gap-3 transition-transform active:scale-95"
+                  style={{ background: 'linear-gradient(135deg, rgba(237,194,46,0.12), rgba(237,194,46,0.03))', border: '1.5px solid rgba(237,194,46,0.25)', color: '#EDC22E' }}>
+                  <span className="text-lg">🪙</span>
+                  <div className="text-left">
+                    <p className="text-xs font-bold" style={{ color: '#EDC22E' }}>Coin Mode</p>
+                    <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Win 2x entry • ₹50</p>
+                  </div>
+                </button>
+
+                {/* Cancel */}
+                <button onClick={() => setFriendModeSelect(null)}
+                  className="w-full py-2 rounded-xl text-xs font-bold transition-transform active:scale-95"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' }}>
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Friend Request Popup on Dashboard */}
+      <AnimatePresence>
+        {showFriendRequestPopup && friendRequests.length > 0 && !showFriends && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[280] w-[90%] max-w-sm"
+          >
+            <div className="rounded-2xl overflow-hidden"
+              style={{ background: 'linear-gradient(135deg, #1a0533, #0d1b3e)', border: '1.5px solid rgba(237,194,46,0.3)', boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 20px rgba(237,194,46,0.1)' }}>
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 pt-3 pb-1">
+                <div className="flex items-center gap-2">
+                  <UserPlus className="w-4 h-4" style={{ color: '#EDC22E' }} />
+                  <p className="text-xs font-bold" style={{ color: '#EDC22E' }}>Friend Requests</p>
+                  <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(246,94,59,0.2)', color: '#F65E3B' }}>
+                    {friendRequests.length}
+                  </span>
+                </div>
+                <button onClick={() => setShowFriendRequestPopup(false)}
+                  className="w-6 h-6 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
+                  <X className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                </button>
+              </div>
+
+              {/* Request items */}
+              <div className="px-4 pb-3 max-h-40 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+                {friendRequests.slice(0, 3).map((req) => (
+                  <div key={req.fromPlayerId}
+                    className="flex items-center justify-between py-2"
+                    style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center"
+                        style={{ backgroundColor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}>
+                        <span className="text-sm">{req.avatar}</span>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold" style={{ color: '#FFFFFF' }}>{req.name}</p>
+                        <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Lv.{req.level}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => handleAcceptRequest(req.fromPlayerId)}
+                        className="px-2.5 py-1 rounded-lg text-[8px] font-bold transition-transform active:scale-95"
+                        style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF' }}>
+                        ✓ Accept
+                      </button>
+                      <button onClick={() => handleDeclineRequest(req.fromPlayerId)}
+                        className="px-2 py-1 rounded-lg text-[8px] font-bold transition-transform active:scale-95"
+                        style={{ backgroundColor: 'rgba(246,94,59,0.15)', border: '1px solid rgba(246,94,59,0.3)', color: '#F65E3B' }}>
+                        ✕ Cancel
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {friendRequests.length > 3 && (
+                  <button onClick={() => { setShowFriendRequestPopup(false); setShowFriends(true) }}
+                    className="w-full py-1.5 text-[8px] font-bold text-center"
+                    style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    +{friendRequests.length - 3} more requests →
+                  </button>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

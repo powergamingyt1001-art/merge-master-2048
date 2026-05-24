@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon, Copy, Percent, Package, TrendingUp, DollarSign, Send, Lock, UserCheck, Filter } from 'lucide-react'
+import { X, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon, Copy, Percent, Package, TrendingUp, DollarSign, Send, Lock, UserCheck, Filter, Save, Database } from 'lucide-react'
 import { getTotalUserCount, getOnlineUserCount, getTotalReferralsCount, checkAdminPassword, setAdminPassword as firebaseSetAdminPassword, authenticatePartner, getPartners as firebaseGetPartners, savePartner as firebaseSavePartner, deletePartner as firebaseDeletePartner, onOrdersUpdate, updateOrderStatus as firebaseUpdateOrderStatus, deliverOrderItems, broadcastCoupon as firebaseBroadcastCoupon, broadcastDailyTask as firebaseBroadcastDailyTask, onCouponBroadcast, type FirebaseStoreOrder, type PartnerData } from '@/lib/firebase-service'
 import { db } from '@/lib/firebase'
 import { ref, onValue } from 'firebase/database'
@@ -19,6 +19,9 @@ interface CouponCodeProps {
   onAddPowerUp: (pu: 'hammer' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x' | 'extraTime', count: number) => void
   onAddSpinTickets: (count: number) => void
   onAddNotification: (title: string, message: string, type: string, emoji: string) => void
+  saveGame?: () => void
+  saveAll?: () => void
+  setAutoSaveEnabled?: (enabled: boolean) => void
 }
 
 interface ClaimedCoupon {
@@ -125,7 +128,7 @@ function loadClaimedCoupons(): ClaimedCoupon[] {
 }
 
 function saveClaimedCoupons(coupons: ClaimedCoupon[]) {
-  localStorage.setItem('claimedCoupons', JSON.stringify(coupons))
+  try { localStorage.setItem('claimedCoupons', JSON.stringify(coupons)) } catch { /* storage full or unavailable */ }
 }
 
 function loadAdminCodesClaimed(): Record<string, boolean> {
@@ -139,7 +142,7 @@ function loadAdminCodesClaimed(): Record<string, boolean> {
 }
 
 function saveAdminCodesClaimed(codes: Record<string, boolean>) {
-  localStorage.setItem('claimedAdminCoupons', JSON.stringify(codes))
+  try { localStorage.setItem('claimedAdminCoupons', JSON.stringify(codes)) } catch { /* storage full or unavailable */ }
 }
 
 function loadMultiplierCount(): { '5x': number; '2.5x': number } {
@@ -153,7 +156,7 @@ function loadMultiplierCount(): { '5x': number; '2.5x': number } {
 }
 
 function saveMultiplierCount(counts: { '5x': number; '2.5x': number }) {
-  localStorage.setItem('multiplierCouponCount', JSON.stringify(counts))
+  try { localStorage.setItem('multiplierCouponCount', JSON.stringify(counts)) } catch { /* storage full or unavailable */ }
 }
 
 // Purchase history type matching Store.tsx
@@ -184,7 +187,7 @@ function loadPurchaseHistory(): PurchaseHistoryEntry[] {
 }
 
 function savePurchaseHistory(history: PurchaseHistoryEntry[]) {
-  localStorage.setItem('purchaseHistory', JSON.stringify(history))
+  try { localStorage.setItem('purchaseHistory', JSON.stringify(history)) } catch { /* storage full or unavailable */ }
 }
 
 // Store order type (matching Store.tsx)
@@ -215,7 +218,7 @@ function loadStoreOrders(): StoreOrder[] {
 }
 
 function saveStoreOrders(orders: StoreOrder[]) {
-  localStorage.setItem('mergeMaster2048_orders', JSON.stringify(orders))
+  try { localStorage.setItem('mergeMaster2048_orders', JSON.stringify(orders)) } catch { /* storage full or unavailable */ }
 }
 
 // Coin-ability pricing
@@ -246,7 +249,7 @@ function loadCoinAbilityPrices(): CoinAbilityPrice {
 }
 
 function saveCoinAbilityPrices(prices: CoinAbilityPrice) {
-  localStorage.setItem('adminCoinAbilityPrices', JSON.stringify(prices))
+  try { localStorage.setItem('adminCoinAbilityPrices', JSON.stringify(prices)) } catch { /* storage full or unavailable */ }
 }
 
 // Lock duration
@@ -261,7 +264,7 @@ function loadLockDuration(): number {
 }
 
 function saveLockDuration(weeks: number) {
-  localStorage.setItem('adminLockDuration', String(weeks))
+  try { localStorage.setItem('adminLockDuration', String(weeks)) } catch { /* storage full or unavailable */ }
 }
 
 // ============================================================
@@ -293,7 +296,7 @@ export function loadAdminDailyTasks(): AdminDailyTask[] {
 }
 
 export function saveAdminDailyTasks(tasks: AdminDailyTask[]): void {
-  localStorage.setItem(ADMIN_DAILY_TASKS_KEY, JSON.stringify(tasks))
+  try { localStorage.setItem(ADMIN_DAILY_TASKS_KEY, JSON.stringify(tasks)) } catch { /* storage full or unavailable */ }
 }
 
 // Custom admin-created coupon codes
@@ -321,7 +324,7 @@ function loadCustomCouponCodes(): CustomCouponCode[] {
 }
 
 function saveCustomCouponCodes(codes: CustomCouponCode[]) {
-  localStorage.setItem('adminCustomCouponCodes', JSON.stringify(codes))
+  try { localStorage.setItem('adminCustomCouponCodes', JSON.stringify(codes)) } catch { /* storage full or unavailable */ }
 }
 
 // Night code settings
@@ -343,7 +346,7 @@ function loadNightCodeSettings(): NightCodeSettings {
 }
 
 function saveNightCodeSettings(settings: NightCodeSettings) {
-  localStorage.setItem('adminNightCodeSettings', JSON.stringify(settings))
+  try { localStorage.setItem('adminNightCodeSettings', JSON.stringify(settings)) } catch { /* storage full or unavailable */ }
 }
 
 // Coin amount mapping for purchases
@@ -384,7 +387,7 @@ function loadCustomPrices(): CustomPriceOverride | null {
 }
 
 function saveCustomPrices(prices: CustomPriceOverride) {
-  localStorage.setItem('adminCustomPrices', JSON.stringify(prices))
+  try { localStorage.setItem('adminCustomPrices', JSON.stringify(prices)) } catch { /* storage full or unavailable */ }
 }
 
 // ============================================================
@@ -414,7 +417,7 @@ function loadPartnerLinks(): PartnerLink[] {
 }
 
 function savePartnerLinks(links: PartnerLink[]) {
-  localStorage.setItem(PARTNER_LINKS_KEY, JSON.stringify(links))
+  try { localStorage.setItem(PARTNER_LINKS_KEY, JSON.stringify(links)) } catch { /* storage full or unavailable */ }
 }
 
 // ============================================================
@@ -454,7 +457,7 @@ function loadTournamentPrizes(): TournamentPrizes {
 }
 
 function saveTournamentPrizes(prizes: TournamentPrizes) {
-  localStorage.setItem(TOURNAMENT_PRIZES_KEY, JSON.stringify(prizes))
+  try { localStorage.setItem(TOURNAMENT_PRIZES_KEY, JSON.stringify(prizes)) } catch { /* storage full or unavailable */ }
 }
 
 // ============================================================
@@ -482,7 +485,7 @@ function loadBannedUsers(): BannedUser[] {
 }
 
 function saveBannedUsers(users: BannedUser[]) {
-  localStorage.setItem(BANNED_USERS_KEY, JSON.stringify(users))
+  try { localStorage.setItem(BANNED_USERS_KEY, JSON.stringify(users)) } catch { /* storage full or unavailable */ }
 }
 
 function isUserBanned(playerId: string): boolean {
@@ -566,7 +569,7 @@ export function loadDiscountCoupons(): DiscountCoupon[] {
 }
 
 export function saveDiscountCoupons(coupons: DiscountCoupon[]) {
-  localStorage.setItem(DISCOUNT_COUPONS_KEY, JSON.stringify(coupons))
+  try { localStorage.setItem(DISCOUNT_COUPONS_KEY, JSON.stringify(coupons)) } catch { /* storage full or unavailable */ }
 }
 
 // Validate a discount coupon for a given user and cart total
@@ -668,6 +671,9 @@ export function CouponCode({
   onAddPowerUp,
   onAddSpinTickets,
   onAddNotification,
+  saveGame,
+  saveAll,
+  setAutoSaveEnabled,
 }: CouponCodeProps) {
   const [codeInput, setCodeInput] = useState('')
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
@@ -754,6 +760,53 @@ export function CouponCode({
   const [newDiscountOneTime, setNewDiscountOneTime] = useState(false)
   const [newDiscountTargetUsers, setNewDiscountTargetUsers] = useState('')
   const [newDiscountDescription, setNewDiscountDescription] = useState('')
+  const [newDiscountTarget, setNewDiscountTarget] = useState<'all' | 'old_members' | 'target_members' | 'welcome_bonus'>('all')
+  const [newDiscountPaused, setNewDiscountPaused] = useState(false)
+
+  // ============================================================
+  // SCRATCH REWARD SYSTEM
+  // ============================================================
+  interface ScratchReward {
+    id: string
+    rewardType: RewardType
+    rewardAmount: number
+    label: string
+    emoji: string
+    probability: number // 0-100
+    minPurchase: number // minimum purchase amount to trigger scratch
+    nextPurchaseOnly: boolean // can only be used on next purchase
+    active: boolean
+    createdAt: number
+  }
+
+  const SCRATCH_REWARDS_KEY = 'adminScratchRewards'
+  const DEFAULT_SCRATCH_REWARDS: ScratchReward[] = [
+    { id: 'sr_1', rewardType: 'coins', rewardAmount: 50, label: '50 Coins', emoji: '💰', probability: 30, minPurchase: 160, nextPurchaseOnly: true, active: true, createdAt: Date.now() },
+    { id: 'sr_2', rewardType: 'spins', rewardAmount: 2, label: '2 Spin Tickets', emoji: '🎫', probability: 25, minPurchase: 160, nextPurchaseOnly: true, active: true, createdAt: Date.now() },
+    { id: 'sr_3', rewardType: 'hammers', rewardAmount: 3, label: '3 Hammers', emoji: '🔨', probability: 20, minPurchase: 160, nextPurchaseOnly: true, active: true, createdAt: Date.now() },
+    { id: 'sr_4', rewardType: 'magnets', rewardAmount: 3, label: '3 Magnets', emoji: '🧲', probability: 15, minPurchase: 160, nextPurchaseOnly: true, active: true, createdAt: Date.now() },
+    { id: 'sr_5', rewardType: 'coins', rewardAmount: 200, label: '200 Coins (Rare!)', emoji: '💎', probability: 7, minPurchase: 160, nextPurchaseOnly: true, active: true, createdAt: Date.now() },
+    { id: 'sr_6', rewardType: 'bombs', rewardAmount: 5, label: '5 Bombs', emoji: '💣', probability: 3, minPurchase: 160, nextPurchaseOnly: true, active: true, createdAt: Date.now() },
+  ]
+
+  function loadScratchRewards(): ScratchReward[] {
+    if (typeof window === 'undefined') return DEFAULT_SCRATCH_REWARDS
+    try {
+      const data = localStorage.getItem(SCRATCH_REWARDS_KEY)
+      return data ? JSON.parse(data) : DEFAULT_SCRATCH_REWARDS
+    } catch { return DEFAULT_SCRATCH_REWARDS }
+  }
+
+  function saveScratchRewards(rewards: ScratchReward[]) {
+    try { localStorage.setItem(SCRATCH_REWARDS_KEY, JSON.stringify(rewards)) } catch { /* storage full */ }
+  }
+
+  const [scratchRewards, setScratchRewards] = useState<ScratchReward[]>(() => loadScratchRewards())
+  const [newScratchRewardType, setNewScratchRewardType] = useState<RewardType>('coins')
+  const [newScratchRewardAmount, setNewScratchRewardAmount] = useState(50)
+  const [newScratchProbability, setNewScratchProbability] = useState(20)
+  const [newScratchMinPurchase, setNewScratchMinPurchase] = useState(160)
+  const [newScratchNextOnly, setNewScratchNextOnly] = useState(true)
 
   // Admin daily tasks state
   const [adminDailyTasks, setAdminDailyTasks] = useState<AdminDailyTask[]>(() => loadAdminDailyTasks())
@@ -775,8 +828,15 @@ export function CouponCode({
   // Save All state
   const [saveAllMsg, setSaveAllMsg] = useState<string>('')
 
+  // Admin error state - NEVER crash, show friendly errors instead
+  const [adminError, setAdminError] = useState<string>('')
+  const showAdminError = useCallback((msg: string) => {
+    setAdminError(msg)
+    setTimeout(() => setAdminError(''), 5000)
+  }, [])
+
   // Coupon sub-tab state (Day/Night, Create, Discount)
-  const [couponSubTab, setCouponSubTab] = useState<'daynight' | 'create' | 'discount'>('daynight')
+  const [couponSubTab, setCouponSubTab] = useState<'daynight' | 'create' | 'discount' | 'scratch'>('daynight')
 
   // Welcome bonus config
   interface WelcomeBonusConfig {
@@ -857,7 +917,7 @@ export function CouponCode({
   const [dcRewardAmount, setDcRewardAmount] = useState(dayCodeSettings.rewardAmount)
 
   function saveDayCodeSettings(settings: DayCodeSettings) {
-    localStorage.setItem('adminDayCodeSettings', JSON.stringify(settings))
+    try { localStorage.setItem('adminDayCodeSettings', JSON.stringify(settings)) } catch { /* storage full or unavailable */ }
     setDayCodeSettings(settings)
   }
 
@@ -1368,9 +1428,10 @@ export function CouponCode({
       saveAdminDailyTasks(adminDailyTasks)
       saveTournamentPrizes(tournamentPrizes)
       saveBannedUsers(bannedUsers)
-      localStorage.setItem(WELCOME_BONUS_KEY, JSON.stringify(welcomeBonus))
+      saveScratchRewards(scratchRewards)
+      try { localStorage.setItem(WELCOME_BONUS_KEY, JSON.stringify(welcomeBonus)) } catch { /* ignore */ }
       // Save day code settings
-      localStorage.setItem('adminDayCodeSettings', JSON.stringify(dayCodeSettings))
+      try { localStorage.setItem('adminDayCodeSettings', JSON.stringify(dayCodeSettings)) } catch { /* ignore */ }
 
       // Broadcast key config to Firebase for real-time sync
       try {
@@ -1379,13 +1440,14 @@ export function CouponCode({
         }
       } catch { /* silent */ }
 
-      setSaveAllMsg('✓ Saved!')
+      setSaveAllMsg('✓ All Saved!')
       setTimeout(() => setSaveAllMsg(''), 2000)
-    } catch {
-      setSaveAllMsg('Error!')
-      setTimeout(() => setSaveAllMsg(''), 2000)
+    } catch (err) {
+      setSaveAllMsg('Error saving!')
+      showAdminError('Failed to save some settings. Please try again.')
+      setTimeout(() => setSaveAllMsg(''), 3000)
     }
-  }, [customPrices, customCodes, nightCodeSettings, coinAbilityPrices, lockDuration, discountCoupons, adminDailyTasks, tournamentPrizes, bannedUsers, welcomeBonus, dayCodeSettings])
+  }, [customPrices, customCodes, nightCodeSettings, coinAbilityPrices, lockDuration, discountCoupons, adminDailyTasks, tournamentPrizes, bannedUsers, welcomeBonus, dayCodeSettings, scratchRewards, showAdminError])
 
   // Listen for Firebase coin purchases when admin panel is open
   useEffect(() => {
@@ -1410,6 +1472,7 @@ export function CouponCode({
 
   // Approve a purchase (works with both purchaseHistory and storeOrders)
   const handleApprovePurchase = useCallback((entry: PurchaseHistoryEntry) => {
+    try {
     const purchaseDate = new Date(entry.date).getTime()
     const now = Date.now()
     const hoursSincePurchase = (now - purchaseDate) / (1000 * 60 * 60)
@@ -1496,217 +1559,261 @@ export function CouponCode({
       const bonusText = isDelayed ? ` (2x bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
       onAddNotification('Order Approved! ✅', `${entry.item} delivered! ${coinAmount} coins added${bonusText}`, 'reward', '📦')
     }
-  }, [purchaseHistory, storeOrders, onAddCoins, onAddPowerUp, onAddNotification, firebaseOrders])
+    } catch (err) {
+      showAdminError('Failed to approve purchase. Please try again.')
+    }
+  }, [purchaseHistory, storeOrders, onAddCoins, onAddPowerUp, onAddNotification, firebaseOrders, showAdminError])
 
   // Deny a purchase (works with both purchaseHistory and storeOrders)
   const handleDenyPurchase = useCallback((entry: PurchaseHistoryEntry) => {
-    const isStoreOrder = entry.id.startsWith('store_')
-    const storeOrderId = isStoreOrder ? entry.id.replace('store_', '') : null
+    try {
+      const isStoreOrder = entry.id.startsWith('store_')
+      const storeOrderId = isStoreOrder ? entry.id.replace('store_', '') : null
 
-    if (isStoreOrder && storeOrderId) {
-      const updatedOrders = storeOrders.map(o =>
-        o.id === storeOrderId ? { ...o, status: 'rejected' as const } : o
-      )
-      setStoreOrders(updatedOrders)
-      saveStoreOrders(updatedOrders)
-      // Update in Firebase
-      firebaseUpdateOrderStatus(storeOrderId, 'rejected').catch(() => {})
-    } else {
-      const updated = purchaseHistory.map(p =>
-        p.id === entry.id ? { ...p, status: 'Denied' as const } : p
-      )
-      setPurchaseHistory(updated)
-      savePurchaseHistory(updated)
+      if (isStoreOrder && storeOrderId) {
+        const updatedOrders = storeOrders.map(o =>
+          o.id === storeOrderId ? { ...o, status: 'rejected' as const } : o
+        )
+        setStoreOrders(updatedOrders)
+        saveStoreOrders(updatedOrders)
+        // Update in Firebase
+        firebaseUpdateOrderStatus(storeOrderId, 'rejected').catch(() => {})
+      } else {
+        const updated = purchaseHistory.map(p =>
+          p.id === entry.id ? { ...p, status: 'Denied' as const } : p
+        )
+        setPurchaseHistory(updated)
+        savePurchaseHistory(updated)
+      }
+    } catch (err) {
+      showAdminError('Failed to deny purchase. Please try again.')
     }
-  }, [purchaseHistory, storeOrders])
+  }, [purchaseHistory, storeOrders, showAdminError])
 
   // Disapprove (undo) a previously approved purchase - only within 24 hours
   const handleDisapprovePurchase = useCallback((entry: PurchaseHistoryEntry) => {
-    const hoursSince = (Date.now() - new Date(entry.date).getTime()) / (1000 * 60 * 60)
-    if (hoursSince > 24) return // Can only undo within 24 hours
+    try {
+      const hoursSince = (Date.now() - new Date(entry.date).getTime()) / (1000 * 60 * 60)
+      if (hoursSince > 24) return // Can only undo within 24 hours
 
-    const isStoreOrder = entry.id.startsWith('store_')
-    const storeOrderId = isStoreOrder ? entry.id.replace('store_', '') : null
+      const isStoreOrder = entry.id.startsWith('store_')
+      const storeOrderId = isStoreOrder ? entry.id.replace('store_', '') : null
 
-    if (isStoreOrder && storeOrderId) {
-      const updatedOrders = storeOrders.map(o =>
-        o.id === storeOrderId ? { ...o, status: 'rejected' as const } : o
-      )
-      setStoreOrders(updatedOrders)
-      saveStoreOrders(updatedOrders)
-      // Update in Firebase
-      firebaseUpdateOrderStatus(storeOrderId, 'rejected').catch(() => {})
-    } else {
-      const updated = purchaseHistory.map(p =>
-        p.id === entry.id ? { ...p, status: 'Denied' as const } : p
-      )
-      setPurchaseHistory(updated)
-      savePurchaseHistory(updated)
+      if (isStoreOrder && storeOrderId) {
+        const updatedOrders = storeOrders.map(o =>
+          o.id === storeOrderId ? { ...o, status: 'rejected' as const } : o
+        )
+        setStoreOrders(updatedOrders)
+        saveStoreOrders(updatedOrders)
+        // Update in Firebase
+        firebaseUpdateOrderStatus(storeOrderId, 'rejected').catch(() => {})
+      } else {
+        const updated = purchaseHistory.map(p =>
+          p.id === entry.id ? { ...p, status: 'Denied' as const } : p
+        )
+        setPurchaseHistory(updated)
+        savePurchaseHistory(updated)
+      }
+    } catch (err) {
+      showAdminError('Failed to disapprove purchase. Please try again.')
     }
-  }, [purchaseHistory, storeOrders])
+  }, [purchaseHistory, storeOrders, showAdminError])
 
-  // Create a custom coupon code
+  // Create a custom coupon code (updates state only - Save to persist)
   const handleCreateCoupon = useCallback(() => {
-    const code = newCodeInput.trim().toUpperCase()
-    if (!code) return
-    if (BUILT_IN_ADMIN_CODES[code]) return
-    if (customCodes.some(c => c.code === code)) return
+    try {
+      const code = newCodeInput.trim().toUpperCase()
+      if (!code) return
+      if (BUILT_IN_ADMIN_CODES[code]) { showAdminError('Cannot use built-in admin code names'); return }
+      if (customCodes.some(c => c.code === code)) { showAdminError('Code already exists'); return }
 
-    const emojiMap: Record<RewardType, string> = {
-      coins: '💰', spins: '🎫', magnets: '🧲', bombs: '💣', hammers: '🔨', '5x': '✨', '2.5x': '🌟',
+      const emojiMap: Record<RewardType, string> = {
+        coins: '💰', spins: '🎫', magnets: '🧲', bombs: '💣', hammers: '🔨', '5x': '✨', '2.5x': '🌟',
+      }
+      const labelMap: Record<RewardType, string> = {
+        coins: `${newCodeRewardAmount} Coins`,
+        spins: `${newCodeRewardAmount} Spin Tickets`,
+        magnets: `${newCodeRewardAmount} Magnets`,
+        bombs: `${newCodeRewardAmount} Bombs`,
+        hammers: `${newCodeRewardAmount} Hammers`,
+        '5x': `5x × ${newCodeRewardAmount} Uses`,
+        '2.5x': `2.5x × ${newCodeRewardAmount} Uses`,
+      }
+
+      const newCode: CustomCouponCode = {
+        code,
+        reward: newCodeRewardType,
+        rewardAmount: newCodeRewardAmount,
+        label: labelMap[newCodeRewardType],
+        emoji: emojiMap[newCodeRewardType],
+        maxUses: newCodeMaxUses,
+        currentUses: 0,
+        isDayCode: newCodeIsDay,
+        isNightCode: newCodeIsNight,
+        createdAt: Date.now(),
+      }
+
+      const updated = [...customCodes, newCode]
+      setCustomCodes(updated)
+      // Note: NOT auto-saving. User must click Save to persist.
+
+      // Broadcast to Firebase so all users receive the coupon in real-time
+      try {
+        firebaseBroadcastCoupon({
+          code,
+          reward: labelMap[newCodeRewardType],
+          rewardType: newCodeRewardType,
+          rewardAmount: newCodeRewardAmount,
+          emoji: emojiMap[newCodeRewardType],
+          maxUses: newCodeMaxUses,
+        }).catch(() => {})
+      } catch { /* Firebase broadcast failed, non-critical */ }
+
+      // Reset form
+      setNewCodeInput('')
+      setNewCodeRewardType('coins')
+      setNewCodeRewardAmount(300)
+      setNewCodeMaxUses(1)
+      setNewCodeIsDay(false)
+      setNewCodeIsNight(false)
+    } catch (err) {
+      showAdminError('Failed to create coupon code. Please try again.')
     }
-    const labelMap: Record<RewardType, string> = {
-      coins: `${newCodeRewardAmount} Coins`,
-      spins: `${newCodeRewardAmount} Spin Tickets`,
-      magnets: `${newCodeRewardAmount} Magnets`,
-      bombs: `${newCodeRewardAmount} Bombs`,
-      hammers: `${newCodeRewardAmount} Hammers`,
-      '5x': `5x × ${newCodeRewardAmount} Uses`,
-      '2.5x': `2.5x × ${newCodeRewardAmount} Uses`,
-    }
+  }, [newCodeInput, newCodeRewardType, newCodeRewardAmount, newCodeMaxUses, newCodeIsDay, newCodeIsNight, customCodes, showAdminError])
 
-    const newCode: CustomCouponCode = {
-      code,
-      reward: newCodeRewardType,
-      rewardAmount: newCodeRewardAmount,
-      label: labelMap[newCodeRewardType],
-      emoji: emojiMap[newCodeRewardType],
-      maxUses: newCodeMaxUses,
-      currentUses: 0,
-      isDayCode: newCodeIsDay,
-      isNightCode: newCodeIsNight,
-      createdAt: Date.now(),
-    }
-
-    const updated = [...customCodes, newCode]
-    setCustomCodes(updated)
-    saveCustomCouponCodes(updated)
-
-    // Broadcast to Firebase so all users receive the coupon in real-time
-    firebaseBroadcastCoupon({
-      code,
-      reward: labelMap[newCodeRewardType],
-      rewardType: newCodeRewardType,
-      rewardAmount: newCodeRewardAmount,
-      emoji: emojiMap[newCodeRewardType],
-      maxUses: newCodeMaxUses,
-    }).catch(() => {})
-
-    // Reset form
-    setNewCodeInput('')
-    setNewCodeRewardType('coins')
-    setNewCodeRewardAmount(300)
-    setNewCodeMaxUses(1)
-    setNewCodeIsDay(false)
-    setNewCodeIsNight(false)
-  }, [newCodeInput, newCodeRewardType, newCodeRewardAmount, newCodeMaxUses, newCodeIsDay, newCodeIsNight, customCodes])
-
-  // Delete a custom coupon code
+  // Delete a custom coupon code (updates state only - Save to persist)
   const handleDeleteCoupon = useCallback((code: string) => {
-    const updated = customCodes.filter(c => c.code !== code)
-    setCustomCodes(updated)
-    saveCustomCouponCodes(updated)
-  }, [customCodes])
+    try {
+      const updated = customCodes.filter(c => c.code !== code)
+      setCustomCodes(updated)
+      // Note: NOT auto-saving. User must click Save to persist.
+    } catch (err) {
+      showAdminError('Failed to delete coupon code.')
+    }
+  }, [customCodes, showAdminError])
 
   // Save night code settings
   const handleSaveNightCodeSettings = useCallback(() => {
-    const emojiMap: Record<RewardType, string> = {
-      coins: '💰', spins: '🎫', magnets: '🧲', bombs: '💣', hammers: '🔨', '5x': '✨', '2.5x': '🌟',
+    try {
+      const emojiMap: Record<RewardType, string> = {
+        coins: '💰', spins: '🎫', magnets: '🧲', bombs: '💣', hammers: '🔨', '5x': '✨', '2.5x': '🌟',
+      }
+      const labelMap: Record<RewardType, string> = {
+        coins: `${ncRewardAmount} Coins`,
+        spins: `${ncRewardAmount} Spin Tickets`,
+        magnets: `${ncRewardAmount} Magnets`,
+        bombs: `${ncRewardAmount} Bombs`,
+        hammers: `${ncRewardAmount} Hammers`,
+        '5x': `5x × ${ncRewardAmount} Uses`,
+        '2.5x': `2.5x × ${ncRewardAmount} Uses`,
+      }
+      const settings: NightCodeSettings = {
+        rewardType: ncRewardType,
+        rewardAmount: ncRewardAmount,
+        label: labelMap[ncRewardType],
+        emoji: emojiMap[ncRewardType],
+      }
+      setNightCodeSettings(settings)
+      saveNightCodeSettings(settings)
+    } catch (err) {
+      showAdminError('Failed to save night code settings.')
     }
-    const labelMap: Record<RewardType, string> = {
-      coins: `${ncRewardAmount} Coins`,
-      spins: `${ncRewardAmount} Spin Tickets`,
-      magnets: `${ncRewardAmount} Magnets`,
-      bombs: `${ncRewardAmount} Bombs`,
-      hammers: `${ncRewardAmount} Hammers`,
-      '5x': `5x × ${ncRewardAmount} Uses`,
-      '2.5x': `2.5x × ${ncRewardAmount} Uses`,
-    }
-    const settings: NightCodeSettings = {
-      rewardType: ncRewardType,
-      rewardAmount: ncRewardAmount,
-      label: labelMap[ncRewardType],
-      emoji: emojiMap[ncRewardType],
-    }
-    setNightCodeSettings(settings)
-    saveNightCodeSettings(settings)
-  }, [ncRewardType, ncRewardAmount])
+  }, [ncRewardType, ncRewardAmount, showAdminError])
 
   // Save day code settings (real-time update)
   const handleSaveDayCodeSettings = useCallback(() => {
-    const emojiMap: Record<RewardType, string> = {
-      coins: '💰', spins: '🎫', magnets: '🧲', bombs: '💣', hammers: '🔨', '5x': '✨', '2.5x': '🌟',
+    try {
+      const emojiMap: Record<RewardType, string> = {
+        coins: '💰', spins: '🎫', magnets: '🧲', bombs: '💣', hammers: '🔨', '5x': '✨', '2.5x': '🌟',
+      }
+      const labelMap: Record<RewardType, string> = {
+        coins: `${dcRewardAmount} Coins`,
+        spins: `${dcRewardAmount} Spin Tickets`,
+        magnets: `${dcRewardAmount} Magnets`,
+        bombs: `${dcRewardAmount} Bombs`,
+        hammers: `${dcRewardAmount} Hammers`,
+        '5x': `5x × ${dcRewardAmount} Uses`,
+        '2.5x': `2.5x × ${dcRewardAmount} Uses`,
+      }
+      const settings: DayCodeSettings = {
+        rewardType: dcRewardType,
+        rewardAmount: dcRewardAmount,
+        label: labelMap[dcRewardType],
+        emoji: emojiMap[dcRewardType],
+      }
+      saveDayCodeSettings(settings)
+    } catch (err) {
+      showAdminError('Failed to save day code settings.')
     }
-    const labelMap: Record<RewardType, string> = {
-      coins: `${dcRewardAmount} Coins`,
-      spins: `${dcRewardAmount} Spin Tickets`,
-      magnets: `${dcRewardAmount} Magnets`,
-      bombs: `${dcRewardAmount} Bombs`,
-      hammers: `${dcRewardAmount} Hammers`,
-      '5x': `5x × ${dcRewardAmount} Uses`,
-      '2.5x': `2.5x × ${dcRewardAmount} Uses`,
-    }
-    const settings: DayCodeSettings = {
-      rewardType: dcRewardType,
-      rewardAmount: dcRewardAmount,
-      label: labelMap[dcRewardType],
-      emoji: emojiMap[dcRewardType],
-    }
-    saveDayCodeSettings(settings)
-  }, [dcRewardType, dcRewardAmount])
+  }, [dcRewardType, dcRewardAmount, showAdminError])
 
-  // Create a discount coupon
+  // Create a discount coupon (updates state only - Save to persist)
   const handleCreateDiscountCoupon = useCallback(() => {
-    const code = newDiscountCode.trim().toUpperCase()
-    if (!code) return
-    if (discountCoupons.some(c => c.code.toUpperCase() === code)) return
+    try {
+      const code = newDiscountCode.trim().toUpperCase()
+      if (!code) { showAdminError('Please enter a coupon code'); return }
+      if (discountCoupons.some(c => c.code.toUpperCase() === code)) { showAdminError('Discount code already exists'); return }
 
-    const targetUsers = newDiscountTargetUsers
-      .split(',')
-      .map(s => s.trim())
-      .filter(s => s.length > 0)
+      const targetUsers = newDiscountTargetUsers
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s.length > 0)
 
-    const newCoupon: DiscountCoupon = {
-      code,
-      discountPercent: newDiscountPercent,
-      minPurchase: newDiscountMinPurchase,
-      maxUses: newDiscountMaxUses,
-      currentUses: 0,
-      oneTime: newDiscountOneTime,
-      targetUserIds: targetUsers,
-      createdAt: Date.now(),
-      createdBy: 'admin',
-      description: newDiscountDescription || `${newDiscountPercent}% off${newDiscountMinPurchase > 0 ? ` on ₹${newDiscountMinPurchase}+` : ''}`,
+      const newCoupon: DiscountCoupon = {
+        code,
+        discountPercent: newDiscountPercent,
+        minPurchase: newDiscountMinPurchase,
+        maxUses: newDiscountMaxUses,
+        currentUses: 0,
+        oneTime: newDiscountOneTime,
+        targetUserIds: targetUsers,
+        createdAt: Date.now(),
+        createdBy: 'admin',
+        description: newDiscountDescription || `${newDiscountPercent}% off${newDiscountMinPurchase > 0 ? ` on ₹${newDiscountMinPurchase}+` : ''}`,
+        disabled: newDiscountPaused,
+      }
+
+      const updated = [...discountCoupons, newCoupon]
+      setDiscountCoupons(updated)
+      // Note: NOT auto-saving. User must click Save to persist.
+
+      // Reset form
+      setNewDiscountCode('')
+      setNewDiscountPercent(10)
+      setNewDiscountMinPurchase(0)
+      setNewDiscountMaxUses(100)
+      setNewDiscountOneTime(false)
+      setNewDiscountTargetUsers('')
+      setNewDiscountDescription('')
+      setNewDiscountTarget('all')
+      setNewDiscountPaused(false)
+    } catch (err) {
+      showAdminError('Failed to create discount coupon. Please try again.')
     }
+  }, [newDiscountCode, newDiscountPercent, newDiscountMinPurchase, newDiscountMaxUses, newDiscountOneTime, newDiscountTargetUsers, newDiscountDescription, newDiscountTarget, newDiscountPaused, discountCoupons, showAdminError])
 
-    const updated = [...discountCoupons, newCoupon]
-    setDiscountCoupons(updated)
-    saveDiscountCoupons(updated)
-
-    // Reset form
-    setNewDiscountCode('')
-    setNewDiscountPercent(10)
-    setNewDiscountMinPurchase(0)
-    setNewDiscountMaxUses(100)
-    setNewDiscountOneTime(false)
-    setNewDiscountTargetUsers('')
-    setNewDiscountDescription('')
-  }, [newDiscountCode, newDiscountPercent, newDiscountMinPurchase, newDiscountMaxUses, newDiscountOneTime, newDiscountTargetUsers, newDiscountDescription, discountCoupons])
-
-  // Delete/disable a discount coupon
+  // Delete/disable a discount coupon (updates state only - Save to persist)
   const handleDeleteDiscountCoupon = useCallback((code: string) => {
-    const updated = discountCoupons.filter(c => c.code !== code)
-    setDiscountCoupons(updated)
-    saveDiscountCoupons(updated)
-  }, [discountCoupons])
+    try {
+      const updated = discountCoupons.filter(c => c.code !== code)
+      setDiscountCoupons(updated)
+      // Note: NOT auto-saving. User must click Save to persist.
+    } catch (err) {
+      showAdminError('Failed to delete discount coupon.')
+    }
+  }, [discountCoupons, showAdminError])
 
   const handleToggleDiscountCoupon = useCallback((code: string) => {
-    const updated = discountCoupons.map(c =>
-      c.code === code ? { ...c, disabled: !c.disabled } : c
-    )
-    setDiscountCoupons(updated)
-    saveDiscountCoupons(updated)
-  }, [discountCoupons])
+    try {
+      const updated = discountCoupons.map(c =>
+        c.code === code ? { ...c, disabled: !c.disabled } : c
+      )
+      setDiscountCoupons(updated)
+      // Note: NOT auto-saving. User must click Save to persist.
+    } catch (err) {
+      showAdminError('Failed to toggle discount coupon.')
+    }
+  }, [discountCoupons, showAdminError])
 
   const dayCode = generateDayCode()
   const nightCode = generateNightCode()
@@ -1795,62 +1902,78 @@ export function CouponCode({
 
   // Approve a store order (from Firebase)
   const handleApproveStoreOrder = useCallback((order: StoreOrder) => {
-    const updated = storeOrders.map(o =>
-      o.id === order.id ? { ...o, status: 'approved' as const } : o
-    )
-    setStoreOrders(updated)
-    saveStoreOrders(updated)
-    // Update in Firebase
-    firebaseUpdateOrderStatus(order.id, 'approved').catch(() => {})
-    // Deliver items via Firebase notification
-    const fbOrder = firebaseOrders.find(o => o.id === order.id)
-    if (fbOrder) {
-      const isInrAbility = order.item.includes('5x') || order.item.includes('2.5x')
-      const deliveryItems: { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number } = {}
-      if (isInrAbility) {
-        if (order.item.includes('5x')) {
-          deliveryItems.abilities = [{ type: 'multiplier5x', count: order.quantity }]
+    try {
+      const updated = storeOrders.map(o =>
+        o.id === order.id ? { ...o, status: 'approved' as const } : o
+      )
+      setStoreOrders(updated)
+      saveStoreOrders(updated)
+      // Update in Firebase
+      firebaseUpdateOrderStatus(order.id, 'approved').catch(() => {})
+      // Deliver items via Firebase notification
+      const fbOrder = firebaseOrders.find(o => o.id === order.id)
+      if (fbOrder) {
+        const isInrAbility = order.item.includes('5x') || order.item.includes('2.5x')
+        const deliveryItems: { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number } = {}
+        if (isInrAbility) {
+          if (order.item.includes('5x')) {
+            deliveryItems.abilities = [{ type: 'multiplier5x', count: order.quantity }]
+          } else {
+            deliveryItems.abilities = [{ type: 'multiplier2_5x', count: order.quantity }]
+          }
         } else {
-          deliveryItems.abilities = [{ type: 'multiplier2_5x', count: order.quantity }]
+          deliveryItems.coins = order.quantity
         }
-      } else {
-        deliveryItems.coins = order.quantity
+        deliverOrderItems(order.id, fbOrder.playerId, deliveryItems).catch(() => {})
       }
-      deliverOrderItems(order.id, fbOrder.playerId, deliveryItems).catch(() => {})
+    } catch (err) {
+      showAdminError('Failed to approve store order.')
     }
-  }, [storeOrders, firebaseOrders])
+  }, [storeOrders, firebaseOrders, showAdminError])
 
   // Deny a store order (from Firebase)
   const handleDenyStoreOrder = useCallback((order: StoreOrder) => {
-    const updated = storeOrders.map(o =>
-      o.id === order.id ? { ...o, status: 'rejected' as const } : o
-    )
-    setStoreOrders(updated)
-    saveStoreOrders(updated)
-    // Update in Firebase
-    firebaseUpdateOrderStatus(order.id, 'rejected').catch(() => {})
-  }, [storeOrders])
+    try {
+      const updated = storeOrders.map(o =>
+        o.id === order.id ? { ...o, status: 'rejected' as const } : o
+      )
+      setStoreOrders(updated)
+      saveStoreOrders(updated)
+      // Update in Firebase
+      firebaseUpdateOrderStatus(order.id, 'rejected').catch(() => {})
+    } catch (err) {
+      showAdminError('Failed to deny store order.')
+    }
+  }, [storeOrders, showAdminError])
 
   // Delete selected history items
   const handleDeleteSelectedHistory = useCallback(() => {
-    // Filter out selected items from both sources
-    const updatedPurchaseHistory = purchaseHistory.filter(p => !selectedHistoryIds.has(p.id))
-    const updatedStoreOrders = storeOrders.filter(o => !selectedHistoryIds.has(`store_${o.id}`))
-    setPurchaseHistory(updatedPurchaseHistory)
-    savePurchaseHistory(updatedPurchaseHistory)
-    setStoreOrders(updatedStoreOrders)
-    saveStoreOrders(updatedStoreOrders)
-    setSelectedHistoryIds(new Set())
-  }, [purchaseHistory, storeOrders, selectedHistoryIds])
+    try {
+      // Filter out selected items from both sources
+      const updatedPurchaseHistory = purchaseHistory.filter(p => !selectedHistoryIds.has(p.id))
+      const updatedStoreOrders = storeOrders.filter(o => !selectedHistoryIds.has(`store_${o.id}`))
+      setPurchaseHistory(updatedPurchaseHistory)
+      savePurchaseHistory(updatedPurchaseHistory)
+      setStoreOrders(updatedStoreOrders)
+      saveStoreOrders(updatedStoreOrders)
+      setSelectedHistoryIds(new Set())
+    } catch (err) {
+      showAdminError('Failed to delete selected history.')
+    }
+  }, [purchaseHistory, storeOrders, selectedHistoryIds, showAdminError])
 
   // Delete all history
   const handleDeleteAllHistory = useCallback(() => {
-    setPurchaseHistory([])
-    savePurchaseHistory([])
-    setStoreOrders([])
-    saveStoreOrders([])
-    setSelectedHistoryIds(new Set())
-  }, [])
+    try {
+      setPurchaseHistory([])
+      savePurchaseHistory([])
+      setStoreOrders([])
+      saveStoreOrders([])
+      setSelectedHistoryIds(new Set())
+    } catch (err) {
+      showAdminError('Failed to delete all history.')
+    }
+  }, [showAdminError])
 
   // Toggle history item selection
   const toggleHistorySelection = useCallback((id: string) => {
@@ -2173,6 +2296,18 @@ export function CouponCode({
               ))}
             </div>
 
+            {/* Admin Error Banner - shows friendly error messages instead of crashes */}
+            {adminError && (
+              <div className="mx-3 mt-1 px-3 py-2 rounded-lg flex items-center gap-2"
+                style={{ backgroundColor: 'rgba(246,94,59,0.12)', border: '1px solid rgba(246,94,59,0.3)' }}>
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" style={{ color: '#F65E3B' }} />
+                <p className="text-[8px] font-semibold" style={{ color: '#F65E3B' }}>{adminError}</p>
+                <button onClick={() => setAdminError('')} className="ml-auto shrink-0">
+                  <X className="w-3 h-3" style={{ color: 'rgba(246,94,59,0.6)' }} />
+                </button>
+              </div>
+            )}
+
             {/* Scrollable Content Area - Full Screen */}
             <div className="flex-1 overflow-y-auto p-3">
                     {/* ====== DASHBOARD TAB ====== */}
@@ -2249,6 +2384,54 @@ export function CouponCode({
                             <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Revenue after discount</p>
                           </div>
                         </div>
+
+                        {/* Save Controls */}
+                        {(saveGame || saveAll || setAutoSaveEnabled) && (
+                          <div className="p-3 rounded-xl"
+                            style={{ backgroundColor: 'rgba(0,188,212,0.08)', border: '1px solid rgba(0,188,212,0.2)' }}>
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <Database className="w-3.5 h-3.5" style={{ color: '#00BCD4' }} />
+                              <p className="text-[9px] font-bold" style={{ color: '#00BCD4' }}>Save Controls</p>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                              <div className="flex gap-2">
+                                {saveGame && (
+                                  <button onClick={saveGame}
+                                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[8px] font-bold transition-transform active:scale-95"
+                                    style={{ backgroundColor: 'rgba(0,188,212,0.15)', border: '1px solid rgba(0,188,212,0.3)', color: '#00BCD4' }}>
+                                    <Save className="w-3 h-3" />
+                                    Quick Save
+                                  </button>
+                                )}
+                                {saveAll && (
+                                  <button onClick={saveAll}
+                                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[8px] font-bold transition-transform active:scale-95"
+                                    style={{ backgroundColor: 'rgba(237,194,46,0.15)', border: '1px solid rgba(237,194,46,0.3)', color: '#EDC22E' }}>
+                                    <Database className="w-3 h-3" />
+                                    Force Save All
+                                  </button>
+                                )}
+                              </div>
+                              {setAutoSaveEnabled && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Auto-Save</span>
+                                  <div className="flex gap-1">
+                                    <button onClick={() => setAutoSaveEnabled(true)}
+                                      className="px-2 py-1 rounded text-[7px] font-bold"
+                                      style={{ backgroundColor: 'rgba(0,230,118,0.15)', border: '1px solid rgba(0,230,118,0.3)', color: '#00E676' }}>
+                                      ON
+                                    </button>
+                                    <button onClick={() => setAutoSaveEnabled(false)}
+                                      className="px-2 py-1 rounded text-[7px] font-bold"
+                                      style={{ backgroundColor: 'rgba(246,94,59,0.15)', border: '1px solid rgba(246,94,59,0.3)', color: '#F65E3B' }}>
+                                      OFF
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
                         {/* Recent Pending Orders */}
                         {pendingOrderCount > 0 && (
@@ -2527,11 +2710,12 @@ export function CouponCode({
                         <div className="flex rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
                           {[
                             { key: 'daynight' as const, label: '☀️ Day/Night', color: '#EDC22E' },
-                            { key: 'create' as const, label: '✨ Create Code', color: '#00E676' },
+                            { key: 'create' as const, label: '✨ Create', color: '#00E676' },
                             { key: 'discount' as const, label: '💸 Discount', color: '#F65E3B' },
+                            { key: 'scratch' as const, label: '🎰 Scratch', color: '#E040FB' },
                           ].map(tab => (
                             <button key={tab.key} onClick={() => setCouponSubTab(tab.key)}
-                              className="flex-1 py-2 text-[9px] font-bold transition-all"
+                              className="flex-1 py-2 text-[8px] font-bold transition-all"
                               style={{ backgroundColor: couponSubTab === tab.key ? `${tab.color}20` : 'rgba(255,255,255,0.03)', color: couponSubTab === tab.key ? tab.color : 'rgba(255,255,255,0.4)', borderBottom: couponSubTab === tab.key ? `2px solid ${tab.color}` : '2px solid transparent' }}>
                               {tab.label}
                             </button>
@@ -2852,9 +3036,17 @@ export function CouponCode({
                         {/* Custom codes list */}
                         {customCodes.length > 0 && (
                           <div>
-                            <p className="text-[9px] font-bold mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                            Custom Codes ({customCodes.length})
-                            </p>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <p className="text-[9px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                              Custom Codes ({customCodes.length})
+                              </p>
+                              <button
+                                onClick={() => { try { setCustomCodes([]) } catch (err) { showAdminError('Failed to clear codes.') } }}
+                                className="text-[7px] font-bold px-2 py-0.5 rounded-lg"
+                                style={{ backgroundColor: 'rgba(246,94,59,0.1)', color: '#F65E3B' }}>
+                                Delete All
+                              </button>
+                            </div>
                             <div className="space-y-1 max-h-48 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
                             {customCodes.map(code => (
                               <div key={code.code} className="flex items-center justify-between px-2.5 py-2 rounded-lg"
@@ -3084,6 +3276,29 @@ export function CouponCode({
                               />
                               <span className="text-[7px] font-semibold" style={{ color: '#FF6D00' }}>One-time use per user</span>
                             </label>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-14" style={{ color: 'rgba(255,255,255,0.4)' }}>Target:</p>
+                              <select
+                                value={newDiscountTarget}
+                                onChange={(e) => setNewDiscountTarget(e.target.value as 'all' | 'old_members' | 'target_members' | 'welcome_bonus')}
+                                className="flex-1 px-2 py-1 rounded-lg text-[7px] font-semibold outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              >
+                                <option value="all">🌍 All Users</option>
+                                <option value="old_members">👤 Old Members</option>
+                                <option value="target_members">🎯 Target Members</option>
+                                <option value="welcome_bonus">🎁 Welcome Bonus Users</option>
+                              </select>
+                            </div>
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={newDiscountPaused}
+                                onChange={(e) => setNewDiscountPaused(e.target.checked)}
+                                className="w-3 h-3 accent-yellow-500"
+                              />
+                              <span className="text-[7px] font-semibold" style={{ color: '#EDC22E' }}>Start Paused</span>
+                            </label>
                             <button
                               onClick={handleCreateDiscountCoupon}
                               disabled={!newDiscountCode.trim()}
@@ -3182,6 +3397,150 @@ export function CouponCode({
                           </div>
                         )} {/* end discount sub-tab */}
 
+                        {/* ====== SCRATCH REWARD SUB-TAB ====== */}
+                        {couponSubTab === 'scratch' && (
+                          <div className="space-y-3">
+                            <div className="p-2.5 rounded-lg"
+                              style={{ backgroundColor: 'rgba(224,64,251,0.06)', border: '1px solid rgba(224,64,251,0.15)' }}>
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <Sparkles className="w-3 h-3" style={{ color: '#E040FB' }} />
+                                <p className="text-[9px] font-bold" style={{ color: '#E040FB' }}>Scratch Rewards</p>
+                                <span className="text-[7px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(224,64,251,0.12)', color: '#E040FB' }}>
+                                  ₹160+ purchase triggers
+                                </span>
+                              </div>
+                              <p className="text-[7px] mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                When a user makes a ₹160+ purchase, they get a scratch card with these rewards.
+                              </p>
+
+                              {/* Add New Scratch Reward */}
+                              <div className="space-y-1.5 mb-3 p-2 rounded-lg"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(224,64,251,0.2)' }}>
+                                <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Add Scratch Reward</p>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Type:</p>
+                                  <select value={newScratchRewardType} onChange={(e) => setNewScratchRewardType(e.target.value as RewardType)}
+                                    className="flex-1 px-2 py-1 rounded-lg text-[7px] font-semibold outline-none"
+                                    style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}>
+                                    <option value="coins">💰 Coins</option>
+                                    <option value="spins">🎫 Spins</option>
+                                    <option value="hammers">🔨 Hammers</option>
+                                    <option value="magnets">🧲 Magnets</option>
+                                    <option value="bombs">💣 Bombs</option>
+                                    <option value="5x">✨ 5x</option>
+                                    <option value="2.5x">🌟 2.5x</option>
+                                  </select>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Amount:</p>
+                                  <input type="number" value={newScratchRewardAmount} onChange={(e) => setNewScratchRewardAmount(parseInt(e.target.value) || 1)} min={1}
+                                    className="flex-1 px-2 py-1 rounded-lg text-[7px] font-semibold outline-none"
+                                    style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }} />
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Chance%:</p>
+                                  <input type="number" value={newScratchProbability} onChange={(e) => setNewScratchProbability(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))} min={1} max={100}
+                                    className="flex-1 px-2 py-1 rounded-lg text-[7px] font-semibold outline-none"
+                                    style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#E040FB' }} />
+                                  <span className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>%</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Min ₹:</p>
+                                  <input type="number" value={newScratchMinPurchase} onChange={(e) => setNewScratchMinPurchase(parseInt(e.target.value) || 0)} min={0}
+                                    className="flex-1 px-2 py-1 rounded-lg text-[7px] font-semibold outline-none"
+                                    style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }} />
+                                </div>
+                                <label className="flex items-center gap-1.5 cursor-pointer">
+                                  <input type="checkbox" checked={newScratchNextOnly} onChange={(e) => setNewScratchNextOnly(e.target.checked)} className="w-3 h-3 accent-purple-500" />
+                                  <span className="text-[7px] font-semibold" style={{ color: '#E040FB' }}>Next purchase only</span>
+                                </label>
+                                <button
+                                  onClick={() => {
+                                    try {
+                                      const emojiMap: Record<RewardType, string> = { coins: '💰', spins: '🎫', magnets: '🧲', bombs: '💣', hammers: '🔨', '5x': '✨', '2.5x': '🌟' }
+                                      const labelMap: Record<RewardType, (n: number) => string> = {
+                                        coins: (n) => `${n} Coins`, spins: (n) => `${n} Spins`, magnets: (n) => `${n} Magnets`,
+                                        bombs: (n) => `${n} Bombs`, hammers: (n) => `${n} Hammers`, '5x': (n) => `5x × ${n}`, '2.5x': (n) => `2.5x × ${n}`,
+                                      }
+                                      const newReward: ScratchReward = {
+                                        id: `sr_${Date.now()}`,
+                                        rewardType: newScratchRewardType,
+                                        rewardAmount: newScratchRewardAmount,
+                                        label: labelMap[newScratchRewardType](newScratchRewardAmount),
+                                        emoji: emojiMap[newScratchRewardType],
+                                        probability: newScratchProbability,
+                                        minPurchase: newScratchMinPurchase,
+                                        nextPurchaseOnly: newScratchNextOnly,
+                                        active: true,
+                                        createdAt: Date.now(),
+                                      }
+                                      setScratchRewards(prev => [...prev, newReward])
+                                      // Reset
+                                      setNewScratchRewardType('coins')
+                                      setNewScratchRewardAmount(50)
+                                      setNewScratchProbability(20)
+                                      setNewScratchMinPurchase(160)
+                                      setNewScratchNextOnly(true)
+                                    } catch (err) { showAdminError('Failed to add scratch reward.') }
+                                  }}
+                                  className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
+                                  style={{ background: 'linear-gradient(135deg, #E040FB, #7C4DFF)', color: '#FFFFFF' }}>
+                                  🎰 ADD REWARD
+                                </button>
+                              </div>
+
+                              {/* Scratch Rewards List */}
+                              {scratchRewards.length > 0 ? (
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <p className="text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.5)' }}>Rewards ({scratchRewards.length})</p>
+                                    <button
+                                      onClick={() => { try { setScratchRewards([]) } catch (err) { showAdminError('Failed to clear.') } }}
+                                      className="text-[7px] font-bold px-2 py-0.5 rounded-lg"
+                                      style={{ backgroundColor: 'rgba(246,94,59,0.1)', color: '#F65E3B' }}>
+                                      Delete All
+                                    </button>
+                                  </div>
+                                  {scratchRewards.map(sr => (
+                                    <div key={sr.id} className="flex items-center justify-between px-2 py-1.5 rounded-lg"
+                                      style={{ backgroundColor: sr.active ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.01)', border: `1px solid ${sr.active ? 'rgba(224,64,251,0.15)' : 'rgba(255,255,255,0.04)'}`, opacity: sr.active ? 1 : 0.5 }}>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm">{sr.emoji}</span>
+                                        <div>
+                                          <p className="text-[8px] font-bold" style={{ color: '#FFFFFF' }}>{sr.label}</p>
+                                          <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                            {sr.probability}% chance • Min ₹{sr.minPurchase}{sr.nextPurchaseOnly ? ' • Next purchase' : ''}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        <button onClick={() => {
+                                          try { setScratchRewards(prev => prev.map(r => r.id === sr.id ? { ...r, active: !r.active } : r)) } catch (err) { showAdminError('Failed to toggle.') }
+                                        }} className="w-5 h-5 rounded flex items-center justify-center" style={{ backgroundColor: sr.active ? 'rgba(237,194,46,0.1)' : 'rgba(0,230,118,0.1)', border: `1px solid ${sr.active ? 'rgba(237,194,46,0.2)' : 'rgba(0,230,118,0.2)'}` }} title={sr.active ? 'Pause' : 'Resume'}>
+                                          <span className="text-[7px]">{sr.active ? '⏸️' : '▶️'}</span>
+                                        </button>
+                                        <button onClick={() => {
+                                          try { setScratchRewards(prev => prev.filter(r => r.id !== sr.id)) } catch (err) { showAdminError('Failed to delete.') }
+                                        }} className="w-5 h-5 rounded flex items-center justify-center" style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)' }} title="Delete">
+                                          <Trash2 className="w-2.5 h-2.5" style={{ color: '#F65E3B' }} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <p className="text-[7px] text-center mt-1" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                                    Click "Save All" to persist scratch reward changes
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="text-center py-3">
+                                  <span className="text-xl block mb-1">🎰</span>
+                                  <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No scratch rewards configured</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Welcome Bonus Section (below all coupon tabs) */}
                         <div className="p-3 rounded-xl mt-3"
                           style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '2px solid rgba(237,194,46,0.25)' }}>
@@ -3260,9 +3619,7 @@ export function CouponCode({
                                 <span className="text-[7px] font-semibold w-16" style={{ color: 'rgba(255,255,255,0.5)' }}>{key}</span>
                                 <input type="number" value={val} min={0}
                                   onChange={(e) => {
-                                    const updated = { ...coinAbilityPrices, [key]: parseInt(e.target.value) || 0 }
-                                    setCoinAbilityPrices(updated)
-                                    saveCoinAbilityPrices(updated)
+                                    setCoinAbilityPrices(prev => ({ ...prev, [key]: parseInt(e.target.value) || 0 }))
                                   }}
                                   className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
                                   style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }} />
@@ -3294,7 +3651,7 @@ export function CouponCode({
                                     updated[idx] = { ...updated[idx], price: newPrice }
                                     const newPrices: CustomPriceOverride = { coinPackages: customPrices?.coinPackages || DEFAULT_COIN_PACKAGES, inrAbilityPackages: updated }
                                     setCustomPrices(newPrices)
-                                    saveCustomPrices(newPrices)
+                                    // Note: NOT auto-saving. User must click Save to persist.
                                   }}
                                   className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
                                   style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }} />
@@ -3332,7 +3689,7 @@ export function CouponCode({
                                       inrAbilityPackages: customPrices?.inrAbilityPackages || DEFAULT_INR_ABILITY_PACKAGES,
                                     }
                                     setCustomPrices(newPrices)
-                                    saveCustomPrices(newPrices)
+                                    // Note: NOT auto-saving. User must click Save to persist.
                                   }}
                                   min={1}
                                   className="w-14 px-1.5 py-1 rounded-lg text-[8px] font-semibold outline-none"
@@ -3356,7 +3713,7 @@ export function CouponCode({
                                       inrAbilityPackages: customPrices?.inrAbilityPackages || DEFAULT_INR_ABILITY_PACKAGES,
                                     }
                                     setCustomPrices(newPrices)
-                                    saveCustomPrices(newPrices)
+                                    // Note: NOT auto-saving. User must click Save to persist.
                                   }}
                                   min={1}
                                   className="w-14 px-1.5 py-1 rounded-lg text-[8px] font-semibold outline-none"
@@ -3375,10 +3732,14 @@ export function CouponCode({
                         {/* Reset Prices Button */}
                         <button
                           onClick={() => {
-                            setCustomPrices(null)
-                            localStorage.removeItem('adminCustomPrices')
-                            setCoinAbilityPrices(DEFAULT_COIN_ABILITY_PRICES)
-                            saveCoinAbilityPrices(DEFAULT_COIN_ABILITY_PRICES)
+                            try {
+                              setCustomPrices(null)
+                              localStorage.removeItem('adminCustomPrices')
+                              setCoinAbilityPrices(DEFAULT_COIN_ABILITY_PRICES)
+                              saveCoinAbilityPrices(DEFAULT_COIN_ABILITY_PRICES)
+                            } catch (err) {
+                              showAdminError('Failed to reset prices.')
+                            }
                           }}
                           className="w-full py-1.5 rounded-lg text-[9px] font-bold flex items-center justify-center gap-1.5 transition-transform active:scale-95"
                           style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)', color: '#F65E3B' }}
@@ -3600,26 +3961,44 @@ export function CouponCode({
                                 <option value="coupon">🎟️ Coupon Manager</option>
                               </select>
                             </div>
+                            {/* Partner Password (for payment approval access) */}
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-[7px] font-semibold w-12" style={{ color: 'rgba(255,255,255,0.4)' }}>Password:</p>
+                              <input
+                                type="text"
+                                value={newPartnerPassword}
+                                onChange={(e) => setNewPartnerPassword(e.target.value)}
+                                placeholder="Set password for partner access..."
+                                className="flex-1 px-2 py-1 rounded-lg text-[8px] font-semibold outline-none"
+                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                              />
+                            </div>
                             <button
                               onClick={() => {
-                                const prefix = partnerNewRole === 'payment' ? 'PAY' : partnerNewRole === 'skill' ? 'SKILL' : 'COUPON'
-                                const token = `${prefix}_${Math.random().toString(36).substring(2, 10).toUpperCase()}`
-                                const name = partnerNewName.trim() || `${partnerNewRole} Partner`
-                                const newLink: PartnerLink = {
-                                  id: `pl_${Date.now()}`,
-                                  role: partnerNewRole,
-                                  token,
-                                  name,
-                                  createdAt: Date.now(),
-                                  lastUsedAt: null,
-                                  active: true,
+                                try {
+                                  const prefix = partnerNewRole === 'payment' ? 'PAY' : partnerNewRole === 'skill' ? 'SKILL' : 'COUPON'
+                                  const token = `${prefix}_${Math.random().toString(36).substring(2, 10).toUpperCase()}`
+                                  const name = partnerNewName.trim() || `${partnerNewRole} Partner`
+                                  const password = newPartnerPassword.trim() || token // Use token as default password if none set
+                                  const newLink: PartnerLink = {
+                                    id: `pl_${Date.now()}`,
+                                    role: partnerNewRole,
+                                    token: password, // Store the password as the token for auth
+                                    name,
+                                    createdAt: Date.now(),
+                                    lastUsedAt: null,
+                                    active: true,
+                                  }
+                                  const updated = [...partnerLinks, newLink]
+                                  setPartnerLinks(updated)
+                                  // Note: NOT auto-saving. User must click Save to persist.
+                                  const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : ''
+                                  setGeneratedLink(`${baseUrl}?partner=${password}`)
+                                  setPartnerNewName('')
+                                  setNewPartnerPassword('')
+                                } catch (err) {
+                                  showAdminError('Failed to generate partner link.')
                                 }
-                                const updated = [...partnerLinks, newLink]
-                                setPartnerLinks(updated)
-                                savePartnerLinks(updated)
-                                const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : ''
-                                setGeneratedLink(`${baseUrl}?partner=${token}`)
-                                setPartnerNewName('')
                               }}
                               className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
                               style={{ background: 'linear-gradient(135deg, #7C4DFF, #536DFE)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(124,77,255,0.3)' }}
@@ -3635,7 +4014,7 @@ export function CouponCode({
                                   </p>
                                   <button
                                     onClick={() => {
-                                      navigator.clipboard.writeText(generatedLink)
+                                      try { navigator.clipboard.writeText(generatedLink) } catch (err) { showAdminError('Failed to copy.') }
                                     }}
                                     className="shrink-0 text-[7px] font-bold px-2 py-1 rounded transition-transform active:scale-95"
                                     style={{ backgroundColor: 'rgba(237,194,46,0.1)', color: '#EDC22E' }}
@@ -3689,9 +4068,11 @@ export function CouponCode({
                                       </span>
                                       <button
                                         onClick={() => {
-                                          const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : ''
-                                          const url = `${baseUrl}?partner=${link.token}`
-                                          navigator.clipboard.writeText(url)
+                                          try {
+                                            const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : ''
+                                            const url = `${baseUrl}?partner=${link.token}`
+                                            navigator.clipboard.writeText(url)
+                                          } catch (err) { showAdminError('Failed to copy link.') }
                                         }}
                                         className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-95"
                                         style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '1px solid rgba(237,194,46,0.2)' }}
@@ -3701,11 +4082,13 @@ export function CouponCode({
                                       </button>
                                       <button
                                         onClick={() => {
-                                          const updated = partnerLinks.map(l =>
-                                            l.id === link.id ? { ...l, active: !l.active } : l
-                                          )
-                                          setPartnerLinks(updated)
-                                          savePartnerLinks(updated)
+                                          try {
+                                            const updated = partnerLinks.map(l =>
+                                              l.id === link.id ? { ...l, active: !l.active } : l
+                                            )
+                                            setPartnerLinks(updated)
+                                            // Note: NOT auto-saving. User must click Save to persist.
+                                          } catch (err) { showAdminError('Failed to toggle partner.') }
                                         }}
                                         className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-95"
                                         style={{ backgroundColor: link.active ? 'rgba(246,94,59,0.1)' : 'rgba(0,230,118,0.1)', border: `1px solid ${link.active ? 'rgba(246,94,59,0.2)' : 'rgba(0,230,118,0.2)'}` }}
@@ -3715,9 +4098,11 @@ export function CouponCode({
                                       </button>
                                       <button
                                         onClick={() => {
-                                          const updated = partnerLinks.filter(l => l.id !== link.id)
-                                          setPartnerLinks(updated)
-                                          savePartnerLinks(updated)
+                                          try {
+                                            const updated = partnerLinks.filter(l => l.id !== link.id)
+                                            setPartnerLinks(updated)
+                                            // Note: NOT auto-saving. User must click Save to persist.
+                                          } catch (err) { showAdminError('Failed to revoke partner link.') }
                                         }}
                                         className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-95"
                                         style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.2)' }}
@@ -3783,13 +4168,17 @@ export function CouponCode({
                             {/* Ban button */}
                             <button
                               onClick={() => {
-                                const id = banPlayerId.trim()
-                                if (!id) return
-                                banUser(id, banReason || 'No reason specified', banDuration)
-                                setBannedUsers(loadBannedUsers())
-                                setBanPlayerId('')
-                                setBanReason('')
-                                setBanDuration('weekly')
+                                try {
+                                  const id = banPlayerId.trim()
+                                  if (!id) return
+                                  banUser(id, banReason || 'No reason specified', banDuration)
+                                  setBannedUsers(loadBannedUsers())
+                                  setBanPlayerId('')
+                                  setBanReason('')
+                                  setBanDuration('weekly')
+                                } catch (err) {
+                                  showAdminError('Failed to ban user.')
+                                }
                               }}
                               disabled={!banPlayerId.trim()}
                               className="w-full py-2 rounded-lg text-[10px] font-bold transition-transform active:scale-95 disabled:opacity-30"
@@ -3855,8 +4244,10 @@ export function CouponCode({
                                       </div>
                                       <button
                                         onClick={() => {
-                                          unbanUser(user.playerId)
-                                          setBannedUsers(loadBannedUsers())
+                                          try {
+                                            unbanUser(user.playerId)
+                                            setBannedUsers(loadBannedUsers())
+                                          } catch (err) { showAdminError('Failed to unban user.') }
                                         }}
                                         className="shrink-0 px-2 py-1 rounded-lg text-[7px] font-bold transition-transform active:scale-95"
                                         style={{ backgroundColor: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.2)', color: '#00E676' }}
@@ -3875,9 +4266,11 @@ export function CouponCode({
                         {bannedUsers.some(u => u.expiresAt !== null && u.expiresAt < Date.now()) && (
                           <button
                             onClick={() => {
-                              const active = bannedUsers.filter(u => u.expiresAt === null || u.expiresAt > Date.now())
-                              saveBannedUsers(active)
-                              setBannedUsers(active)
+                              try {
+                                const active = bannedUsers.filter(u => u.expiresAt === null || u.expiresAt > Date.now())
+                                saveBannedUsers(active)
+                                setBannedUsers(active)
+                              } catch (err) { showAdminError('Failed to clean expired bans.') }
                             }}
                             className="w-full py-1.5 rounded-lg text-[8px] font-bold flex items-center justify-center gap-1.5 transition-transform active:scale-95"
                             style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}
@@ -3908,14 +4301,18 @@ export function CouponCode({
                             />
                             <button
                               onClick={async () => {
-                                if (!newAdminPassword.trim() || newAdminPassword.trim().length < 4) {
-                                  setAdminPasswordMsg({ text: 'Password must be at least 4 characters', type: 'error' })
-                                  return
+                                try {
+                                  if (!newAdminPassword.trim() || newAdminPassword.trim().length < 4) {
+                                    setAdminPasswordMsg({ text: 'Password must be at least 4 characters', type: 'error' })
+                                    return
+                                  }
+                                  await firebaseSetAdminPassword(newAdminPassword.trim())
+                                  setAdminPasswordMsg({ text: 'Password updated successfully!', type: 'success' })
+                                  setNewAdminPassword('')
+                                  setTimeout(() => setAdminPasswordMsg(null), 3000)
+                                } catch (err) {
+                                  setAdminPasswordMsg({ text: 'Failed to update password. Try again.', type: 'error' })
                                 }
-                                await firebaseSetAdminPassword(newAdminPassword.trim())
-                                setAdminPasswordMsg({ text: 'Password updated successfully!', type: 'success' })
-                                setNewAdminPassword('')
-                                setTimeout(() => setAdminPasswordMsg(null), 3000)
                               }}
                               className="px-3 py-1.5 rounded-lg text-[8px] font-bold transition-transform active:scale-95"
                               style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF' }}
@@ -4083,37 +4480,41 @@ export function CouponCode({
                           {/* Create Button */}
                           <button
                             onClick={() => {
-                              if (!newTaskName.trim()) return
-                              const newTask: AdminDailyTask = {
-                                id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-                                name: newTaskName.trim(),
-                                description: newTaskDesc.trim() || newTaskName.trim(),
-                                action: newTaskAction,
-                                requiredCount: newTaskCount,
-                                rewardType: newTaskRewardType,
-                                rewardAmount: newTaskRewardAmount,
-                                active: newTaskActive,
-                                createdAt: Date.now(),
+                              try {
+                                if (!newTaskName.trim()) return
+                                const newTask: AdminDailyTask = {
+                                  id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                                  name: newTaskName.trim(),
+                                  description: newTaskDesc.trim() || newTaskName.trim(),
+                                  action: newTaskAction,
+                                  requiredCount: newTaskCount,
+                                  rewardType: newTaskRewardType,
+                                  rewardAmount: newTaskRewardAmount,
+                                  active: newTaskActive,
+                                  createdAt: Date.now(),
+                                }
+                                const updated = [...adminDailyTasks, newTask]
+                                setAdminDailyTasks(updated)
+                                // Note: NOT auto-saving. User must click Save to persist.
+                                // Broadcast to Firebase so all users receive the task in real-time
+                                firebaseBroadcastDailyTask({
+                                  name: newTask.name,
+                                  description: newTask.description,
+                                  action: newTask.action,
+                                  requiredCount: newTask.requiredCount,
+                                  rewardType: newTask.rewardType,
+                                  rewardAmount: newTask.rewardAmount,
+                                }).catch(() => {})
+                                setNewTaskName('')
+                                setNewTaskDesc('')
+                                setNewTaskAction('play_battle')
+                                setNewTaskCount(1)
+                                setNewTaskRewardType('coins')
+                                setNewTaskRewardAmount(50)
+                                setNewTaskActive(true)
+                              } catch (err) {
+                                showAdminError('Failed to create task.')
                               }
-                              const updated = [...adminDailyTasks, newTask]
-                              setAdminDailyTasks(updated)
-                              saveAdminDailyTasks(updated)
-                              // Broadcast to Firebase so all users receive the task in real-time
-                              firebaseBroadcastDailyTask({
-                                name: newTask.name,
-                                description: newTask.description,
-                                action: newTask.action,
-                                requiredCount: newTask.requiredCount,
-                                rewardType: newTask.rewardType,
-                                rewardAmount: newTask.rewardAmount,
-                              }).catch(() => {})
-                              setNewTaskName('')
-                              setNewTaskDesc('')
-                              setNewTaskAction('play_battle')
-                              setNewTaskCount(1)
-                              setNewTaskRewardType('coins')
-                              setNewTaskRewardAmount(50)
-                              setNewTaskActive(true)
                             }}
                             className="w-full py-2 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
                             style={{ background: 'linear-gradient(135deg, #E040FB, #7C4DFF)', color: '#FFFFFF' }}
@@ -4131,8 +4532,10 @@ export function CouponCode({
                             {adminDailyTasks.length > 0 && (
                               <button
                                 onClick={() => {
-                                  setAdminDailyTasks([])
-                                  saveAdminDailyTasks([])
+                                  try {
+                                    setAdminDailyTasks([])
+                                    // Note: NOT auto-saving. User must click Save to persist.
+                                  } catch (err) { showAdminError('Failed to clear tasks.') }
                                 }}
                                 className="text-[7px] font-bold px-2 py-1 rounded transition-transform active:scale-95"
                                 style={{ backgroundColor: 'rgba(246,94,59,0.1)', color: '#F65E3B' }}
@@ -4204,11 +4607,13 @@ export function CouponCode({
                                       <div className="flex items-center gap-1 shrink-0">
                                         <button
                                           onClick={() => {
+                                            try {
                                             const updated = adminDailyTasks.map(t =>
                                               t.id === task.id ? { ...t, active: !t.active } : t
                                             )
                                             setAdminDailyTasks(updated)
-                                            saveAdminDailyTasks(updated)
+                                            // Note: NOT auto-saving. User must click Save to persist.
+                                            } catch (err) { showAdminError('Failed to toggle task.') }
                                           }}
                                           className="text-[7px] font-bold px-2 py-1 rounded transition-transform active:scale-95"
                                           style={{
@@ -4220,9 +4625,11 @@ export function CouponCode({
                                         </button>
                                         <button
                                           onClick={() => {
+                                            try {
                                             const updated = adminDailyTasks.filter(t => t.id !== task.id)
                                             setAdminDailyTasks(updated)
-                                            saveAdminDailyTasks(updated)
+                                            // Note: NOT auto-saving. User must click Save to persist.
+                                            } catch (err) { showAdminError('Failed to delete task.') }
                                           }}
                                           className="text-[7px] font-bold px-2 py-1 rounded transition-transform active:scale-95"
                                           style={{ backgroundColor: 'rgba(246,94,59,0.1)', color: '#F65E3B' }}
@@ -4284,7 +4691,9 @@ export function CouponCode({
                             </div>
                             <button
                               onClick={() => {
-                                saveTournamentPrizes(tournamentPrizes)
+                                try {
+                                  saveTournamentPrizes(tournamentPrizes)
+                                } catch (err) { showAdminError('Failed to save tournament prizes.') }
                               }}
                               className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
                               style={{ background: 'linear-gradient(135deg, #EDC22E, #FF7A00)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(237,194,46,0.3)' }}
@@ -4320,7 +4729,9 @@ export function CouponCode({
                             </div>
                             <button
                               onClick={() => {
-                                saveTournamentPrizes(tournamentPrizes)
+                                try {
+                                  saveTournamentPrizes(tournamentPrizes)
+                                } catch (err) { showAdminError('Failed to save weekly bonus.') }
                               }}
                               className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-transform active:scale-95"
                               style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF', boxShadow: '0 2px 10px rgba(0,230,118,0.3)' }}

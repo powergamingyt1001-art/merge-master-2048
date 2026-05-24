@@ -1168,23 +1168,15 @@ function AbilityCard({
           </div>
         ) : (
           <button
-            onClick={() => {
-              if (isCoinCurrency) {
-                onCoinBuy(item)
-              } else {
-                onAddToCart(item)
-              }
-            }}
+            onClick={() => onAddToCart(item)}
             disabled={isCoinCurrency && (!canAfford || isLimitReached)}
             className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
             style={{
-              background: isCoinCurrency
-                ? 'linear-gradient(135deg, #EDC22E, #FFB300)'
-                : 'linear-gradient(135deg, #EDC22E, #FF7A00)',
+              background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
               color: '#FFFFFF',
             }}
           >
-            {isCoinCurrency ? 'Buy' : 'Add'}
+            Add
           </button>
         )}
       </div>
@@ -1587,60 +1579,12 @@ const SPIN_COIN_PACKS: SpinPack[] = [
 
 // ─── Spins Tab ──────────────────────────────────────────────────────────────
 
-function SpinsTab({ onBuy, coins, onDeductCoins, onAddSpinTickets, onAddNotification, playerId, playerName, userCode }: {
-  onBuy: (item: string, price: number, quantity: number) => void
+function SpinsTab({ onAddToCart, coins, cart, onUpdateCartQuantity }: {
+  onAddToCart: (item: AbilityItem) => void
   coins: number
-  onDeductCoins: (amount: number) => void
-  onAddSpinTickets?: (count: number) => void
-  onAddNotification: (title: string, message: string, type: string, emoji: string) => void
-  playerId: string
-  playerName: string
-  userCode: string
+  cart: CartItem[]
+  onUpdateCartQuantity: (id: string, delta: number) => void
 }) {
-  const [remainingSpins, setRemainingSpins] = useState(() => getRemainingSpinCoinPurchase())
-
-  const handleCoinBuy = useCallback((pack: SpinPack) => {
-    if (coins < pack.price) {
-      onAddNotification('Not Enough Coins!', `You need ${formatNumber(pack.price)} coins but have ${formatNumber(coins)}`, 'system', '😔')
-      return
-    }
-    const spinsToBuy = pack.spins
-    if (spinsToBuy > remainingSpins) {
-      onAddNotification('Limit Reached!', `You can only buy ${remainingSpins} more spins with coins in this period.`, 'system', '⏳')
-      return
-    }
-    // Deduct coins
-    onDeductCoins(pack.price)
-    // Add spin tickets (including bonus)
-    const totalSpins = pack.spins + (pack.bonusSpins || 0)
-    onAddSpinTickets?.(totalSpins)
-    // Record limit
-    recordSpinCoinPurchase(spinsToBuy)
-    setRemainingSpins(getRemainingSpinCoinPurchase())
-
-    // Record coin purchase to Firebase
-    const coinPurchaseId = Date.now().toString() + Math.random().toString(36).slice(2, 6)
-    recordCoinPurchaseToFirebase({
-      id: coinPurchaseId,
-      date: new Date().toISOString(),
-      playerId,
-      playerName,
-      userCode,
-      item: `🎫 ${pack.spins} Spin${pack.spins > 1 ? 's' : ''}${pack.bonusSpins ? ` +${pack.bonusSpins} FREE` : ''}`,
-      coinPrice: pack.price,
-      quantity: totalSpins,
-      status: 'auto_approved',
-      createdAt: Date.now(),
-    }).catch(() => { /* silent fail */ })
-
-    onAddNotification(
-      'Spins Purchased! 🎫',
-      `You bought ${pack.spins} spin${pack.spins > 1 ? 's' : ''}${pack.bonusSpins ? ` +${pack.bonusSpins} FREE` : ''} for ${formatNumber(pack.price)} coins!`,
-      'reward',
-      '🎫'
-    )
-  }, [coins, remainingSpins, onDeductCoins, onAddSpinTickets, onAddNotification, playerId, playerName, userCode])
-
   return (
     <div className="space-y-4">
       {/* Spins - INR */}
@@ -1652,7 +1596,10 @@ function SpinsTab({ onBuy, coins, onDeductCoins, onAddSpinTickets, onAddNotifica
           </h4>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          {SPIN_INR_PACKS.map((pack, i) => (
+          {SPIN_INR_PACKS.map((pack, i) => {
+            const cartItem = cart.find(c => c.id === pack.id)
+            const inCart = cartItem?.quantity || 0
+            return (
             <motion.div
               key={pack.id}
               initial={{ opacity: 0, y: 20 }}
@@ -1660,8 +1607,8 @@ function SpinsTab({ onBuy, coins, onDeductCoins, onAddSpinTickets, onAddNotifica
               transition={{ delay: i * 0.06, duration: 0.3 }}
               className="relative flex flex-col items-center justify-between p-4 pt-5 rounded-2xl"
               style={{
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.08)',
+                background: inCart > 0 ? 'rgba(237,194,46,0.06)' : 'rgba(255,255,255,0.04)',
+                border: inCart > 0 ? '1px solid rgba(237,194,46,0.2)' : '1px solid rgba(255,255,255,0.08)',
                 boxShadow: pack.tag ? `0 0 20px ${pack.tag.color}15` : 'none',
               }}
             >
@@ -1694,12 +1641,42 @@ function SpinsTab({ onBuy, coins, onDeductCoins, onAddSpinTickets, onAddNotifica
                 <p className="text-center text-xs font-bold mb-2" style={{ color: 'rgba(255,255,255,0.7)' }}>
                   {pack.spins} Spins = ₹{pack.price}
                 </p>
-                <BuyButton
-                  onPress={() => onBuy(`${pack.spins} Spin Tickets`, pack.price, pack.spins)}
-                />
+                {inCart > 0 ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <button
+                      onClick={() => onUpdateCartQuantity(pack.id, -1)}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center transition-transform active:scale-90"
+                      style={{ backgroundColor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}
+                    >
+                      <Minus className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                    </button>
+                    <span className="text-xs font-bold" style={{ color: '#EDC22E' }}>{inCart}</span>
+                    <button
+                      onClick={() => onUpdateCartQuantity(pack.id, 1)}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center transition-transform active:scale-90"
+                      style={{ backgroundColor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}
+                    >
+                      <Plus className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                    </button>
+                  </div>
+                ) : (
+                  <BuyButton
+                    label="Add"
+                    onPress={() => onAddToCart({
+                      id: pack.id,
+                      emoji: '🎫',
+                      name: `${pack.spins} Spin Tickets`,
+                      quantity: pack.spins,
+                      price: pack.price,
+                      section: 'regular',
+                      currency: 'inr',
+                    })}
+                  />
+                )}
               </div>
             </motion.div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
@@ -1710,13 +1687,12 @@ function SpinsTab({ onBuy, coins, onDeductCoins, onAddSpinTickets, onAddNotifica
           <h4 className="text-xs font-extrabold tracking-wide" style={{ color: '#EDC22E' }}>
             SPIN TICKETS (COINS)
           </h4>
-          <span className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(237,194,46,0.15)', color: '#EDC22E' }}>
-            {remainingSpins}/15 per 3 days
-          </span>
         </div>
         <div className="space-y-2">
           {SPIN_COIN_PACKS.map((pack) => {
-            const isDisabled = coins < pack.price || remainingSpins < pack.spins
+            const cartItem = cart.find(c => c.id === pack.id)
+            const inCart = cartItem?.quantity || 0
+            const isDisabled = coins < pack.price
             return (
               <motion.div
                 key={pack.id}
@@ -1726,7 +1702,7 @@ function SpinsTab({ onBuy, coins, onDeductCoins, onAddSpinTickets, onAddNotifica
                 style={{
                   background: 'rgba(255,255,255,0.04)',
                   border: '1px solid rgba(255,255,255,0.08)',
-                  opacity: remainingSpins < pack.spins ? 0.5 : 1,
+                  opacity: isDisabled ? 0.5 : 1,
                 }}
               >
                 {pack.tag && (
@@ -1761,17 +1737,37 @@ function SpinsTab({ onBuy, coins, onDeductCoins, onAddSpinTickets, onAddNotifica
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleCoinBuy(pack)}
-                  disabled={isDisabled}
-                  className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{
-                    background: 'linear-gradient(135deg, #EDC22E, #FFB300)',
-                    color: '#FFFFFF',
-                  }}
-                >
-                  BUY
-                </button>
+                {inCart > 0 ? (
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => onUpdateCartQuantity(pack.id, -1)} className="w-6 h-6 rounded flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                      <Minus className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                    </button>
+                    <span className="text-[10px] font-bold w-5 text-center" style={{ color: '#EDC22E' }}>{inCart}</span>
+                    <button onClick={() => onUpdateCartQuantity(pack.id, 1)} disabled={isDisabled} className="w-6 h-6 rounded flex items-center justify-center disabled:opacity-40" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                      <Plus className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => onAddToCart({
+                      id: pack.id,
+                      emoji: '🎫',
+                      name: `${pack.spins} Spin${pack.spins > 1 ? 's' : ''}${pack.bonusSpins ? ` +${pack.bonusSpins} FREE` : ''}`,
+                      quantity: pack.spins + (pack.bonusSpins || 0),
+                      price: pack.price,
+                      section: 'regular',
+                      currency: 'coin',
+                    })}
+                    disabled={isDisabled}
+                    className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{
+                      background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
+                      color: '#FFFFFF',
+                    }}
+                  >
+                    Add
+                  </button>
+                )}
               </motion.div>
             )
           })}
@@ -2106,12 +2102,19 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
     // Process coin items immediately (auto-approve)
     cart.filter(i => i.currency === 'coin').forEach(item => {
       onDeductCoins(item.price * item.quantity)
-      if (item.abilityType === 'undo') {
+      if (item.id.startsWith('spin-coin-')) {
+        // Spin ticket purchase with coins
+        onAddSpinTickets?.(item.quantity)
+        onAddNotification('Spins Purchased! 🎫', `You bought ${item.name} for ${formatNumber(item.price * item.quantity)} coins!`, 'reward', '🎫')
+      } else if (item.abilityType === 'undo') {
         onAddUndos(item.quantity)
+        onAddNotification('Ability Purchased! 🎉', `You bought ${item.emoji} ${item.name} x${item.quantity} for ${formatNumber(item.price * item.quantity)} coins`, 'reward', item.emoji)
       } else if (item.abilityType === 'timer') {
         onAddPowerUp('extraTime', item.quantity)
+        onAddNotification('Ability Purchased! 🎉', `You bought ${item.emoji} ${item.name} x${item.quantity} for ${formatNumber(item.price * item.quantity)} coins`, 'reward', item.emoji)
       } else if (item.abilityType) {
         onAddPowerUp(item.abilityType as any, item.quantity)
+        onAddNotification('Ability Purchased! 🎉', `You bought ${item.emoji} ${item.name} x${item.quantity} for ${formatNumber(item.price * item.quantity)} coins`, 'reward', item.emoji)
       }
 
       // Record coin purchase to Firebase
@@ -2129,8 +2132,6 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
         status: 'auto_approved',
         createdAt: Date.now(),
       }).catch(() => { /* silent fail */ })
-
-      onAddNotification('Ability Purchased! 🎉', `You bought ${item.emoji} ${item.name} x${item.quantity} for ${formatNumber(item.price * item.quantity)} coins`, 'reward', item.emoji)
     })
 
     // For INR items, open payment modal with combined total
@@ -2138,24 +2139,14 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
     if (inrItems.length > 0) {
       const total = finalTotal
       const itemNames = inrItems.map(i => `${i.emoji} ${i.name} x${i.quantity}`).join(', ')
-
-      // Purchase threshold: ₹29+ → auto 60% discount on current order
-      const inrSubtotal = cartTotalINR
-      if (inrSubtotal >= 29 && inrSubtotal < 200) {
-        // Apply 60% discount to the current order automatically
-        const autoDiscount = Math.round(inrSubtotal * 60 / 100)
-        onAddNotification('🎉 60% Discount Applied!', `Your ₹${inrSubtotal} purchase gets an automatic 60% discount! You save ₹${autoDiscount}!`, 'reward', '🏷️')
-        setPaymentModal({ open: true, itemName: itemNames, itemPrice: inrSubtotal - autoDiscount, itemQuantity: 1 })
-      } else {
-        setPaymentModal({ open: true, itemName: itemNames, itemPrice: total, itemQuantity: 1 })
-      }
+      setPaymentModal({ open: true, itemName: itemNames, itemPrice: total, itemQuantity: 1 })
     }
 
     // Clear cart
     setCart([])
     setCouponCode('')
     setShowCart(false)
-  }, [cart, appliedCoupon, finalTotal, cartTotalINR, onDeductCoins, onAddPowerUp, onAddUndos, onAddNotification, playerId, playerName, userCode])
+  }, [cart, appliedCoupon, finalTotal, cartTotalINR, onDeductCoins, onAddPowerUp, onAddUndos, onAddNotification, onAddSpinTickets, playerId, playerName, userCode])
 
   return (
     <>
@@ -2293,7 +2284,9 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
                             const usedCoupons = JSON.parse(localStorage.getItem('mergeMaster2048_usedCoupons') || '[]')
                             const discountCoupons = JSON.parse(localStorage.getItem('adminDiscountCoupons') || '[]')
                             const adminCoupons = JSON.parse(localStorage.getItem('adminCoupons') || '[]')
-                            const available = [...discountCoupons, ...adminCoupons].filter(
+                            // Add WELCOME60 as an always-available coupon
+                            const welcome60Coupon = { code: 'WELCOME60', discountPercent: 60, minPurchase: 0 }
+                            const available = [welcome60Coupon, ...discountCoupons, ...adminCoupons].filter(
                               (c: any) => !c.disabled && !usedCoupons.includes(c.code.toUpperCase()) &&
                                           (!c.maxUses || !c.currentUses || c.currentUses < c.maxUses)
                             )
@@ -2441,7 +2434,7 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <SpinsTab onBuy={handleBuy} coins={coins} onDeductCoins={onDeductCoins} onAddSpinTickets={onAddSpinTickets} onAddNotification={onAddNotification} playerId={playerId} playerName={playerName} userCode={userCode} />
+                    <SpinsTab onAddToCart={addToCart} coins={coins} cart={cart} onUpdateCartQuantity={updateCartQuantity} />
                   </motion.div>
                 )}
                 {activeTab === 'room' && (

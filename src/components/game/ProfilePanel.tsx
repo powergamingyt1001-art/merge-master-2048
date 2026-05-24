@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Crown, Trophy, Star, Shield, Zap, Edit3, Check, Bell, Coins, Swords, Target, Calendar, Users, TrendingUp, Percent, Gift, Trash2, Sun, Moon, Copy, DoorOpen, History, Search, Lock, Heart, UserPlus } from 'lucide-react'
+import { X, Crown, Trophy, Star, Edit3, Check, Bell, Coins, Swords, Calendar, Percent, Gift, Trash2, Sun, Moon, Copy, DoorOpen, History, Heart, UserPlus } from 'lucide-react'
 import { Notification, PLAYER_AVATARS, getLevelInfo, getLevelThreshold, MAX_LEVEL, GameHistoryEntry } from '@/hooks/useGame'
-import { addLike, removeLike, hasLiked, onLikesUpdate } from '@/lib/firebase-service'
+import { removeLike, transferLike, hasLiked, onLikesUpdate } from '@/lib/firebase-service'
 import { AdsterraBanner320x50 } from '@/components/ads/AdsterraAds'
 import { useTheme } from 'next-themes'
 
@@ -47,17 +47,18 @@ interface ProfilePanelProps {
   gameHistory: GameHistoryEntry[]
   onOpenRoomFight?: () => void
   onStartRoomGame?: (settings: any) => void
-  // Added props
   skillPoints?: number
   isOwnProfile?: boolean
   likeCount?: number
   isLiked?: boolean
   onToggleLike?: () => void
-  onAddNotification?: (title: string, message: string, type: string, emoji: string) => void
+  onAddNotification?: (title: string, message: string, type: 'reward' | 'rank' | 'invite' | 'commission' | 'system' | 'battle' | 'friend_request', emoji: string) => void
   playerId?: string
   viewerPlayerId?: string
   onDeleteGameHistory?: (id: string) => void
   onClearGameHistory?: () => void
+  classicBestScore?: number
+  tournamentBestScore?: number
 }
 
 // Coin count formatter: 1000→1K, 2500→2.5K, 1000000→1M
@@ -132,11 +133,11 @@ export function ProfilePanel({
   totalBattlesPlayed, totalBattlesWon,
   onResetAllData,
   userCode, totalCoinsEarned, roomCardCount, battleBestScore, gameHistory,
-  onOpenRoomFight, onStartRoomGame,
   skillPoints, isOwnProfile = true, likeCount = 0, isLiked = false, onToggleLike,
   onAddNotification,
   playerId, viewerPlayerId,
   onDeleteGameHistory, onClearGameHistory,
+  classicBestScore = 0, tournamentBestScore = 0,
 }: ProfilePanelProps) {
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState(playerName)
@@ -146,12 +147,6 @@ export function ProfilePanel({
   const [copiedCode, setCopiedCode] = useState(false)
   const [showGameHistory, setShowGameHistory] = useState(false)
   const [historyTab, setHistoryTab] = useState<'today' | 'yesterday' | 'week'>('today')
-  const [expandedRoom, setExpandedRoom] = useState<'create' | 'join' | null>(null)
-  const [opponentUid, setOpponentUid] = useState('')
-  const [betCoins, setBetCoins] = useState('')
-  const [betAbility, setBetAbility] = useState('none')
-  const [roomPassword, setRoomPassword] = useState('')
-  const [isSearching, setIsSearching] = useState(false)
   const [localLiked, setLocalLiked] = useState(isLiked)
   const [localLikeCount, setLocalLikeCount] = useState(likeCount)
   const { theme, setTheme } = useTheme()
@@ -190,13 +185,20 @@ export function ProfilePanel({
   const handleToggleLike = async () => {
     const targetId = playerId || ''
     const viewerId = viewerPlayerId || ''
-    if (!targetId || !viewerId || targetId === viewerId) return
-    const newLiked = !localLiked
-    setLocalLiked(newLiked)
-    if (newLiked) {
-      await addLike(viewerId, targetId)
-    } else {
+    if (!targetId || !viewerId) return
+    // Don't allow self-like
+    if (targetId === viewerId) return
+
+    if (localLiked) {
+      // Unlike: remove the like
+      setLocalLiked(false)
+      setLocalLikeCount(prev => Math.max(0, prev - 1))
       await removeLike(viewerId, targetId)
+    } else {
+      // Like: use transferLike (one like per user, transfers from any previous target)
+      setLocalLiked(true)
+      setLocalLikeCount(prev => prev + 1)
+      await transferLike(viewerId, targetId)
     }
     onToggleLike?.()
   }
@@ -220,6 +222,9 @@ export function ProfilePanel({
   // SP display value
   const spValue = skillPoints ?? gamePoints
 
+  // Numeric-only UID for display and copy (friend search uses numeric IDs)
+  const numericUid = userCode.replace(/\D/g, '') || userCode
+
   const handleSaveName = () => {
     if (nameInput.trim()) {
       onUpdateName(nameInput.trim())
@@ -228,13 +233,13 @@ export function ProfilePanel({
   }
 
   const handleCopyCode = () => {
-    navigator.clipboard.writeText(userCode).then(() => {
+    navigator.clipboard.writeText(numericUid).then(() => {
       setCopiedCode(true)
       setTimeout(() => setCopiedCode(false), 2000)
     }).catch(() => {
       // Fallback
       const textArea = document.createElement('textarea')
-      textArea.value = userCode
+      textArea.value = numericUid
       document.body.appendChild(textArea)
       textArea.select()
       document.execCommand('copy')
@@ -261,7 +266,7 @@ export function ProfilePanel({
         status: 'pending'
       })
       localStorage.setItem('mergeMaster2048_friendRequests', JSON.stringify(requests))
-      onAddNotification?.('Friend Request Sent! 🎉', `Request sent to ${playerName}`, 'social', '👤')
+      onAddNotification?.('Friend Request Sent! 🎉', `Request sent to ${playerName}`, 'invite', '👤')
     } catch { /* ignore */ }
   }
 
@@ -294,26 +299,6 @@ export function ProfilePanel({
     acc[dateGroup].push(entry)
     return acc
   }, {})
-
-  const handleJoinRandom = () => {
-    setIsSearching(true)
-    setTimeout(() => {
-      setIsSearching(false)
-      // Trigger room game with random matching
-      onStartRoomGame?.({ mode: 'join', type: 'random' })
-    }, 3000)
-  }
-
-  const handleCreateRoom = () => {
-    if (roomCardCount < 1) return
-    onStartRoomGame?.({
-      mode: 'create',
-      opponentUid,
-      betCoins: parseInt(betCoins) || 0,
-      betAbility,
-      password: roomPassword,
-    })
-  }
 
   return (
     <AnimatePresence>
@@ -437,7 +422,7 @@ export function ProfilePanel({
                   <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>ID:</span>
                   <div className="flex items-center gap-1 px-2 py-0.5 rounded-md"
                     style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <span className="text-xs font-mono font-bold tracking-wider" style={{ color: '#00FFFF' }}>{userCode}</span>
+                    <span className="text-xs font-mono font-bold tracking-wider" style={{ color: '#00FFFF' }}>{numericUid}</span>
                     <button onClick={handleCopyCode}
                       className="w-5 h-5 rounded flex items-center justify-center transition-transform active:scale-90"
                       style={{ backgroundColor: copiedCode ? 'rgba(0,230,118,0.2)' : 'rgba(255,255,255,0.08)' }}>
@@ -466,76 +451,6 @@ export function ProfilePanel({
                   )}
                 </div>
 
-                {/* Level List Overlay */}
-                <AnimatePresence>
-                  {showLevelList && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="w-full mt-2"
-                    >
-                      <div className="rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                        <div className="flex items-center justify-between px-3 py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                          <div className="flex items-center gap-1.5">
-                            <Star className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
-                            <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>Level Progression</span>
-                          </div>
-                          <button onClick={() => setShowLevelList(false)}
-                            className="w-5 h-5 rounded-full flex items-center justify-center"
-                            style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
-                            <X className="w-2.5 h-2.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
-                          </button>
-                        </div>
-                        <div className="max-h-52 overflow-y-auto px-2 py-1.5 space-y-1">
-                          {Array.from({ length: Math.min(playerLevel + 5, MAX_LEVEL) }, (_, i) => i + 1).map((lv) => {
-                            const info = getLevelInfo(lv)
-                            const isAchieved = lv <= playerLevel
-                            const isCurrent = lv === playerLevel
-                            const isBonusLevel = lv % 5 === 0
-                            const bonusCoins = isBonusLevel ? (lv / 5) * 100 : 0
-                            return (
-                              <div key={lv}
-                                className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
-                                style={{
-                                  backgroundColor: isCurrent ? `${info.color}20` : isBonusLevel && isAchieved ? 'rgba(237,194,46,0.08)' : 'rgba(255,255,255,0.02)',
-                                  border: isCurrent ? `1px solid ${info.color}40` : isBonusLevel ? '1px solid rgba(237,194,46,0.15)' : '1px solid rgba(255,255,255,0.03)',
-                                }}>
-                                <span className="text-[11px] flex-shrink-0">{info.icon}</span>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-[9px] font-bold" style={{ color: isAchieved ? '#FFFFFF' : 'rgba(255,255,255,0.3)' }}>
-                                      Lv.{lv}
-                                    </span>
-                                    <span className="text-[8px] truncate" style={{ color: isAchieved ? info.color : 'rgba(255,255,255,0.2)' }}>
-                                      {info.title}
-                                    </span>
-                                    {isBonusLevel && (
-                                      <Gift className="w-2.5 h-2.5 flex-shrink-0" style={{ color: '#EDC22E' }} />
-                                    )}
-                                  </div>
-                                  {isBonusLevel && (
-                                    <p className="text-[7px]" style={{ color: 'rgba(237,194,46,0.7)' }}>
-                                      Bonus: {bonusCoins}💰 + 2 random abilities!
-                                    </p>
-                                  )}
-                                </div>
-                                <span className="text-[9px] flex-shrink-0">
-                                  {isCurrent ? '⭐' : isAchieved ? '✓' : '🔒'}
-                                </span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                        <div className="px-3 py-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                          <p className="text-[7px] text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                            Every 5 levels: Guaranteed coins + 2 random abilities!
-                          </p>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
 
               {/* 6. Win/Loss Rate Box */}
@@ -629,12 +544,14 @@ export function ProfilePanel({
                 )}
               </div>
 
-              {/* 7. Stats Row (3 boxes) - Classic Best, Battle Best, Tournament Best */}
-              <div className="grid grid-cols-3 gap-2 mb-3">
-                <StatBox icon={<Trophy className="w-3 h-3" />} label="Classic" value={bestScore > 0 ? bestScore.toLocaleString() : '-'} color="#EDC22E" />
-                <StatBox icon={<Swords className="w-3 h-3" />} label="Battle" value={battleBestScore > 0 ? battleBestScore.toLocaleString() : '-'} color="#F65E3B" />
-                <StatBox icon={<Crown className="w-3 h-3" />} label="Tour Best" value={modBestScore > 0 ? modBestScore.toLocaleString() : '-'} color="#E040FB" />
-              </div>
+              {/* 7. Stats Row (3 boxes) - Mode-specific best scores (own profile only) */}
+              {isOwnProfile && (
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  <StatBox icon={<Trophy className="w-3 h-3" />} label="Classic Best" value={classicBestScore > 0 ? classicBestScore.toLocaleString() : (bestScore > 0 ? bestScore.toLocaleString() : '-')} color="#EDC22E" />
+                  <StatBox icon={<Swords className="w-3 h-3" />} label="Battle Best" value={battleBestScore > 0 ? battleBestScore.toLocaleString() : '-'} color="#F65E3B" />
+                  <StatBox icon={<Crown className="w-3 h-3" />} label="Tour Best" value={tournamentBestScore > 0 ? tournamentBestScore.toLocaleString() : (modBestScore > 0 ? modBestScore.toLocaleString() : '-')} color="#E040FB" />
+                </div>
+              )}
 
               {/* 8. Bottom Row (3 boxes) - Games Today, History, Room Cards */}
               <div className="grid grid-cols-3 gap-2 mb-3">
@@ -721,264 +638,76 @@ export function ProfilePanel({
                 )}
               </button>
 
-              {/* 11. Room Fight Section - Expandable Create/Join boxes */}
-              {isOwnProfile && (
-                <div className="space-y-2 mb-3">
-                  {/* Create Room Box */}
-                  <div className="rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(224,64,251,0.05)', border: '1px solid rgba(224,64,251,0.15)' }}>
-                    <button
-                      onClick={() => setExpandedRoom(expandedRoom === 'create' ? null : 'create')}
-                      className="w-full p-3 flex items-center justify-between transition-transform active:scale-[0.98]"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">🚀</span>
-                        <div className="text-left">
-                          <p className="text-[10px] font-bold" style={{ color: '#E040FB' }}>Create Room</p>
-                          <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Challenge an opponent • 1 Room Card</p>
+              {/* Level List - Expands below the level progress bar */}
+              <AnimatePresence>
+                {showLevelList && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mb-3"
+                  >
+                    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                      <div className="flex items-center justify-between px-3 py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                        <div className="flex items-center gap-1.5">
+                          <Star className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
+                          <span className="text-[10px] font-bold" style={{ color: '#EDC22E' }}>Level Progression</span>
                         </div>
+                        <button onClick={() => setShowLevelList(false)}
+                          className="w-5 h-5 rounded-full flex items-center justify-center"
+                          style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                          <X className="w-2.5 h-2.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
+                        </button>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[8px] px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(224,64,251,0.15)', color: '#E040FB' }}>
-                          {roomCardCount} cards
-                        </span>
-                        <motion.div
-                          animate={{ rotate: expandedRoom === 'create' ? 180 : 0 }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          <svg className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.4)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </motion.div>
-                      </div>
-                    </button>
-                    <AnimatePresence>
-                      {expandedRoom === 'create' && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.25, ease: 'easeInOut' }}
-                          className="overflow-hidden"
-                        >
-                          <div className="px-3 pb-3 space-y-2" style={{ borderTop: '1px solid rgba(224,64,251,0.1)' }}>
-                            <div className="pt-2" />
-                            {/* Your UID */}
-                            <div>
-                              <label className="text-[8px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Your UID</label>
-                              <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                                <span className="text-[10px] font-mono font-bold" style={{ color: '#00FFFF' }}>{userCode}</span>
-                                <span className="text-[7px] ml-auto" style={{ color: 'rgba(255,255,255,0.25)' }}>Read-only</span>
-                              </div>
-                            </div>
-
-                            {/* Opponent UID */}
-                            <div>
-                              <label className="text-[8px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Opponent UID</label>
-                              <input
-                                value={opponentUid}
-                                onChange={(e) => setOpponentUid(e.target.value)}
-                                placeholder="Enter opponent's UID"
-                                className="w-full px-2 py-1.5 rounded-lg text-[10px]"
-                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.1)', outline: 'none' }}
-                              />
-                            </div>
-
-                            {/* Betting Section */}
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <label className="text-[8px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>🪙 Coins</label>
-                                <input
-                                  type="number"
-                                  value={betCoins}
-                                  onChange={(e) => setBetCoins(e.target.value)}
-                                  placeholder="0"
-                                  min="0"
-                                  max={coins.toString()}
-                                  className="w-full px-2 py-1.5 rounded-lg text-[10px]"
-                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#EDC22E', border: '1px solid rgba(255,255,255,0.1)', outline: 'none' }}
-                                />
-                              </div>
-                              <div>
-                                <label className="text-[8px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>⚡ Ability</label>
-                                <select
-                                  value={betAbility}
-                                  onChange={(e) => setBetAbility(e.target.value)}
-                                  className="w-full px-2 py-1.5 rounded-lg text-[10px]"
-                                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#E040FB', border: '1px solid rgba(255,255,255,0.1)', outline: 'none' }}>
-                                  <option value="none">None</option>
-                                  <option value="hammer">🔨 Hammer</option>
-                                  <option value="magnet">🧲 Magnet</option>
-                                  <option value="blast">💥 Blast</option>
-                                  <option value="multiplier5x">✨ 5x Multi</option>
-                                  <option value="extraTime">⏰ Extra Time</option>
-                                </select>
-                              </div>
-                            </div>
-
-                            {/* Auto-detect notice */}
-                            <div className="px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(0,255,255,0.04)', border: '1px solid rgba(0,255,255,0.08)' }}>
-                              <p className="text-[7px]" style={{ color: 'rgba(0,255,255,0.7)' }}>
-                                💡 Auto-match: Min of your coins ({coins}) vs opponent's coins
-                              </p>
-                            </div>
-
-                            {/* Password (optional) */}
-                            <div>
-                              <label className="text-[8px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>🔒 Password <span style={{ color: 'rgba(255,255,255,0.25)' }}>(optional)</span></label>
-                              <input
-                                type="password"
-                                value={roomPassword}
-                                onChange={(e) => setRoomPassword(e.target.value)}
-                                placeholder="Optional room password"
-                                className="w-full px-2 py-1.5 rounded-lg text-[10px]"
-                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.1)', outline: 'none' }}
-                              />
-                            </div>
-
-                            {/* Tax info */}
-                            <div className="px-2 py-1.5 rounded-lg" style={{ backgroundColor: 'rgba(255,122,0,0.04)', border: '1px solid rgba(255,122,0,0.08)' }}>
-                              <p className="text-[7px] font-bold" style={{ color: '#FF7A00' }}>🏛️ Tax Rules:</p>
-                              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>2 Players: Winner takes 80% (20% tax), Loser gets 20% refund</p>
-                              <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.4)' }}>3 Players: 1st gets profit, 2nd 65% refund, 3rd 30%</p>
-                            </div>
-
-                            {/* Create button */}
-                            <button
-                              onClick={handleCreateRoom}
-                              disabled={roomCardCount < 1}
-                              className="w-full py-2 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1.5 transition-transform active:scale-95"
+                      <div className="max-h-52 overflow-y-auto px-2 py-1.5 space-y-1">
+                        {Array.from({ length: Math.min(playerLevel + 5, MAX_LEVEL) }, (_, i) => i + 1).map((lv) => {
+                          const info = getLevelInfo(lv)
+                          const isAchieved = lv <= playerLevel
+                          const isCurrent = lv === playerLevel
+                          const isBonusLevel = lv % 5 === 0
+                          const bonusCoins = isBonusLevel ? (lv / 5) * 100 : 0
+                          return (
+                            <div key={lv}
+                              className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
                               style={{
-                                backgroundColor: roomCardCount >= 1 ? 'rgba(224,64,251,0.2)' : 'rgba(255,255,255,0.04)',
-                                border: roomCardCount >= 1 ? '1.5px solid rgba(224,64,251,0.4)' : '1px solid rgba(255,255,255,0.08)',
-                                color: roomCardCount >= 1 ? '#E040FB' : 'rgba(255,255,255,0.2)',
-                                cursor: roomCardCount >= 1 ? 'pointer' : 'not-allowed',
+                                backgroundColor: isCurrent ? `${info.color}20` : isBonusLevel && isAchieved ? 'rgba(237,194,46,0.08)' : 'rgba(255,255,255,0.02)',
+                                border: isCurrent ? `1px solid ${info.color}40` : isBonusLevel ? '1px solid rgba(237,194,46,0.15)' : '1px solid rgba(255,255,255,0.03)',
                               }}>
-                              🚪 Create Room (1 Card)
-                              <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                • {roomCardCount} cards left
-                              </span>
-                            </button>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-
-                  {/* Play Friend Box */}
-                  <div className="rounded-xl overflow-hidden" style={{ backgroundColor: 'rgba(0,230,118,0.05)', border: '1px solid rgba(0,230,118,0.15)' }}>
-                    <button
-                      onClick={() => setExpandedRoom(expandedRoom === 'join' ? null : 'join')}
-                      className="w-full p-3 flex items-center justify-between transition-transform active:scale-[0.98]"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">🤝</span>
-                        <div className="text-left">
-                          <p className="text-[10px] font-bold" style={{ color: '#00E676' }}>Play Friend</p>
-                          <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Challenge a friend or join random</p>
-                        </div>
-                      </div>
-                      <motion.div
-                        animate={{ rotate: expandedRoom === 'join' ? 180 : 0 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <svg className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.4)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </motion.div>
-                    </button>
-                    <AnimatePresence>
-                      {expandedRoom === 'join' && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.25, ease: 'easeInOut' }}
-                          className="overflow-hidden"
-                        >
-                          <div className="px-3 pb-3 space-y-3" style={{ borderTop: '1px solid rgba(0,230,118,0.1)' }}>
-                            <div className="pt-2" />
-                            {/* Your UID */}
-                            <div>
-                              <label className="text-[8px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Your UID</label>
-                              <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                                <span className="text-[10px] font-mono font-bold" style={{ color: '#00FFFF' }}>{userCode}</span>
-                              </div>
-                            </div>
-
-                            {/* Room Code Input + Join & Random Buttons */}
-                            <div>
-                              <label className="text-[8px] font-bold mb-0.5 block" style={{ color: 'rgba(255,255,255,0.5)' }}>Room Code (optional)</label>
-                              <input
-                                value={opponentUid}
-                                onChange={(e) => setOpponentUid(e.target.value)}
-                                placeholder="Enter room code..."
-                                className="w-full px-2 py-1.5 rounded-lg text-[10px] mb-2"
-                                style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: '#FFFFFF', border: '1px solid rgba(255,255,255,0.1)', outline: 'none' }}
-                              />
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => {
-                                    if (!opponentUid.trim()) return
-                                    onStartRoomGame?.({ mode: 'join', type: 'code', opponentUid: opponentUid.trim() })
-                                  }}
-                                  className="flex-1 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-transform active:scale-95"
-                                  style={{ background: 'linear-gradient(135deg, #00C853, #00E676)', color: '#FFFFFF' }}>
-                                  🔗 Join
-                                </button>
-                                <button onClick={handleJoinRandom}
-                                  disabled={isSearching}
-                                  className="flex-1 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-transform active:scale-95"
-                                  style={{ background: isSearching ? 'rgba(246,94,59,0.4)' : 'linear-gradient(135deg, #F65E3B, #FF7A00)', color: '#FFFFFF' }}>
-                                  {isSearching ? (
-                                    <>
-                                      <motion.div
-                                        animate={{ rotate: 360 }}
-                                        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                                        className="w-3 h-3"
-                                      >
-                                        <Search className="w-3 h-3" />
-                                      </motion.div>
-                                      <span>Searching...</span>
-                                    </>
-                                  ) : (
-                                    <>🎲 Random</>
+                              <span className="text-[11px] flex-shrink-0">{info.icon}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[9px] font-bold" style={{ color: isAchieved ? '#FFFFFF' : 'rgba(255,255,255,0.3)' }}>
+                                    Lv.{lv}
+                                  </span>
+                                  <span className="text-[8px] truncate" style={{ color: isAchieved ? info.color : 'rgba(255,255,255,0.2)' }}>
+                                    {info.title}
+                                  </span>
+                                  {isBonusLevel && (
+                                    <Gift className="w-2.5 h-2.5 flex-shrink-0" style={{ color: '#EDC22E' }} />
                                   )}
-                                </button>
-                              </div>
-                            </div>
-
-                            {isSearching && (
-                              <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                className="text-center">
-                                <div className="flex items-center justify-center gap-1">
-                                  {[0, 1, 2].map((i) => (
-                                    <motion.div
-                                      key={i}
-                                      animate={{ scale: [1, 1.3, 1], opacity: [0.4, 1, 0.4] }}
-                                      transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.2 }}
-                                      className="w-2 h-2 rounded-full"
-                                      style={{ backgroundColor: '#00E676' }}
-                                    />
-                                  ))}
                                 </div>
-                                <p className="text-[7px] mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>No password rooms • Online players only</p>
-                              </motion.div>
-                            )}
-
-                            {!isSearching && (
-                              <p className="text-[7px] text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                                Join open rooms with no password • Matched with online players
-                              </p>
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </div>
-              )}
+                                {isBonusLevel && (
+                                  <p className="text-[7px]" style={{ color: 'rgba(237,194,46,0.7)' }}>
+                                    Bonus: {bonusCoins}💰 + 2 random abilities!
+                                  </p>
+                                )}
+                              </div>
+                              <span className="text-[9px] flex-shrink-0">
+                                {isCurrent ? '⭐' : isAchieved ? '✓' : '🔒'}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <div className="px-3 py-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+                        <p className="text-[7px] text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                          Every 5 levels: Guaranteed coins + 2 random abilities!
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* 12. How Leveling Works - Detailed SP/XP formula */}
               <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.1)' }}>
@@ -1079,11 +808,12 @@ export function ProfilePanel({
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      {gameHistory.length > 0 && onClearGameHistory && (
+                      {gameHistory.length > 0 && onClearGameHistory && isOwnProfile && (
                         <button onClick={onClearGameHistory}
                           className="flex items-center gap-0.5 px-2 py-1 rounded-lg text-[8px] font-bold transition-transform active:scale-95"
                           style={{ backgroundColor: 'rgba(246,94,59,0.12)', border: '1px solid rgba(246,94,59,0.25)', color: '#F65E3B' }}>
-                          🗑️ Clear All
+                          <Trash2 className="w-2.5 h-2.5" />
+                          Delete All
                         </button>
                       )}
                       <button onClick={() => setShowGameHistory(false)} className="w-8 h-8 rounded-full flex items-center justify-center transition-transform active:scale-95" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
@@ -1132,12 +862,12 @@ export function ProfilePanel({
                             backgroundColor: entry.result === 'win' ? 'rgba(0,230,118,0.06)' : entry.result === 'lose' ? 'rgba(246,94,59,0.06)' : 'rgba(255,255,255,0.03)',
                             border: `1px solid ${entry.result === 'win' ? 'rgba(0,230,118,0.15)' : entry.result === 'lose' ? 'rgba(246,94,59,0.15)' : 'rgba(255,255,255,0.06)'}`,
                           }}>
-                          {/* Delete button */}
+                          {/* Delete button - trash icon */}
                           {onDeleteGameHistory && (
                             <button onClick={() => onDeleteGameHistory(entry.id)}
                               className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center transition-transform active:scale-90"
-                              style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                              <X className="w-2.5 h-2.5" style={{ color: 'rgba(255,255,255,0.4)' }} />
+                              style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.15)' }}>
+                              <Trash2 className="w-2.5 h-2.5" style={{ color: '#F65E3B' }} />
                             </button>
                           )}
                           <div className="flex items-center justify-between mb-2">
