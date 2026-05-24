@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Crown, Medal, Star, Trophy, Swords, Coins, Wifi, WifiOff, Target, ChevronRight, Heart, Zap, Shield, UserPlus, Copy } from 'lucide-react'
-import { getLeaderboardPlayers, onLeaderboardUpdate, addLike, removeLike, hasLiked, onLikesUpdate, type FirebasePlayer } from '@/lib/firebase-service'
+import { getLeaderboardPlayers, onLeaderboardUpdate, transferLike, removeLike, hasLiked, onLikeCountUpdate, type FirebasePlayer } from '@/lib/firebase-service'
 import { getLevelInfo, getLevelThreshold } from '@/hooks/useGame'
 
 interface LeaderboardProps {
@@ -178,6 +178,15 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
   const [likeCount, setLikeCount] = useState(0)
   const [copiedUid, setCopiedUid] = useState(false)
 
+  // Real-time like count listener for the selected player
+  useEffect(() => {
+    if (!selectedPlayer?.playerId || selectedPlayer.playerId === playerId) return
+    const unsub = onLikeCountUpdate(selectedPlayer.playerId, (count) => {
+      setLikeCount(count)
+    })
+    return unsub
+  }, [selectedPlayer?.playerId, playerId])
+
   // Wrapper to reset liked when selectedPlayer changes
   const setSelectedPlayer = async (player: LeaderboardEntry | null) => {
     setSelectedPlayerRaw(player)
@@ -186,7 +195,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
       // Check if current player has already liked this player via Firebase
       const alreadyLiked = await hasLiked(playerId, player.playerId)
       setLiked(alreadyLiked)
-      // Get current likes count from Firebase
+      // Get current likes count from Firebase (real-time listener will update it)
       const fbPlayer = firebasePlayers.find(p => p.id === player.playerId)
       setLikeCount(fbPlayer?.likes || 0)
     } else {
@@ -324,18 +333,18 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
                     {[4, 5, 6].map(pos => {
                       const entry = modesEntries[pos - 1]
                       return (
-                        <div key={pos} className="flex items-center mb-1.5 cursor-pointer transition-transform active:scale-[0.98]"
+                        <div key={pos} className="flex items-center mb-1 cursor-pointer transition-transform active:scale-[0.98]"
                           onClick={() => entry && setSelectedPlayer(entry)}>
-                          <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
                             style={{ backgroundColor: entry ? 'rgba(246,94,59,0.15)' : 'rgba(255,255,255,0.04)', border: entry ? '1px solid rgba(246,94,59,0.3)' : '1px dashed rgba(255,255,255,0.1)' }}>
-                            <span className="text-[9px] font-bold" style={{ color: entry ? '#F65E3B' : 'rgba(255,255,255,0.2)' }}>{pos}</span>
+                            <span className="text-[7px] font-bold" style={{ color: entry ? '#F65E3B' : 'rgba(255,255,255,0.2)' }}>{pos}</span>
                           </div>
-                          <div className="flex-1 mx-2" style={{ height: '1px', background: entry ? 'rgba(246,94,59,0.3)' : 'rgba(255,255,255,0.06)' }} />
-                          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg flex-1"
+                          <div className="mx-1 flex-shrink-0" style={{ width: '16px', height: '1px', background: entry ? 'rgba(246,94,59,0.3)' : 'rgba(255,255,255,0.06)' }} />
+                          <div className="flex items-center gap-1 px-2 py-1 rounded-lg flex-1"
                             style={{ backgroundColor: entry ? (entry.isPlayer ? 'rgba(246,94,59,0.1)' : 'rgba(255,255,255,0.04)') : 'rgba(255,255,255,0.02)', border: entry ? (entry.isPlayer ? '1px solid rgba(246,94,59,0.2)' : '1px solid rgba(255,255,255,0.08)') : '1px dashed rgba(255,255,255,0.08)' }}>
                             {entry ? (
                               <>
-                                <span className="text-sm">{entry.avatar}</span>
+                                <span className="text-xs">{entry.avatar}</span>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-[8px] font-bold truncate" style={{ color: entry.isPlayer ? '#F65E3B' : 'rgba(255,255,255,0.7)' }}>{entry.name}</p>
                                   <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{entry.value.toLocaleString()}</p>
@@ -378,18 +387,18 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
                     {[4, 5, 6].map(pos => {
                       const entry = coinsEntries[pos - 1]
                       return (
-                        <div key={pos} className="flex items-center mb-1.5 cursor-pointer transition-transform active:scale-[0.98]"
+                        <div key={pos} className="flex items-center mb-1 cursor-pointer transition-transform active:scale-[0.98]"
                           onClick={() => entry && setSelectedPlayer(entry)}>
-                          <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
                             style={{ backgroundColor: entry ? 'rgba(237,194,46,0.15)' : 'rgba(255,255,255,0.04)', border: entry ? '1px solid rgba(237,194,46,0.3)' : '1px dashed rgba(255,255,255,0.1)' }}>
-                            <span className="text-[9px] font-bold" style={{ color: entry ? '#EDC22E' : 'rgba(255,255,255,0.2)' }}>{pos}</span>
+                            <span className="text-[7px] font-bold" style={{ color: entry ? '#EDC22E' : 'rgba(255,255,255,0.2)' }}>{pos}</span>
                           </div>
-                          <div className="flex-1 mx-2" style={{ height: '1px', background: entry ? 'rgba(237,194,46,0.3)' : 'rgba(255,255,255,0.06)' }} />
-                          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg flex-1"
+                          <div className="mx-1 flex-shrink-0" style={{ width: '16px', height: '1px', background: entry ? 'rgba(237,194,46,0.3)' : 'rgba(255,255,255,0.06)' }} />
+                          <div className="flex items-center gap-1 px-2 py-1 rounded-lg flex-1"
                             style={{ backgroundColor: entry ? (entry.isPlayer ? 'rgba(237,194,46,0.1)' : 'rgba(255,255,255,0.04)') : 'rgba(255,255,255,0.02)', border: entry ? (entry.isPlayer ? '1px solid rgba(237,194,46,0.2)' : '1px solid rgba(255,255,255,0.08)') : '1px dashed rgba(255,255,255,0.08)' }}>
                             {entry ? (
                               <>
-                                <span className="text-sm">{entry.avatar}</span>
+                                <span className="text-xs">{entry.avatar}</span>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-[8px] font-bold truncate" style={{ color: entry.isPlayer ? '#EDC22E' : 'rgba(255,255,255,0.7)' }}>{entry.name}</p>
                                   <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{formatCoinCount(entry.value)}</p>
@@ -660,15 +669,14 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
                     <button onClick={async () => {
                       const pid = selectedPlayer?.playerId || ''
                       if (!pid || pid === playerId) return
-                      const newLiked = !liked
-                      setLiked(newLiked)
-                      if (newLiked) {
-                        await addLike(playerId, pid)
-                        setLikeCount(prev => prev + 1)
+                      if (!liked) {
+                        // Like: use transferLike (one-like-per-user, transfers from old target)
+                        setLiked(true)
                         onLikeProfile?.(pid)
                       } else {
+                        // Unlike: remove the like entirely
+                        setLiked(false)
                         await removeLike(playerId, pid)
-                        setLikeCount(prev => Math.max(0, prev - 1))
                       }
                     }}
                       className="w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95"

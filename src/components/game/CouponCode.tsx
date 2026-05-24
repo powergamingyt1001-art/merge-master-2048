@@ -933,7 +933,8 @@ export function CouponCode({
   // Listen for Firebase coupon broadcasts (user-side, real-time)
   useEffect(() => {
     const unsubscribe = onCouponBroadcast((coupons) => {
-      setFirebaseCoupons(coupons.filter(c => c.sentAt > Date.now() - 24 * 60 * 60 * 1000)) // Last 24h only
+      const safeCoupons = Array.isArray(coupons) ? coupons : []
+      setFirebaseCoupons(safeCoupons.filter(c => c.sentAt > Date.now() - 24 * 60 * 60 * 1000)) // Last 24h only
     })
     return unsubscribe
   }, [])
@@ -997,11 +998,12 @@ export function CouponCode({
   useEffect(() => {
     if (!showAdminPanel) return
     const unsubscribe = onOrdersUpdate((orders) => {
-      setFirebaseOrders(orders)
+      const safeOrders = Array.isArray(orders) ? orders : []
+      setFirebaseOrders(safeOrders)
       // Compute revenue and pending count from Firebase orders
-      const approvedRevenue = orders.filter(o => o.status === 'approved').reduce((sum, o) => sum + o.finalAmount, 0)
+      const approvedRevenue = safeOrders.filter(o => o.status === 'approved').reduce((sum, o) => sum + (o.finalAmount || 0), 0)
       setTotalRevenue(approvedRevenue)
-      setPendingOrderCount(orders.filter(o => o.status === 'pending').length)
+      setPendingOrderCount(safeOrders.filter(o => o.status === 'pending').length)
     })
     // Also listen for coin purchases from Firebase
     let coinUnsubscribe: (() => void) | null = null
@@ -1160,6 +1162,7 @@ export function CouponCode({
 
   // Handle claim
   const handleClaim = useCallback(async () => {
+    try {
     const code = codeInput.trim().toUpperCase()
     if (!code) {
       setStatusMessage({ text: 'Please enter a coupon code', type: 'error' })
@@ -1253,7 +1256,8 @@ export function CouponCode({
     }
 
     // Check Firebase broadcast coupons (real-time from admin)
-    const fbCoupon = firebaseCoupons.find(c => c.code.toUpperCase() === code)
+    const safeFirebaseCoupons = Array.isArray(firebaseCoupons) ? firebaseCoupons : []
+    const fbCoupon = safeFirebaseCoupons.find(c => c.code.toUpperCase() === code)
     if (fbCoupon) {
       // Check if already claimed
       const today = getTodayStr()
@@ -1277,15 +1281,15 @@ export function CouponCode({
       const newClaim: ClaimedCoupon = {
         code,
         date: today,
-        reward: `${fbCoupon.emoji} ${fbCoupon.reward}`,
+        reward: `${fbCoupon.emoji || '🎁'} ${fbCoupon.reward || 'Reward'}`,
         timestamp: Date.now(),
       }
       const updatedHistory = [newClaim, ...claimHistory].slice(0, 50)
       setClaimHistory(updatedHistory)
       saveClaimedCoupons(updatedHistory)
-      setShowReward({ label: fbCoupon.reward, emoji: fbCoupon.emoji })
-      setStatusMessage({ text: `Code redeemed! ${fbCoupon.emoji} ${fbCoupon.reward}`, type: 'success' })
-      onAddNotification('Coupon Reward! 🎉', `You received ${fbCoupon.emoji} ${fbCoupon.reward}!`, 'reward', '🎁')
+      setShowReward({ label: fbCoupon.reward || 'Reward', emoji: fbCoupon.emoji || '🎁' })
+      setStatusMessage({ text: `Code redeemed! ${fbCoupon.emoji || '🎁'} ${fbCoupon.reward || 'Reward'}`, type: 'success' })
+      onAddNotification('Coupon Reward! 🎉', `You received ${fbCoupon.emoji || '🎁'} ${fbCoupon.reward || 'Reward'}!`, 'reward', '🎁')
       setCodeInput('')
       return
     }
@@ -1411,6 +1415,10 @@ export function CouponCode({
     setShowReward({ label: reward.label, emoji: reward.emoji })
     setStatusMessage({ text: `Code redeemed! ${reward.emoji} ${reward.label}`, type: 'success' })
     setCodeInput('')
+    } catch (err) {
+      // Never crash on coupon claim
+      setStatusMessage({ text: 'Something went wrong. Please try again.', type: 'error' })
+    }
   }, [codeInput, claimHistory, customCodes, firebaseCoupons, pickRandomReward, applyReward, applyAdminReward, applyCustomReward, dayCodeSettings, nightCodeSettings, onAddCoins, onAddPowerUp, onAddSpinTickets, onAddNotification])
 
   // ===== ADMIN PANEL HANDLERS =====
@@ -1477,8 +1485,6 @@ export function CouponCode({
     const now = Date.now()
     const hoursSincePurchase = (now - purchaseDate) / (1000 * 60 * 60)
     const isDelayed = hoursSincePurchase > 24
-
-    // Check if it's a store order
     const isStoreOrder = entry.id.startsWith('store_')
     const storeOrderId = isStoreOrder ? entry.id.replace('store_', '') : null
 

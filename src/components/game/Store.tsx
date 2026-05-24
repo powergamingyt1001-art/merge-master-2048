@@ -2,13 +2,13 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Coins, Zap, Clock, AlertCircle, Copy, Check, Upload, FileText, ImageIcon, Trash2, ShoppingCart, Minus, Plus, Tag } from 'lucide-react'
+import { X, Coins, Zap, Clock, AlertCircle, Copy, Check, Upload, FileText, ImageIcon, Trash2, ShoppingCart, Minus, Plus, Tag, Gift, Users, Send } from 'lucide-react'
 import { getRandomLink } from '@/components/ads/AdOverlay'
 import { ScratchCard } from '@/components/game/ScratchCard'
-import { placeOrder as firebasePlaceOrder, onUserOrdersUpdate, type FirebaseStoreOrder } from '@/lib/firebase-service'
+import { placeOrder as firebasePlaceOrder, onUserOrdersUpdate, type FirebaseStoreOrder, onFriendsUpdate, type FriendData } from '@/lib/firebase-service'
 import { validateDiscountCoupon, consumeDiscountCoupon, type DiscountCoupon } from '@/components/game/CouponCode'
 import { db } from '@/lib/firebase'
-import { ref, set } from 'firebase/database'
+import { ref, set, push } from 'firebase/database'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -62,7 +62,7 @@ interface StoreOrder {
   upiId: string
 }
 
-type TabId = 'coins' | 'ability' | 'room' | 'spins' | 'history'
+type TabId = 'coins' | 'ability' | 'room' | 'spins' | 'gift' | 'history'
 
 // ─── Cart Types ────────────────────────────────────────────────────────────
 
@@ -600,12 +600,13 @@ function TagBadge({ label, color }: { label: string; color: string }) {
   )
 }
 
-function BuyButton({ onPress, label }: { onPress: () => void; label?: 'Add' | 'Buy' }) {
+function BuyButton({ onPress, label, disabled }: { onPress: () => void; label?: 'Add' | 'Buy'; disabled?: boolean }) {
   const isBuy = label === 'Buy'
   return (
     <button
       onClick={onPress}
-      className="w-full py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-transform hover:scale-[1.02] active:scale-95"
+      disabled={disabled}
+      className="w-full py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-transform hover:scale-[1.02] active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
       style={{
         background: isBuy ? 'linear-gradient(135deg, #EDC22E, #FFB300)' : 'linear-gradient(135deg, #EDC22E, #FF7A00)',
         color: '#FFFFFF',
@@ -1156,7 +1157,14 @@ function AbilityCard({
         <span className="text-xs font-bold" style={{ color: isCoinCurrency ? '#EDC22E' : 'rgba(255,255,255,0.6)' }}>
           {isCoinCurrency ? `💰 ${formatNumber(item.price)}` : `₹${item.price}`}
         </span>
-        {cartQuantity > 0 ? (
+        {/* Coin items: Buy directly (auto-add to wallet). INR items: Add to cart. */}
+        {isCoinCurrency ? (
+          <BuyButton
+            label="Buy"
+            onPress={() => onCoinBuy(item)}
+            disabled={!canAfford || isLimitReached}
+          />
+        ) : cartQuantity > 0 ? (
           <div className="flex items-center gap-1">
             <button onClick={() => onUpdateCartQuantity(item.id, -1)} className="w-6 h-6 rounded flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
               <Minus className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.5)' }} />
@@ -1167,17 +1175,10 @@ function AbilityCard({
             </button>
           </div>
         ) : (
-          <button
-            onClick={() => onAddToCart(item)}
-            disabled={isCoinCurrency && (!canAfford || isLimitReached)}
-            className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{
-              background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
-              color: '#FFFFFF',
-            }}
-          >
-            Add
-          </button>
+          <BuyButton
+            label="Add"
+            onPress={() => onAddToCart(item)}
+          />
         )}
       </div>
     </motion.div>
@@ -1374,11 +1375,208 @@ function RoomTab({ onBuy, onCoinBuy, coins, onAddRoomCards, onAddNotification, o
           </div>
           <button onClick={handleBuyRoomCardWithCoins} disabled={coins < 3000 || roomCardCoinPurchased}
             className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40"
-            style={{ background: 'linear-gradient(135deg, #E040FB, #7C4DFF)', color: '#FFFFFF' }}>
-            {roomCardCoinPurchased ? 'SOLD OUT' : 'ADD 💰'}
+            style={{ background: 'linear-gradient(135deg, #EDC22E, #FFB300)', color: '#FFFFFF' }}>
+            {roomCardCoinPurchased ? 'SOLD OUT' : 'Buy 💰'}
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─── Gift Tab ─────────────────────────────────────────────────────────────
+
+const GIFT_DAILY_LIMIT = 5
+const GIFT_SENT_KEY = 'mergeMaster2048_giftSentToday'
+
+interface GiftFriend extends FriendData {
+  friendId: string
+}
+
+function GiftTab({ playerId, coins, onDeductCoins, onAddNotification }: {
+  playerId: string
+  coins: number
+  onDeductCoins: (amount: number) => void
+  onAddNotification: (title: string, message: string, type: string, emoji: string) => void
+}) {
+  const [friends, setFriends] = useState<GiftFriend[]>([])
+  const [giftType, setGiftType] = useState<'coins' | 'hammer' | 'magnet' | 'blast'>('coins')
+  const [giftAmount, setGiftAmount] = useState(100)
+  const [selectedFriend, setSelectedFriend] = useState<string | null>(null)
+  const [sending, setSending] = useState(false)
+
+  // Listen for friends
+  useEffect(() => {
+    if (!playerId) return
+    const unsub = onFriendsUpdate(playerId, (friendsList) => {
+      const safeList = Array.isArray(friendsList) ? friendsList : []
+      setFriends(safeList as GiftFriend[])
+    })
+    return () => unsub()
+  }, [playerId])
+
+  // Track daily gift limit
+  const getGiftCountToday = useCallback(() => {
+    try {
+      const data = localStorage.getItem(GIFT_SENT_KEY)
+      if (!data) return 0
+      const parsed = JSON.parse(data)
+      const today = new Date().toISOString().split('T')[0]
+      if (parsed.date !== today) return 0
+      return parsed.count || 0
+    } catch { return 0 }
+  }, [])
+
+  const incrementGiftCount = useCallback(() => {
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const current = getGiftCountToday()
+      localStorage.setItem(GIFT_SENT_KEY, JSON.stringify({ date: today, count: current + 1 }))
+    } catch { /* ignore */ }
+  }, [getGiftCountToday])
+
+  const giftsSentToday = getGiftCountToday()
+  const giftsRemaining = Math.max(0, GIFT_DAILY_LIMIT - giftsSentToday)
+
+  const handleSendGift = useCallback(() => {
+    if (!selectedFriend) return
+    if (giftsRemaining <= 0) {
+      onAddNotification('Gift Limit', `You've sent ${GIFT_DAILY_LIMIT} gifts today. Come back tomorrow!`, 'system', '🎁')
+      return
+    }
+    if (giftType === 'coins' && coins < giftAmount) {
+      onAddNotification('Not Enough Coins', `You need ${giftAmount} coins to send this gift.`, 'system', '💰')
+      return
+    }
+    setSending(true)
+
+    // Deduct from sender
+    if (giftType === 'coins') {
+      onDeductCoins(giftAmount)
+    }
+
+    const friend = friends.find(f => f.friendId === selectedFriend)
+    const friendName = friend?.name || 'Friend'
+    const giftLabel = giftType === 'coins' ? `${giftAmount} Coins` : `${giftAmount} ${giftType.charAt(0).toUpperCase() + giftType.slice(1)}s`
+
+    // Send notification to friend via Firebase
+    try {
+      const notifRef = push(ref(db, `notifications/${selectedFriend}`))
+      void set(notifRef, {
+        type: 'gift',
+        fromPlayerId: playerId,
+        giftType,
+        giftAmount,
+        timestamp: Date.now(),
+        read: false,
+      })
+    } catch { /* silent */ }
+
+    incrementGiftCount()
+    onAddNotification('Gift Sent! 🎁', `You sent ${giftLabel} to ${friendName}!`, 'reward', '🎁')
+    setSending(false)
+    setSelectedFriend(null)
+  }, [selectedFriend, giftsRemaining, giftType, giftAmount, coins, friends, playerId, onDeductCoins, onAddNotification, incrementGiftCount])
+
+  const coinAmounts = [50, 100, 200, 500, 1000]
+  const abilityAmounts = [1, 3, 5]
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="p-3 rounded-xl" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.12)' }}>
+        <div className="flex items-center gap-2 mb-2">
+          <Gift className="w-4 h-4" style={{ color: '#EDC22E' }} />
+          <span className="text-xs font-bold" style={{ color: '#EDC22E' }}>Send Gift to Friends</span>
+        </div>
+        <p className="text-[9px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          {giftsRemaining}/{GIFT_DAILY_LIMIT} gifts remaining today
+        </p>
+      </div>
+
+      {/* Gift Type Selection */}
+      <div>
+        <p className="text-[10px] font-bold mb-2" style={{ color: 'rgba(255,255,255,0.6)' }}>What to gift:</p>
+        <div className="grid grid-cols-4 gap-2">
+          {[
+            { type: 'coins' as const, emoji: '💰', label: 'Coins' },
+            { type: 'hammer' as const, emoji: '🔨', label: 'Hammer' },
+            { type: 'magnet' as const, emoji: '🧲', label: 'Magnet' },
+            { type: 'blast' as const, emoji: '💣', label: 'Bomb' },
+          ].map((g) => (
+            <button key={g.type} onClick={() => setGiftType(g.type)}
+              className="flex flex-col items-center gap-1 p-2 rounded-xl transition-transform active:scale-95"
+              style={{
+                backgroundColor: giftType === g.type ? 'rgba(237,194,46,0.12)' : 'rgba(255,255,255,0.04)',
+                border: giftType === g.type ? '1px solid rgba(237,194,46,0.3)' : '1px solid rgba(255,255,255,0.08)',
+              }}>
+              <span className="text-lg">{g.emoji}</span>
+              <span className="text-[8px] font-bold" style={{ color: giftType === g.type ? '#EDC22E' : 'rgba(255,255,255,0.4)' }}>{g.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Amount Selection */}
+      <div>
+        <p className="text-[10px] font-bold mb-2" style={{ color: 'rgba(255,255,255,0.6)' }}>Amount:</p>
+        <div className="flex flex-wrap gap-2">
+          {(giftType === 'coins' ? coinAmounts : abilityAmounts).map((amt) => (
+            <button key={amt} onClick={() => setGiftAmount(amt)}
+              className="px-3 py-1.5 rounded-lg text-[10px] font-bold transition-transform active:scale-95"
+              style={{
+                backgroundColor: giftAmount === amt ? 'rgba(237,194,46,0.15)' : 'rgba(255,255,255,0.04)',
+                border: giftAmount === amt ? '1px solid rgba(237,194,46,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                color: giftAmount === amt ? '#EDC22E' : 'rgba(255,255,255,0.5)',
+              }}>
+              {giftType === 'coins' ? `${amt}` : `x${amt}`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Friend Selection */}
+      <div>
+        <p className="text-[10px] font-bold mb-2" style={{ color: 'rgba(255,255,255,0.6)' }}>Select Friend:</p>
+        {friends.length === 0 ? (
+          <div className="text-center py-6">
+            <Users className="w-8 h-8 mx-auto mb-2" style={{ color: 'rgba(255,255,255,0.15)' }} />
+            <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>No friends yet</p>
+            <p className="text-[8px]" style={{ color: 'rgba(255,255,255,0.2)' }}>Add friends from the Invite panel to send gifts!</p>
+          </div>
+        ) : (
+          <div className="space-y-1.5 max-h-48 overflow-y-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+            {friends.map((friend) => (
+              <button key={friend.friendId} onClick={() => setSelectedFriend(friend.friendId)}
+                className="w-full flex items-center gap-2 p-2 rounded-lg transition-transform active:scale-95"
+                style={{
+                  backgroundColor: selectedFriend === friend.friendId ? 'rgba(237,194,46,0.1)' : 'rgba(255,255,255,0.03)',
+                  border: selectedFriend === friend.friendId ? '1px solid rgba(237,194,46,0.3)' : '1px solid rgba(255,255,255,0.06)',
+                }}>
+                <span className="text-sm">{friend.avatar || '😎'}</span>
+                <div className="flex-1 text-left">
+                  <p className="text-[10px] font-semibold" style={{ color: 'rgba(255,255,255,0.7)' }}>{friend.name}</p>
+                  <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Lv.{friend.level || 1}</p>
+                </div>
+                {selectedFriend === friend.friendId && (
+                  <Check className="w-3.5 h-3.5" style={{ color: '#EDC22E' }} />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Send Button */}
+      <button onClick={handleSendGift} disabled={!selectedFriend || sending || giftsRemaining <= 0}
+        className="w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95 disabled:opacity-40"
+        style={{
+          background: selectedFriend && giftsRemaining > 0 ? 'linear-gradient(135deg, #EDC22E, #FF7A00)' : 'rgba(255,255,255,0.06)',
+          color: selectedFriend && giftsRemaining > 0 ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
+        }}>
+        <Send className="w-3.5 h-3.5" />
+        {sending ? 'Sending...' : `Send ${giftType === 'coins' ? giftAmount + ' Coins' : giftAmount + ' ' + giftType.charAt(0).toUpperCase() + giftType.slice(1) + (giftAmount > 1 ? 's' : '')}`}
+      </button>
     </div>
   )
 }
@@ -1579,7 +1777,8 @@ const SPIN_COIN_PACKS: SpinPack[] = [
 
 // ─── Spins Tab ──────────────────────────────────────────────────────────────
 
-function SpinsTab({ onAddToCart, coins, cart, onUpdateCartQuantity }: {
+function SpinsTab({ onCoinBuy, onAddToCart, coins, cart, onUpdateCartQuantity }: {
+  onCoinBuy: (item: AbilityItem) => void
   onAddToCart: (item: AbilityItem) => void
   coins: number
   cart: CartItem[]
@@ -1748,8 +1947,9 @@ function SpinsTab({ onAddToCart, coins, cart, onUpdateCartQuantity }: {
                     </button>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => onAddToCart({
+                  <BuyButton
+                    label="Buy"
+                    onPress={() => onCoinBuy({
                       id: pack.id,
                       emoji: '🎫',
                       name: `${pack.spins} Spin${pack.spins > 1 ? 's' : ''}${pack.bonusSpins ? ` +${pack.bonusSpins} FREE` : ''}`,
@@ -1759,14 +1959,7 @@ function SpinsTab({ onAddToCart, coins, cart, onUpdateCartQuantity }: {
                       currency: 'coin',
                     })}
                     disabled={isDisabled}
-                    className="px-3 py-1.5 rounded-lg font-bold text-[10px] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{
-                      background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
-                      color: '#FFFFFF',
-                    }}
-                  >
-                    Add
-                  </button>
+                  />
                 )}
               </motion.div>
             )
@@ -1889,10 +2082,21 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
         }
         recordPurchase(item.abilityType, item.quantity)
       }
+      // Check spin purchase limits
+      if (item.id.startsWith('spin-coin-')) {
+        const remaining = getRemainingSpinCoinPurchase()
+        if (remaining <= 0) {
+          onAddNotification('Limit Reached!', 'You\'ve reached the 3-day limit for coin spin purchases.', 'system', '⏳')
+          return
+        }
+        recordSpinCoinPurchase(item.quantity)
+      }
       // Deduct coins
       onDeductCoins(item.price)
-      // Add ability
-      if (item.abilityType === 'undo') {
+      // Add ability or spin tickets
+      if (item.id.startsWith('spin-coin-')) {
+        onAddSpinTickets?.(item.quantity)
+      } else if (item.abilityType === 'undo') {
         onAddUndos(item.quantity)
       } else if (item.abilityType === 'timer') {
         onAddPowerUp('extraTime', item.quantity)
@@ -1917,13 +2121,13 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
       }).catch(() => { /* silent fail */ })
 
       onAddNotification(
-        'Ability Purchased! 🎉',
+        item.id.startsWith('spin-coin-') ? 'Spins Purchased! 🎫' : 'Ability Purchased! 🎉',
         `You bought ${item.emoji} ${item.name} x${item.quantity} for ${formatNumber(item.price)} coins`,
         'reward',
         item.emoji
       )
     },
-    [coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos, playerId, playerName, userCode]
+    [coins, onAddNotification, onDeductCoins, onAddPowerUp, onAddUndos, onAddSpinTickets, playerId, playerName, userCode]
   )
 
   // Handle real-money purchase: open payment modal
@@ -1989,6 +2193,7 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
     { id: 'ability', label: 'Ability', icon: <Zap className="w-3.5 h-3.5" /> },
     { id: 'spins', label: 'Spins', icon: <span className="text-xs">🎫</span> },
     { id: 'room', label: 'Room', icon: <span className="text-xs">🃏</span> },
+    { id: 'gift', label: 'Gift', icon: <Gift className="w-3.5 h-3.5" /> },
     { id: 'history', label: 'History', icon: <Clock className="w-3.5 h-3.5" /> },
   ]
 
@@ -2434,7 +2639,7 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <SpinsTab onAddToCart={addToCart} coins={coins} cart={cart} onUpdateCartQuantity={updateCartQuantity} />
+                    <SpinsTab onCoinBuy={handleCoinBuy} onAddToCart={addToCart} coins={coins} cart={cart} onUpdateCartQuantity={updateCartQuantity} />
                   </motion.div>
                 )}
                 {activeTab === 'room' && (
@@ -2446,6 +2651,17 @@ export function Store({ isOpen, onClose, playerId, playerName, userCode, coins, 
                     transition={{ duration: 0.2 }}
                   >
                     <RoomTab onBuy={handleBuy} onCoinBuy={handleCoinBuy} coins={coins} onAddRoomCards={onAddRoomCards} onAddNotification={onAddNotification} onDeductCoins={onDeductCoins} cart={cart} onAddToCart={addToCart} onUpdateCartQuantity={updateCartQuantity} playerId={playerId} playerName={playerName} userCode={userCode} />
+                  </motion.div>
+                )}
+                {activeTab === 'gift' && (
+                  <motion.div
+                    key="gift"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <GiftTab playerId={playerId} coins={coins} onDeductCoins={onDeductCoins} onAddNotification={onAddNotification} />
                   </motion.div>
                 )}
                 {activeTab === 'history' && (

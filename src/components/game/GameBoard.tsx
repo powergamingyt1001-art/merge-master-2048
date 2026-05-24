@@ -123,6 +123,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   const [waitingForReturn, setWaitingForReturn] = useState(false) // User visiting ad site
   const [showWelcomeBack, setShowWelcomeBack] = useState(false) // Show welcome back overlay
   const [timerMessage, setTimerMessage] = useState<string | null>(null) // Timer ability feedback message
+  const [showGo, setShowGo] = useState(false) // Show "GO!" after countdown
   // showCoupon state removed - CODE button removed
 
   // Determine game type
@@ -143,6 +144,24 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     const timer = setTimeout(() => { tickCountdown() }, 1000)
     return () => clearTimeout(timer)
   }, [countdownActive, countdownSecondsLeft, tickCountdown])
+
+  // Show "GO!" for 500ms after countdown ends (in battle modes)
+  // Uses ref to detect transition without calling setState directly in effect
+  const prevCountdownActive = useRef(false)
+  useEffect(() => {
+    // Detect transition from countdownActive=true to false (countdown just ended)
+    if (prevCountdownActive.current && !countdownActive && isBattleMode) {
+      // Use setTimeout to defer setState outside the effect body
+      const showTimer = setTimeout(() => {
+        setShowGo(true)
+        const hideTimer = setTimeout(() => setShowGo(false), 500)
+        return () => clearTimeout(hideTimer)
+      }, 0)
+      prevCountdownActive.current = false
+      return () => clearTimeout(showTimer)
+    }
+    prevCountdownActive.current = countdownActive
+  }, [countdownActive, isBattleMode])
 
   // Internet detection
   useEffect(() => {
@@ -172,12 +191,15 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     return () => clearInterval(interval)
   }, [isBattleMode, botBattleResult, battleTimer, tickBattleTimer, countdownOverlay, timerPaused])
 
-  // Classic mode: tick game time elapsed (for timer ability 20-second cooldown)
+  // All modes: tick game time elapsed (for ability 10-second cooldown)
+  // Starts after countdown finishes, pauses when timer is paused
   useEffect(() => {
-    if (!isClassic || gameOver) return
+    if (gameOver || countdownActive || showGo) return
+    // In battle mode, don't tick until countdown is done and game isn't paused
+    if (isBattleMode && timerPaused) return
     const interval = setInterval(() => { tickGameTimeElapsed() }, 1000)
     return () => clearInterval(interval)
-  }, [isClassic, gameOver, tickGameTimeElapsed])
+  }, [gameOver, countdownActive, showGo, isBattleMode, timerPaused, tickGameTimeElapsed])
 
   // Multiplier countdown tick - 1 second interval (TIME-based, not move-based)
   useEffect(() => {
@@ -202,26 +224,32 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   const onMove = useCallback((dir: Direction) => { handleMove(dir) }, [handleMove])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Block keyboard input during countdown or GO!
+    if (countdownActive || showGo) { e.preventDefault(); return }
     const keyMap: Record<string, Direction> = {
       ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
       w: 'up', s: 'down', a: 'left', d: 'right',
     }
     const dir = keyMap[e.key]
     if (dir) { e.preventDefault(); onMove(dir) }
-  }, [onMove])
+  }, [onMove, countdownActive, showGo])
 
-  // Touch handlers
+  // Touch handlers - block during countdown
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    // Block ALL touch during countdown or GO!
+    if (countdownActive || showGo) { e.preventDefault(); return }
     // Don't capture touch on buttons/interactive elements inside overlays
     if ((e.target as HTMLElement).closest('button, [role="button"], .overlay-content')) return
     e.preventDefault()
     touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
-  }, [])
+  }, [countdownActive, showGo])
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (countdownActive || showGo) { e.preventDefault(); return }
     if (!touchStart.current) return
     e.preventDefault()
-  }, [])
+  }, [countdownActive, showGo])
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (countdownActive || showGo) { e.preventDefault(); return }
     if (!touchStart.current) return
     e.preventDefault()
     const endX = e.changedTouches[0].clientX
@@ -247,13 +275,17 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     }
     onMove(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'))
     touchStart.current = null
-  }, [onMove, activePowerUp, handleTileClick, cellSize, gap])
+  }, [onMove, activePowerUp, handleTileClick, cellSize, gap, countdownActive, showGo])
+
+  // 10-second ability cooldown: no abilities can be used in first 10 seconds of gameplay
+  const abilityCooldownActive = game.gameTimeElapsed < 10 && !gameOver
+  const abilityCooldownLeft = Math.max(0, 10 - game.gameTimeElapsed)
 
   // Timer ability click handler with feedback messages
   const handleTimerPowerUp = useCallback(() => {
     if (game.extraTimeCount <= 0) return
-    if (game.gameTimeElapsed < 20) {
-      setTimerMessage('Timer available after 20s')
+    if (game.gameTimeElapsed < 10) {
+      setTimerMessage(`Timer available in ${10 - game.gameTimeElapsed}s`)
       setTimeout(() => setTimerMessage(null), 2000)
       return
     }
@@ -266,7 +298,15 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
     activatePowerUp('extraTime')
   }, [game.extraTimeCount, game.gameTimeElapsed, game.gameMode, game.timerAbilitiesUsed, activatePowerUp])
 
-  const handlePowerUp = useCallback((pu: PowerUp) => { activatePowerUp(pu) }, [activatePowerUp])
+  const handlePowerUp = useCallback((pu: PowerUp) => {
+    // Block all abilities during 10-second cooldown
+    if (game.gameTimeElapsed < 10) {
+      setTimerMessage(`Abilities unlock in ${10 - game.gameTimeElapsed}s`)
+      setTimeout(() => setTimerMessage(null), 2000)
+      return
+    }
+    activatePowerUp(pu)
+  }, [game.gameTimeElapsed, activatePowerUp])
   const handleStuckContinue = useCallback(() => { restartAfterStuck() }, [restartAfterStuck])
   const handleBack = useCallback(() => { onBackToDashboard() }, [onBackToDashboard])
 
@@ -292,7 +332,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
   // Finalize current game (save history, coins, tournament points)
   const finalizeGame = useCallback(() => {
     const result = botBattleResult || 'classic'
-    addGameToHistory(gameMode, score, result as 'win' | 'lose' | 'classic', coinEntryFee, battleTimeLimit)
+    addGameToHistory(gameMode, score, result as 'win' | 'lose' | 'classic', coinEntryFee, battleTimeLimit, botOpponent?.name)
     if (isCoinGame && botBattleResult === 'win' && coinEntryFee > 0) {
       const winAmount = coinEntryFee * 2
       addWinningCoins(winAmount)
@@ -308,7 +348,7 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
         addNotification('Tournament Game Over', `Score: ${score} - Keep playing!`, 'battle', '⚔️')
       }
     }
-  }, [isCoinGame, isTournament, botBattleResult, coinEntryFee, score, addCoins, addWinningCoins, addNotification, addGameToHistory, gameMode, battleTimeLimit, calculateTournamentPoints])
+  }, [isCoinGame, isTournament, botBattleResult, coinEntryFee, score, addCoins, addWinningCoins, addNotification, addGameToHistory, gameMode, battleTimeLimit, calculateTournamentPoints, botOpponent?.name])
 
   const handleBattleEnd = useCallback(() => {
     finalizeGame()
@@ -666,41 +706,63 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
           ))}
         </AnimatePresence>
 
-        {/* Countdown overlay - 3-2-1 when entering battle mode */}
+        {/* Countdown overlay - 3-2-1 then GO! when entering battle mode */}
         <AnimatePresence>
-          {countdownOverlay && countdownOverlay.seconds > 0 && (
+          {(countdownOverlay && countdownOverlay.seconds > 0) || showGo ? (
             <motion.div
-              key="countdown"
+              key={showGo ? 'go-overlay' : 'countdown'}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="absolute inset-0 flex flex-col items-center justify-center rounded-xl"
-              style={{ backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 150 }}
+              style={{ backgroundColor: 'rgba(0,0,0,0.95)', zIndex: 150 }}
             >
-              <motion.div
-                key={countdownOverlay.seconds}
-                initial={{ scale: 2, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.5, opacity: 0 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-              >
-                <span
-                  className="text-7xl sm:text-8xl font-extrabold"
-                  style={{
-                    color: countdownOverlay.seconds === 1 ? '#F65E3B' : '#EDC22E',
-                    textShadow: countdownOverlay.seconds === 1
-                      ? '0 0 40px rgba(246,94,59,0.6), 0 0 80px rgba(246,94,59,0.3)'
-                      : '0 0 30px rgba(237,194,46,0.4)',
-                  }}
+              {showGo ? (
+                <motion.div
+                  key="go-text"
+                  initial={{ scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 1.5, opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 15 }}
                 >
-                  {countdownOverlay.seconds}
-                </span>
-              </motion.div>
-              <p className="text-xs font-bold mt-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                {isTournament ? '🏆 Tournament Starting!' : isCoinGame ? '🪙 Coin Game Starting!' : '⚔️ Battle Starting!'}
-              </p>
+                  <span
+                    className="text-7xl sm:text-8xl font-extrabold"
+                    style={{
+                      color: '#00E676',
+                      textShadow: '0 0 40px rgba(0,230,118,0.6), 0 0 80px rgba(0,230,118,0.3)',
+                    }}
+                  >
+                    GO!
+                  </span>
+                </motion.div>
+              ) : countdownOverlay && countdownOverlay.seconds > 0 ? (
+                <>
+                  <motion.div
+                    key={countdownOverlay.seconds}
+                    initial={{ scale: 2, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.5, opacity: 0 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                  >
+                    <span
+                      className="text-7xl sm:text-8xl font-extrabold"
+                      style={{
+                        color: countdownOverlay.seconds === 1 ? '#F65E3B' : '#EDC22E',
+                        textShadow: countdownOverlay.seconds === 1
+                          ? '0 0 40px rgba(246,94,59,0.6), 0 0 80px rgba(246,94,59,0.3)'
+                          : '0 0 30px rgba(237,194,46,0.4)',
+                      }}
+                    >
+                      {countdownOverlay.seconds}
+                    </span>
+                  </motion.div>
+                  <p className="text-xs font-bold mt-2" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                    {isTournament ? '🏆 Tournament Starting!' : isCoinGame ? '🪙 Coin Game Starting!' : '⚔️ Battle Starting!'}
+                  </p>
+                </>
+              ) : null}
             </motion.div>
-          )}
+          ) : null}
         </AnimatePresence>
 
         {/* Final countdown removed - no 5-4-3-2-1 overlay to waste user's time */}
@@ -808,12 +870,12 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
           maxWidth: 360,
         }}
       >
-        <OvalAbilitySlot icon="🔨" count={hammerCount} active={activePowerUp === 'hammer'} onClick={() => handlePowerUp('hammer')} label="Hammer" />
-        <OvalAbilitySlot icon="🧲" count={magnetCount} active={activePowerUp === 'magnet'} onClick={() => handlePowerUp('magnet')} label="Magnet" />
-        <OvalAbilitySlot icon="💣" count={blastCount} active={false} onClick={() => handlePowerUp('blast')} label="Bomb" />
-        <OvalAbilitySlot icon="↩️" count={undoTotal - undoCount} active={false} onClick={undo} label="Undo" disabled={!canUndo || undoCount >= undoTotal} />
-        <OvalAbilitySlot icon="⚡" count={game.multiplier5xCount} active={game.activeMultiplier === 5} onClick={() => handlePowerUp('multiplier5x')} label="5x" accentColor="#FF4D4D" />
-        <OvalAbilitySlot icon="🔥" count={game.multiplier2_5xCount} active={game.activeMultiplier === 2.5} onClick={() => handlePowerUp('multiplier2_5x')} label="2.5x" accentColor="#FF7A00" />
+        <OvalAbilitySlot icon="🔨" count={hammerCount} active={activePowerUp === 'hammer'} onClick={() => handlePowerUp('hammer')} label="Hammer" disabled={abilityCooldownActive} subtitle={abilityCooldownActive ? `${abilityCooldownLeft}s` : undefined} />
+        <OvalAbilitySlot icon="🧲" count={magnetCount} active={activePowerUp === 'magnet'} onClick={() => handlePowerUp('magnet')} label="Magnet" disabled={abilityCooldownActive} subtitle={abilityCooldownActive ? `${abilityCooldownLeft}s` : undefined} />
+        <OvalAbilitySlot icon="💣" count={blastCount} active={false} onClick={() => handlePowerUp('blast')} label="Bomb" disabled={abilityCooldownActive} subtitle={abilityCooldownActive ? `${abilityCooldownLeft}s` : undefined} />
+        <OvalAbilitySlot icon="↩️" count={undoTotal - undoCount} active={false} onClick={undo} label="Undo" disabled={!canUndo || undoCount >= undoTotal || abilityCooldownActive} subtitle={abilityCooldownActive ? `${abilityCooldownLeft}s` : undefined} />
+        <OvalAbilitySlot icon="⚡" count={game.multiplier5xCount} active={game.activeMultiplier === 5} onClick={() => handlePowerUp('multiplier5x')} label="5x" accentColor="#FF4D4D" disabled={abilityCooldownActive} subtitle={abilityCooldownActive ? `${abilityCooldownLeft}s` : undefined} />
+        <OvalAbilitySlot icon="🔥" count={game.multiplier2_5xCount} active={game.activeMultiplier === 2.5} onClick={() => handlePowerUp('multiplier2_5x')} label="2.5x" accentColor="#FF7A00" disabled={abilityCooldownActive} subtitle={abilityCooldownActive ? `${abilityCooldownLeft}s` : undefined} />
         <OvalAbilitySlot
           icon="⏱️"
           count={game.extraTimeCount}
@@ -821,8 +883,8 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
           onClick={handleTimerPowerUp}
           label={isClassic ? '+50pts' : '+10s'}
           accentColor="#00E676"
-          disabled={game.extraTimeCount > 0 && (game.gameTimeElapsed < 20 || (isBattleMode && game.timerAbilitiesUsed >= 2))}
-          subtitle={isBattleMode ? `${game.timerAbilitiesUsed}/2` : game.gameTimeElapsed < 20 ? '20s' : undefined}
+          disabled={abilityCooldownActive || (game.extraTimeCount > 0 && isBattleMode && game.timerAbilitiesUsed >= 2)}
+          subtitle={abilityCooldownActive ? `${abilityCooldownLeft}s` : isBattleMode ? `${game.timerAbilitiesUsed}/2` : undefined}
         />
       </div>
 

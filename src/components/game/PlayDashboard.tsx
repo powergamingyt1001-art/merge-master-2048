@@ -633,7 +633,7 @@ export function PlayDashboard({
             </button>
           </div>
 
-          {/* Quick Actions Row 2: Rank + Invite + Friends */}
+          {/* Quick Actions Row 2: Rank + Invite + Room Fight */}
           <div className="w-full grid grid-cols-3 gap-1.5">
             <button onClick={() => setShowLeaderboard(true)}
               className="flex items-center justify-center gap-1.5 py-3 rounded-lg transition-transform active:scale-95"
@@ -653,20 +653,14 @@ export function PlayDashboard({
                 <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>20% Win / 2% Loss</p>
               </div>
             </button>
-            <button onClick={() => setShowFriends(true)}
-              className="flex items-center justify-center gap-1.5 py-3 rounded-lg transition-transform active:scale-95 relative"
-              style={{ backgroundColor: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.12)' }}>
-              <span className="text-lg">👥</span>
+            <button onClick={() => setShowRoomFight(true)}
+              className="flex items-center justify-center gap-1.5 py-3 rounded-lg transition-transform active:scale-95"
+              style={{ backgroundColor: 'rgba(246,94,59,0.08)', border: '1px solid rgba(246,94,59,0.18)' }}>
+              <span className="text-lg">⚔️</span>
               <div className="text-left">
-                <p className="text-[9px] font-bold" style={{ color: '#00E676' }}>Friends</p>
-                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>{friendsList.length} friends</p>
+                <p className="text-[9px] font-bold" style={{ color: '#F65E3B' }}>Room</p>
+                <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Room Fight</p>
               </div>
-              {friendRequests.length > 0 && (
-                <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[6px] font-bold"
-                  style={{ backgroundColor: '#F65E3B', color: '#FFFFFF' }}>
-                  {friendRequests.length}
-                </div>
-              )}
             </button>
           </div>
 

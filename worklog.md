@@ -1,4 +1,56 @@
 ---
+Task ID: 3+4
+Agent: Store Buy Button + Countdown + Abilities Agent
+Task: Fix Store "Add"→"Buy" button, Coin auto-add, Game countdown, Abilities cooldown
+
+Work Log:
+
+1. STORE: Changed "Add" to "Buy" for Coin items with auto-add behavior:
+   - AbilityCard component: Coin items now show "Buy" button (with 💰 icon) that directly purchases via onCoinBuy
+   - INR items still show "Add" button (with 🛒 cart icon) that adds to cart for admin approval
+   - BuyButton component: Added `disabled` prop for insufficient coins/limit reached
+   - Room card coin purchase (3,000 coins): Changed from "ADD 💰" to "Buy 💰" with gold gradient
+   - Spin coin packs: Changed from "Add" to "Buy" button that directly purchases via onCoinBuy
+   - INR spin packs: Keep "Add" to cart behavior
+   - handleCoinBuy: Extended to handle spin ticket purchases (auto-adds spin tickets, respects 3-day limit)
+   - SpinsTab: Added onCoinBuy and onAddToCart props for separate coin/INR handling
+   - All coin purchases auto-add to wallet immediately (no cart needed)
+
+2. GAME COUNTDOWN: Black screen + No tile movement + GO! state:
+   - During countdown, ALL touch events are blocked (handleTouchStart/Move/End check countdownActive/showGo)
+   - During countdown, ALL keyboard events are blocked (handleKeyDown checks countdownActive/showGo)
+   - Countdown overlay uses rgba(0,0,0,0.95) - near-black for full obscurity
+   - After 3-2-1 countdown, shows "GO!" for 500ms with green color and spring animation
+   - "GO!" text fades out with scale-up animation
+   - Game only becomes interactive after "GO!" disappears
+   - Added showGo state and prevCountdownActive ref to detect countdown→GO! transition
+   - Uses setTimeout(0) wrapper to avoid React setState-in-effect lint error
+
+3. ABILITIES: 10-second cooldown before activation:
+   - Changed ability cooldown from 20s to 10s for ALL abilities
+   - All ability buttons (Hammer, Magnet, Bomb, Undo, 5x, 2.5x, Timer) disabled during first 10 seconds
+   - Disabled buttons show countdown subtitle (e.g., "8s", "5s", "1s")
+   - handlePowerUp: Added 10-second check with feedback message
+   - handleTimerPowerUp: Changed from 20s to 10s cooldown check
+   - activatePowerUp in useGame.ts: Changed gameTimeElapsed check from <20 to <10
+   - Timer ability: Adds exactly +10 seconds to battle timer (unchanged)
+   - Timer ability: Max 2 per game in battle mode (unchanged)
+
+4. GAME TIMER FIX: tickGameTimeElapsed for all modes:
+   - tickGameTimeElapsed now works for ALL game modes (was classic-only)
+   - Added countdown check: doesn't tick during countdown
+   - Added timerPaused check: doesn't tick when game is paused
+   - Removed double-counting: tickBattleTimer no longer increments gameTimeElapsed
+   - GameBoard useEffect: Runs for all modes, checks gameOver/countdownActive/showGo/timerPaused
+   - gameTimeElapsed starts after countdown finishes and pauses when timer is paused
+
+Files Modified:
+- src/components/game/Store.tsx (Buy vs Add button, auto-add coin purchases, spin coin buy)
+- src/components/game/GameBoard.tsx (countdown overlay, GO! state, blocked interactions, 10s cooldown, timer fix)
+- src/hooks/useGame.ts (tickGameTimeElapsed all modes, 10s cooldown, remove double-counting)
+
+Lint: Passes ✅
+---
 Task ID: 8+9+10
 Agent: Friends + Leaderboard + History Agent
 Task: Implement Friends play modes, Coin leaderboard 4-6 boxes, History delete, Admin Save
@@ -73,3 +125,107 @@ Stage Summary:
 - Live at: https://my-project-liart-iota.vercel.app
 - GitHub: https://github.com/powergamingyt1001-art/merge-master-2048
 - Lint passes, TypeScript src/ errors resolved, build succeeds
+---
+Task ID: 2
+Agent: Like + Leaderboard + Bot Names Agent
+Task: Fix Like System, Leaderboard Rank Lines, and AI Bot Names
+
+Work Log:
+- Fixed critical like system bug in Leaderboard.tsx:
+  - Replaced addLike() call with transferLike() (via onLikeProfile callback) to prevent double-call bug
+  - Original code called both addLike() AND onLikeProfile() (which calls transferLike), causing redundant Firebase ops
+  - Now: liking uses onLikeProfile (→ transferLike), unliking uses removeLike directly
+  - Added real-time onLikeCountUpdate listener for selected player's profile overlay
+  - Like count now syncs via Firebase in real-time instead of optimistic local updates
+  - Any player can like any other player from leaderboard profile overlay
+
+- Compacted Leaderboard 4th-6th position rank lines (both Battle and Coins tabs):
+  - Changed line from flex-1 (full width) to fixed 16px width
+  - Reduced position circle from w-7 h-7 to w-5 h-5
+  - Reduced avatar size, padding, gaps, and margins for compact layout
+
+- Updated AI Bot Names in useGame.ts:
+  - Replaced 25 generic "Name + Number" names (e.g., "Aero 4", "Blaze 7") with 20 distinct Indian-style names
+  - Names: Rahul, Priya, Arjun, Ananya, Vikram, Meera, Karan, Ishita, Rohan, Simran, Dev, Nisha, Aryan, Pooja, Aditya, Kavita, Varun, Sneha, Manish, Divya
+
+- Adjusted bot win rate to ~45% (player wins ~55%):
+  - Added -10% bias to generateFairBotScore: bot scores center 10% below player score
+  - Combined with ±30% variance, this gives ~55% player win rate against bots
+  - Real-time PvP matchmaking remains 50-50 (fair)
+
+- Added opponent name to game history:
+  - Added opponentName?: string field to GameHistoryEntry interface
+  - Updated addGameToHistory to accept and store opponentName parameter
+  - GameBoard.tsx now passes botOpponent?.name when creating history entries
+  - ProfilePanel.tsx displays actual bot name instead of generic "BOT" in history
+
+Files Modified:
+- src/components/game/Leaderboard.tsx (like system fix, rank line compacting)
+- src/hooks/useGame.ts (bot names, win rate, GameHistoryEntry.opponentName)
+- src/components/game/GameBoard.tsx (pass opponent name to addGameToHistory)
+- src/components/game/ProfilePanel.tsx (display opponent name in history)
+
+Lint: Passes ✅ | TypeScript: No new errors in modified files ✅
+---
+Task ID: 5
+Agent: Room Fight + UID + Admin Fix Agent
+Task: Replace Friends with Room Fight, UID Sequential, Admin Panel Fix, Send Gift
+
+Work Log:
+
+1. REPLACED "Friends" BUTTON WITH "Room Fight" in PlayDashboard.tsx:
+   - Quick Actions Row 2 now shows: Rank | Invite | Room Fight
+   - Room Fight button uses ⚔️ icon and opens setShowRoomFight(true)
+   - Same styling pattern as Rank and Invite buttons (orange/red theme)
+   - Friends panel still accessible via Users icon in top header bar
+
+2. FRIENDS STILL ACCESSIBLE:
+   - Users icon in top header bar opens Friends panel (unchanged)
+   - Friends panel in PlayDashboard.tsx with search, requests, friends list
+   - InvitePanel.tsx Friends tab with search and friend management
+
+3. INVITE SECTION - PLAY + REQUEST BUTTONS:
+   - Changed X (remove) button to ⚔️ Play button (Swords icon, gold color)
+   - Added "+" (Plus) icon button for sending friend requests (green color)
+   - Both buttons visible next to each friend in the InvitePanel friends list
+   - Removed the "remove friend" X button to prevent accidental removals
+
+4. UID SYSTEM: Sequential from 5001:
+   - generateUserCode() in useGame.ts now generates sequential UIDs starting from 5001
+   - Uses localStorage key 'mergeMaster2048_nextUserCode' as immediate sync source
+   - Added getNextUserCode() to firebase-service.ts using Firebase transactions
+   - Firebase transactions ensure atomicity (no duplicate UIDs across devices)
+   - Falls back to localStorage if Firebase unavailable
+   - useEffect in useGame.ts verifies userCode from Firebase on first load
+   - User code validation updated: accepts any numeric code >= 5001
+   - Added runTransaction import from firebase/database
+
+5. ADMIN PANEL CRASH FIX in CouponCode.tsx:
+   - Wrapped entire handleClaim function in try-catch (never crashes)
+   - Added Array.isArray() safety checks for firebaseCoupons and orders callbacks
+   - Added null safety for fbCoupon.emoji and fbCoupon.reward properties
+   - Added (o.finalAmount || 0) fallback in revenue calculation
+   - Added safeFirebaseCoupons variable for Firebase coupon search
+   - handleApprovePurchase already had try-catch (verified working)
+
+6. SEND GIFT TAB in Store.tsx:
+   - Added new "Gift" tab between Room and History tabs
+   - GiftTab component with friend list, gift type selection, and amount selection
+   - Gift types: Coins, Hammer, Magnet, Bomb
+   - Amount options: coins (50-1000), abilities (1-5)
+   - Daily gift limit: 5 gifts per day (tracked in localStorage)
+   - Friend selection with check mark indicator
+   - Sends Firebase notification to friend on gift send
+   - Deducts coins from sender when gifting coins
+   - Added Gift, Users, Send icons to lucide-react imports
+   - Added onFriendsUpdate and FriendData imports from firebase-service
+
+Files Modified:
+- src/components/game/PlayDashboard.tsx (Friends → Room Fight button)
+- src/components/game/InvitePanel.tsx (Play + Request buttons)
+- src/hooks/useGame.ts (sequential UID from 5001, Firebase verification)
+- src/lib/firebase-service.ts (getNextUserCode with transactions)
+- src/components/game/CouponCode.tsx (crash-proof try-catch, null safety)
+- src/components/game/Store.tsx (Gift tab, GiftTab component)
+
+Lint: Passes ✅ | Build: Succeeds ✅

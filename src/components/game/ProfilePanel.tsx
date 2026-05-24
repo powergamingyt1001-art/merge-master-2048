@@ -892,7 +892,7 @@ export function ProfilePanel({
                             <div className="flex items-center gap-3">
                               <div>
                                 <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Opponent</p>
-                                <p className="text-[9px] font-mono font-bold" style={{ color: '#00FFFF' }}>{entry.mode === 'classic' ? '—' : 'BOT'}</p>
+                                <p className="text-[9px] font-mono font-bold" style={{ color: '#00FFFF' }}>{entry.mode === 'classic' ? '—' : (entry.opponentName || 'BOT')}</p>
                               </div>
                               <div>
                                 <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.35)' }}>You</p>

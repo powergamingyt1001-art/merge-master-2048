@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { syncPlayerToFirebase, processReferral, processCommissionForReferrer, getReferrals, onReferralsUpdate, getCommissionNotifications, claimCommissionNotification, type FirebaseReferral, joinMatchmaking, leaveMatchmaking, findMatch, onMatchmakingUpdate, cleanupStaleMatchmaking, createBattle, joinBattle, onBattleUpdate, updateBattleScore, finishBattle, leaveBattle as firebaseLeaveBattle, markMatched, type MatchmakingEntry, type FirebaseBattle, onUserNotificationsUpdate, markNotificationDelivered, transferLike } from '@/lib/firebase-service'
+import { syncPlayerToFirebase, processReferral, processCommissionForReferrer, getReferrals, onReferralsUpdate, getCommissionNotifications, claimCommissionNotification, type FirebaseReferral, joinMatchmaking, leaveMatchmaking, findMatch, onMatchmakingUpdate, cleanupStaleMatchmaking, createBattle, joinBattle, onBattleUpdate, updateBattleScore, finishBattle, leaveBattle as firebaseLeaveBattle, markMatched, type MatchmakingEntry, type FirebaseBattle, onUserNotificationsUpdate, markNotificationDelivered, transferLike, getNextUserCode } from '@/lib/firebase-service'
 
 export type Direction = 'up' | 'down' | 'left' | 'right'
 export type PowerUp = 'hammer' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x' | 'extraTime'
@@ -48,6 +48,7 @@ export interface GameHistoryEntry {
   result: 'win' | 'lose' | 'classic'
   entryFee: number
   timeLimit: number
+  opponentName?: string
 }
 
 export interface DailyTaskReward {
@@ -198,31 +199,26 @@ export interface GameState {
 }
 
 const BOT_NAMES = [
-  { name: 'Aero 4', avatar: '🦅' },
-  { name: 'Blaze 7', avatar: '🔥' },
-  { name: 'Viper 9', avatar: '🐍' },
-  { name: 'Nova 3', avatar: '💫' },
-  { name: 'Storm 6', avatar: '⚡' },
-  { name: 'Raze 2', avatar: '💥' },
-  { name: 'Fang 8', avatar: '🐺' },
-  { name: 'Drift 5', avatar: '🌪️' },
-  { name: 'Apex 1', avatar: '🏆' },
-  { name: 'Volt 11', avatar: '⚡' },
-  { name: 'Shadow 3', avatar: '🌑' },
-  { name: 'Phantom 7', avatar: '👻' },
-  { name: 'Titan 5', avatar: '🗿' },
-  { name: 'Echo 9', avatar: '🔊' },
-  { name: 'Fury 4', avatar: '😡' },
-  { name: 'Onyx 2', avatar: '🖤' },
-  { name: 'Nexus 6', avatar: '🔮' },
-  { name: 'Zenith 8', avatar: '🏔️' },
-  { name: 'Cipher 3', avatar: '🔐' },
-  { name: 'Rogue 7', avatar: '🗡️' },
-  { name: 'Flux 10', avatar: '🌊' },
-  { name: 'Saber 4', avatar: '⚔️' },
-  { name: 'Blitz 6', avatar: '💥' },
-  { name: 'Omega 1', avatar: '🅾️' },
-  { name: 'Spark 5', avatar: '✨' },
+  { name: 'Rahul', avatar: '🦅' },
+  { name: 'Priya', avatar: '🔥' },
+  { name: 'Arjun', avatar: '🐍' },
+  { name: 'Ananya', avatar: '💫' },
+  { name: 'Vikram', avatar: '⚡' },
+  { name: 'Meera', avatar: '💥' },
+  { name: 'Karan', avatar: '🐺' },
+  { name: 'Ishita', avatar: '🌪️' },
+  { name: 'Rohan', avatar: '🏆' },
+  { name: 'Simran', avatar: '⚡' },
+  { name: 'Dev', avatar: '🌑' },
+  { name: 'Nisha', avatar: '👻' },
+  { name: 'Aryan', avatar: '🗿' },
+  { name: 'Pooja', avatar: '🔊' },
+  { name: 'Aditya', avatar: '😡' },
+  { name: 'Kavita', avatar: '🖤' },
+  { name: 'Varun', avatar: '🔮' },
+  { name: 'Sneha', avatar: '🏔️' },
+  { name: 'Manish', avatar: '🔐' },
+  { name: 'Divya', avatar: '🗡️' },
 ]
 
 export const PLAYER_AVATARS = ['😎', '🦊', '🐺', '🦅', '🐉', '🦁', '👑', '🔥', '💎', '⚡']
@@ -252,8 +248,20 @@ function generatePlayerId(): string {
 }
 
 function generateUserCode(): string {
-  // Generate a random 6-digit numeric UID
-  return String(Math.floor(100000 + Math.random() * 900000))
+  // Sequential UID starting from 5001 using localStorage
+  // Firebase will be checked async in useEffect to correct/verify
+  const START_CODE = 5001
+  const LOCAL_KEY = 'mergeMaster2048_nextUserCode'
+  try {
+    const stored = localStorage.getItem(LOCAL_KEY)
+    let nextCode = stored ? parseInt(stored, 10) : START_CODE
+    if (isNaN(nextCode) || nextCode < START_CODE) nextCode = START_CODE
+    const code = String(nextCode)
+    localStorage.setItem(LOCAL_KEY, String(nextCode + 1))
+    return code
+  } catch {
+    return String(START_CODE)
+  }
 }
 
 function getEmptyCells(tiles: Tile[]): [number, number][] {
@@ -441,14 +449,17 @@ function generateBotOpponent(): BotOpponent {
   return { ...bot, finalScore: 0 } // Score set to 0; will be generated at game end
 }
 
-// Generate fair bot score at game end - 50/50 win chance
+// Generate fair bot score at game end - ~45% bot win rate (player wins ~55%)
 // Score is based on player's ACTUAL score, not best score
-// This ensures truly fair gameplay where both have equal chances
+// Bot score is slightly lower on average so player has a slight advantage
 function generateFairBotScore(playerScore: number): number {
   const base = Math.max(playerScore, 100)
-  // ±30% variance around player's score for close, exciting games
+  // Bias toward lower scores: center the distribution 10% below player score
+  // This gives the player roughly a 55% win rate against bots
+  const bias = -base * 0.10
+  // ±30% variance around the biased center
   const variance = base * 0.3
-  return Math.round(Math.max(50, base + (Math.random() * variance * 2 - variance)))
+  return Math.round(Math.max(50, base + bias + (Math.random() * variance * 2 - variance)))
 }
 
 // ============================================================
@@ -1133,7 +1144,8 @@ export function useGame() {
       // Validate userCode is numeric; if not, regenerate
       userCode: (() => {
         const code = saved.userCode || ''
-        if (code && /^\d{6}$/.test(code)) return code
+        // Accept any numeric code (4+ digits) - was 6-digit random, now sequential from 5001
+        if (code && /^\d+$/.test(code) && parseInt(code, 10) >= 5001) return code
         return generateUserCode()
       })(),
       totalCoinsEarned: saved.totalCoinsEarned ?? 0,
@@ -1278,6 +1290,23 @@ export function useGame() {
     }, 2000) // 2 second debounce
     return () => clearTimeout(timer)
   }, [state.playerId, state.playerName, state.playerAvatar, state.inviteCode, state.userCode, state.tournamentPoints, state.levelXP, state.bestScore, state.modBestScore, state.battleBestScore, state.coins, state.totalCoinsEarned, state.playerLevel, state.totalBattlesPlayed, state.totalBattlesWon, state.likes, state.classicBestScore, state.tournamentBestScore])
+
+  // Verify userCode from Firebase on first load - ensure sequential UIDs
+  useEffect(() => {
+    if (!state.playerId) return
+    // Only run once on mount - check if the local userCode needs Firebase verification
+    if (state.userCode && parseInt(state.userCode, 10) >= 5001) {
+      // User already has a valid sequential code, no need to change
+      return
+    }
+    // User has no valid code yet, get one from Firebase
+    getNextUserCode().then((code) => {
+      setState(prev => {
+        if (prev.userCode && parseInt(prev.userCode, 10) >= 5001) return prev // Already has valid code
+        return { ...prev, userCode: code }
+      })
+    }).catch(() => { /* silent - localStorage fallback already handled */ })
+  }, [state.playerId])
 
   // Listen to referrals in real-time (people who used MY invite code)
   useEffect(() => {
@@ -1516,7 +1545,7 @@ export function useGame() {
   }, [])
 
   // Add game to history
-  const addGameToHistory = useCallback((mode: GameMode, score: number, result: 'win' | 'lose' | 'classic', entryFee: number, timeLimit: number) => {
+  const addGameToHistory = useCallback((mode: GameMode, score: number, result: 'win' | 'lose' | 'classic', entryFee: number, timeLimit: number, opponentName?: string) => {
     const entry: GameHistoryEntry = {
       id: Date.now().toString(),
       date: new Date().toISOString(),
@@ -1525,6 +1554,7 @@ export function useGame() {
       result,
       entryFee,
       timeLimit,
+      opponentName,
     }
     setState(prev => {
       // Update daily task progress for games played, score, and ability tasks
@@ -1833,8 +1863,8 @@ export function useGame() {
         return { ...prev, activeMultiplier: 2.5, multiplierTimeLeft: 10, multiplier2_5xCount: prev.multiplier2_5xCount - 1, activePowerUp: null }
       }
       if (pu === 'extraTime') {
-        // Timer ability: only usable after 20 seconds of game time have elapsed
-        if (prev.gameTimeElapsed < 20) return prev
+        // Timer ability: only usable after 10 seconds of game time have elapsed
+        if (prev.gameTimeElapsed < 10) return prev
         const isBattleMode = prev.gameMode === 'bot' || prev.gameMode === 'coins' || prev.gameMode === 'tournament'
         // In battle/tournament mode: max 2 timer abilities per game
         if (isBattleMode && prev.timerAbilitiesUsed >= 2) return prev
@@ -2486,8 +2516,7 @@ export function useGame() {
       if (prev.gameMode !== 'bot' && prev.gameMode !== 'coins' && prev.gameMode !== 'tournament') return prev
       if (prev.botBattleResult || prev.battleTimer <= 0 || prev.timerPaused) return prev
 
-      // Track game time elapsed
-      const newGameTimeElapsed = prev.gameTimeElapsed + 1
+      // gameTimeElapsed is now tracked by tickGameTimeElapsed for all modes
       const newTimer = prev.battleTimer - 1
 
       if (newTimer <= 0) {
@@ -2544,17 +2573,20 @@ export function useGame() {
           playerLevel: calculateLevel(levelXP),
           skillPoints,
           spRemainder,
-          gameTimeElapsed: newGameTimeElapsed,
         }
       }
-      return { ...prev, battleTimer: newTimer, gameTimeElapsed: newGameTimeElapsed }
+      return { ...prev, battleTimer: newTimer }
     })
   }, [])
 
-  // Tick game time elapsed for classic mode (no battle timer, just tracking elapsed time)
+  // Tick game time elapsed for all modes (ability 10-second cooldown tracking)
   const tickGameTimeElapsed = useCallback(() => {
     setState(prev => {
-      if (prev.gameMode !== 'classic' || prev.gameOver) return prev
+      if (prev.gameOver) return prev
+      // Don't tick during countdown
+      if (prev.countdownActive) return prev
+      // Don't tick when timer is paused (lives finished, waiting for ad revive)
+      if (prev.timerPaused) return prev
       return { ...prev, gameTimeElapsed: prev.gameTimeElapsed + 1 }
     })
   }, [])

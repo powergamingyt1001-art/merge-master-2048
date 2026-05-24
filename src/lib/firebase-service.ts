@@ -15,6 +15,7 @@ import {
   equalTo,
   limitToLast,
   serverTimestamp,
+  runTransaction,
 } from 'firebase/database'
 
 // ============================================================
@@ -61,6 +62,48 @@ export interface FirebaseReferral {
 export function ensureNumericUserCode(userCode: string): string {
   if (!userCode) return ''
   return String(userCode).replace(/[^0-9]/g, '')
+}
+
+/**
+ * Get the next sequential user code starting from 5001.
+ * Uses Firebase transactions for atomicity (no duplicate UIDs).
+ * Falls back to localStorage if Firebase is unavailable.
+ */
+export async function getNextUserCode(): Promise<string> {
+  const START_CODE = 5001
+  const LOCAL_KEY = 'mergeMaster2048_nextUserCode'
+
+  // Try Firebase transaction first
+  try {
+    const counterRef = ref(db, 'system/lastUserCode')
+    const result = await runTransaction(counterRef, (currentData) => {
+      if (currentData === null) {
+        return START_CODE // First user gets 5001
+      }
+      return (currentData as number) + 1 // Increment
+    })
+    if (result.committed && result.snapshot.val() !== null) {
+      const code = String(result.snapshot.val())
+      // Also update localStorage as fallback marker
+      try { localStorage.setItem(LOCAL_KEY, String(parseInt(code, 10) + 1)) } catch { /* ignore */ }
+      return code
+    }
+  } catch (err) {
+    console.warn('Firebase getNextUserCode failed, using localStorage fallback:', err)
+  }
+
+  // Fallback: localStorage
+  try {
+    const stored = localStorage.getItem(LOCAL_KEY)
+    let nextCode = stored ? parseInt(stored, 10) : START_CODE
+    if (isNaN(nextCode) || nextCode < START_CODE) nextCode = START_CODE
+    const code = String(nextCode)
+    localStorage.setItem(LOCAL_KEY, String(nextCode + 1))
+    return code
+  } catch {
+    // Ultimate fallback: timestamp-based unique number
+    return String(START_CODE + Math.floor(Math.random() * 900000))
+  }
 }
 
 /**

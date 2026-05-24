@@ -713,20 +713,19 @@ export function InvitePanel({
                             </div>
                           </div>
                           <div className="flex items-center gap-1">
-                            {friend.online && (
-                              <button
-                                className="w-5 h-5 rounded flex items-center justify-center"
-                                style={{ backgroundColor: 'rgba(0,230,118,0.15)', border: '1px solid rgba(0,230,118,0.2)' }}
-                                title="Invite to Room">
-                                <Swords className="w-2.5 h-2.5" style={{ color: '#00E676' }} />
-                              </button>
-                            )}
+                            {/* Play button - invite to Room Fight */}
                             <button
-                              onClick={() => handleRemoveFriend(friend.friendId, friend.name)}
                               className="w-5 h-5 rounded flex items-center justify-center"
-                              style={{ backgroundColor: 'rgba(246,94,59,0.1)', border: '1px solid rgba(246,94,59,0.15)' }}
-                              title="Remove friend">
-                              <X className="w-2.5 h-2.5" style={{ color: '#F65E3B' }} />
+                              style={{ backgroundColor: 'rgba(237,194,46,0.15)', border: '1px solid rgba(237,194,46,0.3)' }}
+                              title="Play with friend">
+                              <Swords className="w-2.5 h-2.5" style={{ color: '#EDC22E' }} />
+                            </button>
+                            {/* Add/Request button - send friend request to friend's friends */}
+                            <button
+                              className="w-5 h-5 rounded flex items-center justify-center"
+                              style={{ backgroundColor: 'rgba(0,230,118,0.15)', border: '1px solid rgba(0,230,118,0.25)' }}
+                              title="Send friend request" onClick={() => onAddNotification?.('Friend', `Send a request from ${friend.name}'s friends list`, 'friend_request', '👤')}>
+                              <Plus className="w-2.5 h-2.5" style={{ color: '#00E676' }} />
                             </button>
                           </div>
                         </div>
