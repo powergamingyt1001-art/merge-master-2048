@@ -74,6 +74,8 @@ interface CouponCodeProps {
   saveGame?: () => void
   saveAll?: () => void
   setAutoSaveEnabled?: (enabled: boolean) => void
+  forceOpenAdmin?: boolean  // When true, auto-open admin panel
+  onAdminOpened?: () => void  // Callback after admin panel is opened
 }
 
 interface ClaimedCoupon {
@@ -726,6 +728,8 @@ export function CouponCode({
   saveGame,
   saveAll,
   setAutoSaveEnabled,
+  forceOpenAdmin,
+  onAdminOpened,
 }: CouponCodeProps) {
   const [codeInput, setCodeInput] = useState('')
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
@@ -740,6 +744,16 @@ export function CouponCode({
 
   // Admin panel state
   const [showAdminPanel, setShowAdminPanel] = useState(false)
+
+  // Auto-open admin panel when forceOpenAdmin prop is true
+  useEffect(() => {
+    if (forceOpenAdmin && isOpen) {
+      setAdminRole('admin')
+      setShowAdminPanel(true)
+      onAdminOpened?.()
+    }
+  }, [forceOpenAdmin, isOpen, onAdminOpened])
+
   const [adminTab, setAdminTab] = useState<AdminTab>('dashboard')
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryEntry[]>(() => loadPurchaseHistory())
   const [customCodes, setCustomCodes] = useState<CustomCouponCode[]>(() => loadCustomCouponCodes())

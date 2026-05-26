@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Crown, Trophy, Star, Edit3, Check, Bell, Coins, Swords, Calendar, Percent, Gift, Trash2, Sun, Moon, Copy, History, UserPlus } from 'lucide-react'
+import { X, Crown, Trophy, Star, Edit3, Check, Bell, Coins, Swords, Calendar, Percent, Gift, Trash2, Sun, Moon, Copy, History, UserPlus, Shield } from 'lucide-react'
 import { Notification, PLAYER_AVATARS, getLevelInfo, getLevelThreshold, MAX_LEVEL, GameHistoryEntry } from '@/hooks/useGame'
 import { AdsterraBanner320x50 } from '@/components/ads/AdsterraAds'
 import { useTheme } from 'next-themes'
@@ -55,6 +55,7 @@ interface ProfilePanelProps {
   onClearGameHistory?: () => void
   classicBestScore?: number
   tournamentBestScore?: number
+  onOpenAdminPanel?: () => void  // Open admin panel from profile
 }
 
 // Coin count formatter: 1000→1K, 2500→2.5K, 1000000→1M
@@ -134,6 +135,7 @@ export function ProfilePanel({
   playerId, viewerPlayerId,
   onDeleteGameHistory, onClearGameHistory,
   classicBestScore = 0, tournamentBestScore = 0,
+  onOpenAdminPanel,
 }: ProfilePanelProps) {
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState(playerName)
@@ -143,6 +145,9 @@ export function ProfilePanel({
   const [copiedCode, setCopiedCode] = useState(false)
   const [showGameHistory, setShowGameHistory] = useState(false)
   const [historyTab, setHistoryTab] = useState<'today' | 'yesterday' | 'week'>('today')
+  const [showAdminInput, setShowAdminInput] = useState(false)
+  const [adminPwd, setAdminPwd] = useState('')
+  const [adminPwdError, setAdminPwdError] = useState(false)
   const { theme, setTheme } = useTheme()
 
   // Sync local state with next-themes
@@ -514,28 +519,79 @@ export function ProfilePanel({
                   <p className="text-[9px] font-bold" style={{ color: '#FF7A00' }}>{gameHistory.length}</p>
                 </button>
 
-                {/* Room Cards - Bigger Prominent Box */}
-                <div className="p-2.5 rounded-xl text-center" style={{ backgroundColor: 'rgba(224,64,251,0.1)', border: '1px solid rgba(224,64,251,0.25)' }}>
-                  <div className="flex items-center justify-center gap-1 mb-1">
-                    <span className="text-sm">🃏</span>
-                    <span className="text-[8px] font-bold" style={{ color: '#E040FB' }}>Room Cards</span>
+                {/* Admin Panel - Password Protected */}
+                {!showAdminInput ? (
+                  <button onClick={() => { setShowAdminInput(true); setAdminPwd(''); setAdminPwdError(false) }}
+                    className="p-2.5 rounded-xl text-center transition-transform active:scale-95 w-full"
+                    style={{ backgroundColor: 'rgba(255,122,0,0.08)', border: '1px solid rgba(255,122,0,0.2)' }}>
+                    <div className="flex items-center justify-center gap-1 mb-1">
+                      <Shield className="w-3.5 h-3.5" style={{ color: '#FF7A00' }} />
+                      <span className="text-[8px] font-bold" style={{ color: '#FF7A00' }}>Admin Panel</span>
+                    </div>
+                    <span className="text-base">🔐</span>
+                    <p className="text-[6px] mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      Tap to enter
+                    </p>
+                  </button>
+                ) : (
+                  <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(255,122,0,0.1)', border: adminPwdError ? '1px solid rgba(246,94,59,0.5)' : '1px solid rgba(255,122,0,0.3)' }}>
+                    <div className="flex items-center justify-center gap-1 mb-1">
+                      <Shield className="w-3 h-3" style={{ color: '#FF7A00' }} />
+                      <span className="text-[7px] font-bold" style={{ color: '#FF7A00' }}>Password</span>
+                    </div>
+                    <input
+                      type="password"
+                      value={adminPwd}
+                      onChange={(e) => { setAdminPwd(e.target.value.toUpperCase()); setAdminPwdError(false) }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          if (adminPwd === 'ADMIN.IN') {
+                            setShowAdminInput(false)
+                            setAdminPwd('')
+                            onOpenAdminPanel?.()
+                          } else {
+                            setAdminPwdError(true)
+                          }
+                        }
+                        if (e.key === 'Escape') { setShowAdminInput(false); setAdminPwd('') }
+                      }}
+                      placeholder="Enter password..."
+                      autoFocus
+                      className="w-full px-2 py-1.5 rounded-lg text-[10px] font-mono text-center outline-none"
+                      style={{
+                        backgroundColor: 'rgba(255,255,255,0.08)',
+                        border: adminPwdError ? '1px solid rgba(246,94,59,0.5)' : '1px solid rgba(255,255,255,0.12)',
+                        color: '#FFFFFF',
+                      }}
+                    />
+                    {adminPwdError && (
+                      <p className="text-[6px] font-bold mt-0.5" style={{ color: '#F65E3B' }}>Wrong password!</p>
+                    )}
+                    <div className="flex gap-1 mt-1">
+                      <button onClick={() => {
+                        if (adminPwd === 'ADMIN.IN') {
+                          setShowAdminInput(false)
+                          setAdminPwd('')
+                          onOpenAdminPanel?.()
+                        } else {
+                          setAdminPwdError(true)
+                        }
+                      }}
+                        className="flex-1 px-1.5 py-1 rounded text-[7px] font-bold transition-transform active:scale-95"
+                        style={{ background: 'linear-gradient(135deg, #FF7A00, #EDC22E)', color: '#FFFFFF' }}>
+                        Enter
+                      </button>
+                      <button onClick={() => { setShowAdminInput(false); setAdminPwd('') }}
+                        className="px-1.5 py-1 rounded text-[7px] font-bold"
+                        style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)' }}>
+                        ✕
+                      </button>
+                    </div>
                   </div>
-                  <span className="text-lg font-extrabold" style={{ color: '#E040FB' }}>
-                    {roomCardCount}
-                  </span>
-                  <div className="h-1.5 rounded-full overflow-hidden mt-1" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
-                    <div className="h-full rounded-full transition-all" style={{
-                      width: `${Math.min(100, roomCardCount * 10)}%`,
-                      background: roomCardCount === 0 ? 'linear-gradient(90deg, #F65E3B, #FF7A00)' : 'linear-gradient(90deg, #E040FB, #AA00FF)',
-                    }} />
-                  </div>
-                  <p className="text-[6px] mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                    {roomCardCount > 0 ? 'Ready to fight!' : 'No cards - buy from store'}
-                  </p>
-                </div>
+                )}
               </div>
 
-              {/* 9. Total Coins Earned */}
+              {/* 9. Total Coins Earned + Room Cards */}
               <div className="p-3 rounded-xl mb-3" style={{ backgroundColor: 'rgba(237,194,46,0.06)', border: '1px solid rgba(237,194,46,0.15)' }}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -545,9 +601,15 @@ export function ProfilePanel({
                       <p className="text-base font-extrabold" style={{ color: '#EDC22E' }}>{formatCoinCount(totalCoinsEarned)}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '1px solid rgba(237,194,46,0.2)' }}>
-                    <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
-                    <span className="text-[8px] font-bold" style={{ color: '#EDC22E' }}>{coins.toLocaleString()} now</span>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(224,64,251,0.1)', border: '1px solid rgba(224,64,251,0.2)' }}>
+                      <span className="text-[10px]">🃏</span>
+                      <span className="text-[8px] font-bold" style={{ color: '#E040FB' }}>{roomCardCount}</span>
+                    </div>
+                    <div className="flex items-center gap-1 px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(237,194,46,0.1)', border: '1px solid rgba(237,194,46,0.2)' }}>
+                      <Coins className="w-3 h-3" style={{ color: '#EDC22E' }} />
+                      <span className="text-[8px] font-bold" style={{ color: '#EDC22E' }}>{coins.toLocaleString()}</span>
+                    </div>
                   </div>
                 </div>
               </div>
