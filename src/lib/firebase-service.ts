@@ -1586,6 +1586,7 @@ export async function deliverOrderItems(
   }
 ): Promise<void> {
   try {
+    // 1. Send notification to user (for client-side pickup)
     const notifRef = push(ref(db, `userNotifications/${playerId}`))
     await set(notifRef, {
       type: 'order_delivery',
@@ -1594,6 +1595,48 @@ export async function deliverOrderItems(
       deliveredAt: Date.now(),
       delivered: false, // will be marked true after user's client processes it
     })
+
+    // 2. ALSO directly update the player's Firebase record as a reliable fallback
+    // This ensures items are delivered even if the notification listener misses it
+    try {
+      const playerRef = ref(db, `players/${playerId}`)
+      const playerSnapshot = await get(playerRef)
+      if (playerSnapshot.exists()) {
+        const playerData = playerSnapshot.val()
+        const updates: Record<string, number> = {}
+
+        if (items.coins && items.coins > 0) {
+          updates['coins'] = (playerData.coins || 0) + items.coins
+          updates['totalCoinsEarned'] = (playerData.totalCoinsEarned || 0) + items.coins
+        }
+        if (items.abilities) {
+          for (const ability of items.abilities) {
+            switch (ability.type) {
+              case 'multiplier5x': updates['multiplier5xCount'] = (playerData.multiplier5xCount || 0) + ability.count; break
+              case 'multiplier2_5x': updates['multiplier2_5xCount'] = (playerData.multiplier2_5xCount || 0) + ability.count; break
+              case 'hammer': updates['hammerCount'] = (playerData.hammerCount || 0) + ability.count; break
+              case 'magnet': updates['magnetCount'] = (playerData.magnetCount || 0) + ability.count; break
+              case 'blast': updates['blastCount'] = (playerData.blastCount || 0) + ability.count; break
+              case 'extraTime': updates['extraTimeCount'] = (playerData.extraTimeCount || 0) + ability.count; break
+              case 'undo': updates['undoCount'] = (playerData.undoCount || 0) + ability.count; updates['undoTotal'] = (playerData.undoTotal || 0) + ability.count; break
+            }
+          }
+        }
+        if (items.roomCards && items.roomCards > 0) {
+          updates['roomCardCount'] = (playerData.roomCardCount || 0) + items.roomCards
+        }
+        if (items.spinTickets && items.spinTickets > 0) {
+          updates['spinTickets'] = (playerData.spinTickets || 0) + items.spinTickets
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await update(playerRef, updates)
+        }
+      }
+    } catch (playerUpdateErr) {
+      // Don't fail the whole delivery if player update fails - notification still sent
+      console.warn('Firebase direct player update failed (notification still sent):', playerUpdateErr)
+    }
   } catch (err) {
     console.warn('Firebase deliverOrderItems failed:', err)
   }
