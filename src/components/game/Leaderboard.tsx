@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Crown, Medal, Star, Trophy, Swords, Coins, Wifi, WifiOff, Target, ChevronRight, Heart, Zap, Shield, UserPlus, Copy } from 'lucide-react'
-import { getLeaderboardPlayers, onLeaderboardUpdate, transferLike, removeLike, hasLiked, onLikeCountUpdate, type FirebasePlayer } from '@/lib/firebase-service'
+import { X, Crown, Medal, Star, Trophy, Swords, Coins, Wifi, WifiOff, Target, ChevronRight, Zap, Shield, UserPlus, Copy } from 'lucide-react'
+import { getLeaderboardPlayers, onLeaderboardUpdate, type FirebasePlayer } from '@/lib/firebase-service'
 import { getLevelInfo, getLevelThreshold } from '@/hooks/useGame'
 
 interface LeaderboardProps {
@@ -21,8 +21,6 @@ interface LeaderboardProps {
   classicBestScore?: number
   tournamentBestScore?: number
   battleBestScore?: number
-  onLikeProfile?: (targetPlayerId: string) => void
-  likedProfileId?: string | null
 }
 
 type TabType = 'modesScore' | 'coinsRank' | 'offlineRank'
@@ -49,8 +47,6 @@ function formatCoinCount(count: number): string {
   if (count >= 1000) return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`
   return count.toString()
 }
-
-// Like system now uses Firebase real-time sync (no more localStorage)
 
 // Offline rank players - progressive, beat one to advance
 const OFFLINE_RANKS = [
@@ -170,39 +166,11 @@ function getOfflineRank(playerBestScore: number): { currentRank: number; nextTar
   }
 }
 
-export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, totalCoinsEarned, winningCoins, playerName, playerAvatar, playerId, tournamentPoints, classicBestScore = 0, tournamentBestScore = 0, battleBestScore = 0, onLikeProfile, likedProfileId = null }: LeaderboardProps) {
+export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, totalCoinsEarned, winningCoins, playerName, playerAvatar, playerId, tournamentPoints, classicBestScore = 0, tournamentBestScore = 0, battleBestScore = 0 }: LeaderboardProps) {
   const [tab, setTab] = useState<TabType>('modesScore')
   const [firebasePlayers, setFirebasePlayers] = useState<FirebasePlayer[]>([])
-  const [selectedPlayer, setSelectedPlayerRaw] = useState<LeaderboardEntry | null>(null)
-  const [liked, setLiked] = useState(false)
-  const [likeCount, setLikeCount] = useState(0)
+  const [selectedPlayer, setSelectedPlayer] = useState<LeaderboardEntry | null>(null)
   const [copiedUid, setCopiedUid] = useState(false)
-
-  // Real-time like count listener for the selected player
-  useEffect(() => {
-    if (!selectedPlayer?.playerId || selectedPlayer.playerId === playerId) return
-    const unsub = onLikeCountUpdate(selectedPlayer.playerId, (count) => {
-      setLikeCount(count)
-    })
-    return unsub
-  }, [selectedPlayer?.playerId, playerId])
-
-  // Wrapper to reset liked when selectedPlayer changes
-  const setSelectedPlayer = async (player: LeaderboardEntry | null) => {
-    setSelectedPlayerRaw(player)
-    setCopiedUid(false)
-    if (player?.playerId && player.playerId !== playerId) {
-      // Check if current player has already liked this player via Firebase
-      const alreadyLiked = await hasLiked(playerId, player.playerId)
-      setLiked(alreadyLiked)
-      // Get current likes count from Firebase (real-time listener will update it)
-      const fbPlayer = firebasePlayers.find(p => p.id === player.playerId)
-      setLikeCount(fbPlayer?.likes || 0)
-    } else {
-      setLiked(false)
-      setLikeCount(0)
-    }
-  }
 
   const handleCopyUid = () => {
     if (!selectedPlayer?.playerId) return
@@ -665,29 +633,7 @@ export function Leaderboard({ isOpen, onClose, gamePoints, bestScore, coins, tot
                       </div>
                     </div>
 
-                    {/* Like Button */}
-                    <button onClick={async () => {
-                      const pid = selectedPlayer?.playerId || ''
-                      if (!pid || pid === playerId) return
-                      if (!liked) {
-                        // Like: use transferLike (one-like-per-user, transfers from old target)
-                        setLiked(true)
-                        onLikeProfile?.(pid)
-                      } else {
-                        // Unlike: remove the like entirely
-                        setLiked(false)
-                        await removeLike(playerId, pid)
-                      }
-                    }}
-                      className="w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
-                      style={{
-                        backgroundColor: liked ? 'rgba(246,94,59,0.15)' : 'rgba(255,255,255,0.06)',
-                        border: liked ? '1px solid rgba(246,94,59,0.4)' : '1px solid rgba(255,255,255,0.08)',
-                        color: liked ? '#F65E3B' : 'rgba(255,255,255,0.5)',
-                      }}>
-                      <Heart fill={liked ? '#F65E3B' : 'none'} className="w-4 h-4" />
-                      {liked ? 'Liked ❤️' : 'Like'} ({likeCount})
-                    </button>
+
                   </motion.div>
                 </motion.div>
               )}

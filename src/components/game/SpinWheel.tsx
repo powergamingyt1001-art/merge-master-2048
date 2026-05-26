@@ -65,7 +65,7 @@ function pickPrize(): { index: number; prize: SpinPrize } {
   return { index: 0, prize: { ...PRIZE_POOL[0].prize } }
 }
 
-const SPIN_COUNTS = [1, 3, 5, 10]
+const SPIN_COUNTS = [1, 3, 5, 10, 20]
 
 
 
@@ -123,7 +123,7 @@ export function SpinWheel({
     return 1
   }, [spinMultiplier, spinTickets])
 
-  const totalSpins = effectiveMultiplier === 10 ? 12 : effectiveMultiplier
+  const totalSpins = effectiveMultiplier === 10 ? 12 : effectiveMultiplier === 20 ? 24 : effectiveMultiplier
   const ticketCost = effectiveMultiplier
   const canAffordSpin = spinTickets >= ticketCost
 
@@ -295,7 +295,9 @@ export function SpinWheel({
                   <div className="flex items-center justify-center gap-2 mb-3">
                     {SPIN_COUNTS.map(count => {
                       const isActive = effectiveMultiplier === count
-                      const isBonus = count === 10
+                      const isBonus10 = count === 10
+                      const isBonus20 = count === 20
+                      const bonusCount = isBonus10 ? 2 : isBonus20 ? 4 : 0
                       const canAfford = spinTickets >= count
                       const costLabel = `${count}🎫`
                       return (
@@ -311,12 +313,12 @@ export function SpinWheel({
                           }}
                         >
                           <span className="text-[10px] font-extrabold" style={{ color: isActive ? '#EDC22E' : 'rgba(255,255,255,0.6)' }}>
-                            {isBonus ? '10+2' : `${count}`}x
+                            {bonusCount > 0 ? `${count}+${bonusCount}` : `${count}`}x
                           </span>
                           <span className="text-[7px]" style={{ color: isActive ? 'rgba(237,194,46,0.7)' : 'rgba(255,255,255,0.3)' }}>{costLabel}</span>
-                          {isBonus && (
+                          {bonusCount > 0 && (
                             <span className="absolute -top-1.5 -right-1 text-[6px] font-bold px-1 rounded-full" style={{ backgroundColor: '#00E676', color: '#FFFFFF' }}>
-                              +2 FREE
+                              +{bonusCount} FREE
                             </span>
                           )}
                         </button>
@@ -328,7 +330,7 @@ export function SpinWheel({
                 {/* Multi-spin info */}
                 {!hasResult && !spinning && effectiveMultiplier > 1 && (
                   <p className="text-center text-[10px] mb-2" style={{ color: '#00E676' }}>
-                    {effectiveMultiplier === 10 ? '10 tickets = 12 spins! (+2 FREE 🎉)' : `${effectiveMultiplier} spins for ${effectiveMultiplier} tickets`}
+                    {effectiveMultiplier === 10 ? '10 tickets = 12 spins! (+2 FREE 🎉)' : effectiveMultiplier === 20 ? '20 tickets = 24 spins! (+4 FREE 🎉)' : `${effectiveMultiplier} spins for ${effectiveMultiplier} tickets`}
                   </p>
                 )}
 

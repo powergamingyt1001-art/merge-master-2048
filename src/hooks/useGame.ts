@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { syncPlayerToFirebase, processReferral, processCommissionForReferrer, getReferrals, onReferralsUpdate, getCommissionNotifications, claimCommissionNotification, type FirebaseReferral, joinMatchmaking, leaveMatchmaking, findMatch, onMatchmakingUpdate, cleanupStaleMatchmaking, createBattle, joinBattle, onBattleUpdate, updateBattleScore, finishBattle, leaveBattle as firebaseLeaveBattle, markMatched, type MatchmakingEntry, type FirebaseBattle, onUserNotificationsUpdate, markNotificationDelivered, transferLike, getNextUserCode } from '@/lib/firebase-service'
+import { syncPlayerToFirebase, processReferral, processCommissionForReferrer, getReferrals, onReferralsUpdate, getCommissionNotifications, claimCommissionNotification, type FirebaseReferral, joinMatchmaking, leaveMatchmaking, findMatch, onMatchmakingUpdate, cleanupStaleMatchmaking, createBattle, joinBattle, onBattleUpdate, updateBattleScore, finishBattle, leaveBattle as firebaseLeaveBattle, markMatched, type MatchmakingEntry, type FirebaseBattle, onUserNotificationsUpdate, markNotificationDelivered, markGiftDelivered, getNextUserCode } from '@/lib/firebase-service'
 
 export type Direction = 'up' | 'down' | 'left' | 'right'
 export type PowerUp = 'hammer' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x' | 'extraTime'
@@ -184,10 +184,6 @@ export interface GameState {
   realTimeOpponentScore: number // Opponent's live score from Firebase
   realTimeOpponentFinished: boolean // Opponent finished the game
   isRealTimeBattle: boolean // Whether this is a real-time battle vs real player
-  // Like system - Firebase synced
-  likes: number
-  // Which profile the user currently has their like on (one like per user)
-  likedProfileId: string | null
   // Mode-specific best scores (only update in their respective modes)
   classicBestScore: number // Classic mode only
   tournamentBestScore: number // Tournament mode only
@@ -912,8 +908,6 @@ export function useGame() {
       realTimeOpponentScore: 0,
       realTimeOpponentFinished: false,
       isRealTimeBattle: false,
-      likes: 0,
-      likedProfileId: null,
       classicBestScore: 0,
       tournamentBestScore: 0,
       battleBestScore: 0,
@@ -1161,7 +1155,6 @@ export function useGame() {
       realTimeOpponentScore: 0,
       realTimeOpponentFinished: false,
       isRealTimeBattle: false,
-      likedProfileId: saved.likedProfileId ?? null,
       classicBestScore: saved.classicBestScore ?? 0,
       tournamentBestScore: saved.tournamentBestScore ?? 0,
       battleBestScore: saved.battleBestScore ?? saved.modBestScore ?? 0, // Migrate from modBestScore
@@ -1229,7 +1222,6 @@ export function useGame() {
       skillPoints: s.skillPoints,
       spRemainder: s.spRemainder,
       welcomeCouponClaimed: s.welcomeCouponClaimed,
-      likedProfileId: s.likedProfileId,
       classicBestScore: s.classicBestScore,
       tournamentBestScore: s.tournamentBestScore,
       battleBestScore: s.battleBestScore,
@@ -1242,7 +1234,7 @@ export function useGame() {
     if (!state.autoSaveEnabled) return
     const data = buildSaveData(state)
     localStorage.setItem('mergeMaster2048', JSON.stringify(data))
-  }, [state.autoSaveEnabled, state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount, state.userCode, state.totalCoinsEarned, state.winningCoins, state.roomCardCount, state.streakWeek, state.skillPoints, state.spRemainder, state.welcomeCouponClaimed, state.likedProfileId, state.classicBestScore, state.tournamentBestScore, state.battleBestScore, buildSaveData])
+  }, [state.autoSaveEnabled, state.bestScore, state.spinTickets, state.streakDay, state.lastLoginDate, state.streakClaimed, state.welcomeClaimed, state.hammerCount, state.magnetCount, state.blastCount, state.undoTotal, state.coins, state.gamePoints, state.modBestScore, state.inviteCode, state.invitedBy, state.invitedUsers, state.commissionBalance, state.commissionClaimed, state.autoClaimCommission, state.gamesPlayedToday, state.lastPlayDate, state.notifications, state.playerName, state.playerAvatar, state.playerLevel, state.playerId, state.totalBattlesPlayed, state.totalBattlesWon, state.tournamentJoined, state.tournamentPoints, state.tournamentCarryOver, state.tournamentGamesPlayed, state.levelXP, state.gameHistory, state.weeklyBonusClaimed, state.dailyTasks, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount, state.userCode, state.totalCoinsEarned, state.winningCoins, state.roomCardCount, state.streakWeek, state.skillPoints, state.spRemainder, state.welcomeCouponClaimed, state.classicBestScore, state.tournamentBestScore, state.battleBestScore, buildSaveData])
 
   // Manual save: save current state to localStorage
   const saveGame = useCallback(() => {
@@ -1283,13 +1275,12 @@ export function useGame() {
         level: state.playerLevel,
         totalBattlesPlayed: state.totalBattlesPlayed,
         totalBattlesWon: state.totalBattlesWon,
-        likes: state.likes,
         classicBestScore: state.classicBestScore,
         tournamentBestScore: state.tournamentBestScore,
       }).catch(() => {/* silent fail */})
     }, 2000) // 2 second debounce
     return () => clearTimeout(timer)
-  }, [state.playerId, state.playerName, state.playerAvatar, state.inviteCode, state.userCode, state.tournamentPoints, state.levelXP, state.bestScore, state.modBestScore, state.battleBestScore, state.coins, state.totalCoinsEarned, state.playerLevel, state.totalBattlesPlayed, state.totalBattlesWon, state.likes, state.classicBestScore, state.tournamentBestScore])
+  }, [state.playerId, state.playerName, state.playerAvatar, state.inviteCode, state.userCode, state.tournamentPoints, state.levelXP, state.bestScore, state.modBestScore, state.battleBestScore, state.coins, state.totalCoinsEarned, state.playerLevel, state.totalBattlesPlayed, state.totalBattlesWon, state.classicBestScore, state.tournamentBestScore])
 
   // Verify userCode from Firebase on first load - ensure sequential UIDs
   useEffect(() => {
@@ -1386,18 +1377,49 @@ export function useGame() {
   // REAL-TIME ITEM DELIVERY - Listen for order approval notifications
   // When admin approves an order, items are delivered via Firebase
   // ============================================================
+  // Use localStorage to track processed delivery IDs for robustness:
+  // - Survives page refreshes (unlike useRef which resets)
+  // - Prevents re-processing on re-render but allows processing
+  //   of notifications that are marked delivered in Firebase
+  //   but haven't been applied to game state yet
   const deliveryProcessedRef = useRef<Set<string>>(new Set())
+  // Load previously processed IDs from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('mergeMaster2048_deliveryProcessed')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (Array.isArray(parsed)) {
+          deliveryProcessedRef.current = new Set(parsed)
+        }
+      }
+    } catch { /* ignore */ }
+  }, [])
+  // Helper to mark a delivery as processed and persist to localStorage
+  const markDeliveryProcessed = useCallback((notifId: string) => {
+    deliveryProcessedRef.current.add(notifId)
+    try {
+      // Keep only last 200 processed IDs to avoid unbounded growth
+      const ids = Array.from(deliveryProcessedRef.current).slice(-200)
+      localStorage.setItem('mergeMaster2048_deliveryProcessed', JSON.stringify(ids))
+    } catch { /* storage full or unavailable */ }
+  }, [])
+
   useEffect(() => {
     if (!state.playerId) return
     const unsubscribe = onUserNotificationsUpdate(state.playerId, (notifications) => {
       for (const notif of notifications) {
-        // Skip already delivered or already processed
-        if (notif.delivered || deliveryProcessedRef.current.has(notif.id)) continue
+        // Skip if already processed locally (via localStorage-backed tracking)
+        // NOTE: We intentionally do NOT skip notifications where notif.delivered === true
+        // from Firebase, because the page might have been refreshed after Firebase was
+        // updated but before the game state was saved. If we haven't processed it locally,
+        // we should still apply it.
+        if (deliveryProcessedRef.current.has(notif.id)) continue
 
         // Handle order delivery (approval)
         if (notif.type === 'order_delivery' && notif.items) {
           // Mark as processed to avoid double delivery
-          deliveryProcessedRef.current.add(notif.id)
+          markDeliveryProcessed(notif.id)
 
           // Deliver items to user
           const items = notif.items as { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number }
@@ -1441,6 +1463,11 @@ export function useGame() {
                     newState.extraTimeCount = prev.extraTimeCount + ability.count
                     deliveryMsg.push(`⏱️ ${ability.count}x Timer`)
                     break
+                  case 'undo':
+                    newState.undoCount = prev.undoCount + ability.count
+                    newState.undoTotal = prev.undoTotal + ability.count
+                    deliveryMsg.push(`↩️ ${ability.count}x Undo`)
+                    break
                 }
               }
             }
@@ -1468,12 +1495,42 @@ export function useGame() {
 
           // Mark as delivered in Firebase
           markNotificationDelivered(state.playerId, notif.id).catch(() => {})
+
+          // Immediately save game state to persist the delivered items
+          try {
+            const currentData = localStorage.getItem('mergeMaster2048')
+            if (currentData) {
+              const saved = JSON.parse(currentData)
+              // Only update the fields that were just delivered to avoid overwriting other state changes
+              const items = notif.items as { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number }
+              if (items.coins && items.coins > 0) {
+                saved.coins = (saved.coins || 0) + items.coins
+                saved.totalCoinsEarned = (saved.totalCoinsEarned || 0) + items.coins
+              }
+              if (items.abilities) {
+                for (const ability of items.abilities) {
+                  switch (ability.type) {
+                    case 'multiplier5x': saved.multiplier5xCount = (saved.multiplier5xCount || 0) + ability.count; break
+                    case 'multiplier2_5x': saved.multiplier2_5xCount = (saved.multiplier2_5xCount || 0) + ability.count; break
+                    case 'hammer': saved.hammerCount = (saved.hammerCount || 0) + ability.count; break
+                    case 'magnet': saved.magnetCount = (saved.magnetCount || 0) + ability.count; break
+                    case 'blast': saved.blastCount = (saved.blastCount || 0) + ability.count; break
+                    case 'extraTime': saved.extraTimeCount = (saved.extraTimeCount || 0) + ability.count; break
+                    case 'undo': saved.undoCount = (saved.undoCount || 0) + ability.count; saved.undoTotal = (saved.undoTotal || 0) + ability.count; break
+                  }
+                }
+              }
+              if (items.roomCards && items.roomCards > 0) saved.roomCardCount = (saved.roomCardCount || 0) + items.roomCards
+              if (items.spinTickets && items.spinTickets > 0) saved.spinTickets = (saved.spinTickets || 0) + items.spinTickets
+              localStorage.setItem('mergeMaster2048', JSON.stringify(saved))
+            }
+          } catch { /* ignore save errors */ }
         }
 
         // Handle order rejection
         if (notif.type === 'order_rejected') {
           // Mark as processed
-          deliveryProcessedRef.current.add(notif.id)
+          markDeliveryProcessed(notif.id)
 
           // Show cancellation notification
           const rejectMsg = (notif as any).message || 'Your payment was not verified. Order cancelled.'
@@ -1482,10 +1539,51 @@ export function useGame() {
           // Mark as delivered in Firebase
           markNotificationDelivered(state.playerId, notif.id).catch(() => {})
         }
+
+        // Handle gift received
+        if (notif.type === 'gift_received') {
+          // Mark as processed to avoid double delivery
+          markDeliveryProcessed(notif.id)
+
+          const giftData = notif as any
+          const giftType = giftData.giftType as string
+          const giftAmount = (giftData.giftAmount as number) || 0
+          const fromName = giftData.fromPlayerName || 'A friend'
+
+          if (giftAmount > 0) {
+            setState(prev => {
+              let newState = { ...prev }
+              switch (giftType) {
+                case 'coins':
+                  newState.coins = prev.coins + giftAmount
+                  newState.totalCoinsEarned = prev.totalCoinsEarned + giftAmount
+                  break
+                case 'hammer':
+                  newState.hammerCount = prev.hammerCount + giftAmount
+                  break
+                case 'magnet':
+                  newState.magnetCount = prev.magnetCount + giftAmount
+                  break
+                case 'blast':
+                  newState.blastCount = prev.blastCount + giftAmount
+                  break
+              }
+              return newState
+            })
+
+            const giftLabel = giftType === 'coins' ? `${giftAmount} Coins` : `${giftAmount} ${giftType.charAt(0).toUpperCase() + giftType.slice(1)}${giftAmount > 1 ? 's' : ''}`
+            addNotification('🎁 Gift Received!', `${fromName} sent you ${giftLabel}!`, 'reward', '🎁')
+          }
+
+          // Mark gift as delivered in Firebase
+          markGiftDelivered(state.playerId, notif.id).catch(() => {})
+          // Also mark the general notification as delivered
+          markNotificationDelivered(state.playerId, notif.id).catch(() => {})
+        }
       }
     })
     return unsubscribe
-  }, [state.playerId, addNotification])
+  }, [state.playerId, addNotification, markDeliveryProcessed])
 
   // Check ban status on game load
   const banCheckRef = useRef(false)
@@ -3057,8 +3155,6 @@ export function useGame() {
       realTimeOpponentScore: 0,
       realTimeOpponentFinished: false,
       isRealTimeBattle: false,
-      likes: 0,
-      likedProfileId: null,
       classicBestScore: 0,
       tournamentBestScore: 0,
       battleBestScore: 0,
@@ -3082,17 +3178,6 @@ export function useGame() {
       return { ...prev, roomCardCount: prev.roomCardCount - 1 }
     })
   }, [])
-
-  // Like a profile - uses transferLike from Firebase (one like per user)
-  const likeProfile = useCallback((targetPlayerId: string) => {
-    if (!state.playerId || state.playerId === targetPlayerId) return
-    transferLike(state.playerId, targetPlayerId).then(() => {
-      setState(prev => ({
-        ...prev,
-        likedProfileId: targetPlayerId,
-      }))
-    }).catch(() => {/* silent */})
-  }, [state.playerId])
 
   // Set auto-save enabled/disabled (admin can set false)
   const setAutoSaveEnabled = useCallback((enabled: boolean) => {
@@ -3168,7 +3253,6 @@ export function useGame() {
     resetAllData,
     addRoomCards,
     onUseRoomCard,
-    likeProfile,
     setAutoSaveEnabled,
     saveGame,
     saveAll,

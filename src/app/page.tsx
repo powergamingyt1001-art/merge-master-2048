@@ -236,9 +236,6 @@ export default function Home() {
                 gameHistory={game.gameHistory}
                 streakWeek={game.streakWeek}
                 onAddRoomCards={game.addRoomCards}
-                likeCount={game.likes}
-                onLikeProfile={game.likeProfile}
-                likedProfileId={game.likedProfileId}
                 classicBestScore={game.classicBestScore}
                 tournamentBestScore={game.tournamentBestScore}
                 battleBestScore={game.battleBestScore}

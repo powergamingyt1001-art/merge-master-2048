@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useEffect, Component, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon, Copy, Percent, Package, TrendingUp, DollarSign, Send, Lock, UserCheck, Filter, Save, Database } from 'lucide-react'
-import { getTotalUserCount, getOnlineUserCount, getTotalReferralsCount, checkAdminPassword, setAdminPassword as firebaseSetAdminPassword, authenticatePartner, getPartners as firebaseGetPartners, savePartner as firebaseSavePartner, deletePartner as firebaseDeletePartner, onOrdersUpdate, updateOrderStatus as firebaseUpdateOrderStatus, deliverOrderItems, broadcastCoupon as firebaseBroadcastCoupon, broadcastDailyTask as firebaseBroadcastDailyTask, onCouponBroadcast, type FirebaseStoreOrder, type PartnerData } from '@/lib/firebase-service'
+import { getTotalUserCount, getOnlineUserCount, getTotalReferralsCount, checkAdminPassword, setAdminPassword as firebaseSetAdminPassword, authenticatePartner, getPartners as firebaseGetPartners, savePartner as firebaseSavePartner, deletePartner as firebaseDeletePartner, onOrdersUpdate, updateOrderStatus as firebaseUpdateOrderStatus, deliverOrderItems, broadcastCoupon as firebaseBroadcastCoupon, broadcastDailyTask as firebaseBroadcastDailyTask, onCouponBroadcast, syncAdminConfigToFirebase, getAdminConfigFromFirebase, type FirebaseStoreOrder, type PartnerData } from '@/lib/firebase-service'
 import { db } from '@/lib/firebase'
 import { ref, onValue } from 'firebase/database'
 
@@ -632,7 +632,7 @@ export function validateDiscountCoupon(code: string, userCode: string, cartTotal
   if (coupon.disabled) return { valid: false, error: 'This coupon has been disabled' }
   if (coupon.currentUses >= coupon.maxUses) return { valid: false, error: 'This coupon has reached its max uses' }
   if (coupon.minPurchase > 0 && cartTotal < coupon.minPurchase) return { valid: false, error: `Minimum purchase of ₹${coupon.minPurchase} required` }
-  if (coupon.targetUserIds.length > 0 && !coupon.targetUserIds.includes(userCode)) return { valid: false, error: 'This coupon is not available for your account' }
+  if ((coupon.targetUserIds?.length ?? 0) > 0 && !coupon.targetUserIds.includes(userCode)) return { valid: false, error: 'This coupon is not available for your account' }
   return { valid: true, coupon }
 }
 
@@ -890,6 +890,13 @@ export function CouponCode({
   // Loading state for admin password check
   const [checkingAdmin, setCheckingAdmin] = useState(false)
 
+  // Safety: Reset checkingAdmin after 12 seconds to prevent permanent hang
+  useEffect(() => {
+    if (!checkingAdmin) return
+    const timer = setTimeout(() => setCheckingAdmin(false), 12000)
+    return () => clearTimeout(timer)
+  }, [checkingAdmin])
+
   // Coupon sub-tab state (Day/Night, Create, Discount)
   const [couponSubTab, setCouponSubTab] = useState<'daynight' | 'create' | 'discount' | 'scratch'>('daynight')
 
@@ -1034,6 +1041,27 @@ export function CouponCode({
           setDcRewardAmount(parsed.rewardAmount)
         }
       } catch { /* ignore */ }
+
+      // Load admin config from Firebase (overrides localStorage if Firebase has newer data)
+      // This ensures cross-device sync works properly
+      try {
+        const configKeys = [
+          'customPrices', 'customCouponCodes', 'nightCodeSettings', 'coinAbilityPrices',
+          'discountCoupons', 'adminDailyTasks', 'tournamentPrizes', 'scratchRewards',
+          'welcomeBonus', 'dayCodeSettings'
+        ]
+        Promise.all(configKeys.map(key => getAdminConfigFromFirebase(key).catch(() => null)))
+          .then(results => {
+            if (results[0]) setCustomPrices(results[0] as CustomPriceOverride)
+            if (results[1]) setCustomCodes(results[1] as CustomCouponCode[])
+            if (results[2]) { setNightCodeSettings(results[2] as NightCodeSettings); setNcRewardType((results[2] as NightCodeSettings).rewardType); setNcRewardAmount((results[2] as NightCodeSettings).rewardAmount) }
+            if (results[3]) setCoinAbilityPrices(results[3] as CoinAbilityPrice)
+            if (results[5]) setAdminDailyTasks(results[5] as AdminDailyTask[])
+            if (results[6]) setTournamentPrizes(results[6] as TournamentPrizes)
+            if (results[9]) { setDayCodeSettings(results[9] as DayCodeSettings); setDcRewardType((results[9] as DayCodeSettings).rewardType); setDcRewardAmount((results[9] as DayCodeSettings).rewardAmount) }
+          })
+          .catch(() => { /* silent - localStorage values already loaded */ })
+      } catch { /* silent */ }
     }
   }, [showAdminPanel])
 
@@ -1232,10 +1260,18 @@ export function CouponCode({
       // Check for admin access code FIRST (before any other check)
     // Check against Firebase admin password and partner passwords
     if (code.length >= 4) {
-      // Try admin password check with loading state and error handling
+      // Try admin password check with loading state, timeout, and error handling
+      setCheckingAdmin(true)
       try {
-        setCheckingAdmin(true)
-        const isAdmin = await checkAdminPassword(code)
+        // Add 8-second timeout to prevent permanent hang
+        const adminCheckPromise = checkAdminPassword(code)
+        const timeoutPromise = new Promise<boolean>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), 8000)
+        )
+        const isAdmin = await Promise.race([adminCheckPromise, timeoutPromise]).catch(() => {
+          // On timeout, check if it's the default admin code as fallback
+          return code === 'ADMIN.IN'
+        })
         if (isAdmin) {
           setAdminRole('admin')
           setShowAdminPanel(true)
@@ -1244,13 +1280,18 @@ export function CouponCode({
           setCheckingAdmin(false)
           return
         }
-        setCheckingAdmin(false)
       } catch (err) {
-        setCheckingAdmin(false)
-        // Firebase unreachable - show clear error message
-        setStatusMessage({ text: 'Network error. Check your connection and try again.', type: 'error' })
-        return
+        // Firebase unreachable - fallback to default check
+        if (code === 'ADMIN.IN') {
+          setAdminRole('admin')
+          setShowAdminPanel(true)
+          setCodeInput('')
+          setStatusMessage(null)
+          setCheckingAdmin(false)
+          return
+        }
       }
+      setCheckingAdmin(false)
 
       // Try partner password check
       try {
@@ -1517,8 +1558,21 @@ export function CouponCode({
       // Save day code settings
       try { localStorage.setItem('adminDayCodeSettings', JSON.stringify(dayCodeSettings)) } catch { /* ignore */ }
 
-      // Broadcast key config to Firebase for real-time sync
+      // Sync all admin config to Firebase for cross-device persistence
       try {
+        if (customPrices) syncAdminConfigToFirebase('customPrices', customPrices).catch(() => {})
+        syncAdminConfigToFirebase('customCouponCodes', customCodes).catch(() => {})
+        syncAdminConfigToFirebase('nightCodeSettings', nightCodeSettings).catch(() => {})
+        syncAdminConfigToFirebase('coinAbilityPrices', coinAbilityPrices).catch(() => {})
+        syncAdminConfigToFirebase('lockDuration', lockDuration).catch(() => {})
+        syncAdminConfigToFirebase('discountCoupons', discountCoupons).catch(() => {})
+        syncAdminConfigToFirebase('adminDailyTasks', adminDailyTasks).catch(() => {})
+        syncAdminConfigToFirebase('tournamentPrizes', tournamentPrizes).catch(() => {})
+        syncAdminConfigToFirebase('bannedUsers', bannedUsers).catch(() => {})
+        syncAdminConfigToFirebase('scratchRewards', scratchRewards).catch(() => {})
+        syncAdminConfigToFirebase('welcomeBonus', welcomeBonus).catch(() => {})
+        syncAdminConfigToFirebase('dayCodeSettings', dayCodeSettings).catch(() => {})
+        // Broadcast config change for real-time sync
         if (customPrices) {
           firebaseBroadcastCoupon({ code: '__CONFIG_SYNC__', reward: 'prices_update', rewardType: 'coins', rewardAmount: 0, emoji: '⚙️', maxUses: 999 }).catch(() => {})
         }
@@ -1561,6 +1615,9 @@ export function CouponCode({
   }, [showAdminPanel])
 
   // Approve a purchase (works with both purchaseHistory and storeOrders)
+  // IMPORTANT: Items are delivered ONLY via Firebase deliverOrderItems() to the buyer.
+  // We do NOT call onAddCoins/onAddPowerUp here because those add to the ADMIN's own account,
+  // not the buyer's. The buyer receives items through the Firebase notification listener in useGame.ts.
   const handleApprovePurchase = useCallback((entry: PurchaseHistoryEntry) => {
     try {
     const purchaseDate = new Date(entry.date).getTime()
@@ -1573,23 +1630,6 @@ export function CouponCode({
     if (isStoreOrder && storeOrderId) {
       const isInrAbility = entry.item.includes('5x') || entry.item.includes('2.5x')
 
-      if (isInrAbility) {
-        // Add the actual ability instead of coins
-        if (entry.item.includes('5x')) {
-          onAddPowerUp('multiplier5x', entry.abilityCount || entry.coinAmount || 5)
-        } else if (entry.item.includes('2.5x')) {
-          onAddPowerUp('multiplier2_5x', entry.abilityCount || entry.coinAmount || 5)
-        }
-        onAddNotification('Ability Delivered! ✅', `${entry.item} has been delivered to your inventory!`, 'reward', '📦')
-      } else {
-        // Coin pack - add coins
-        let coinAmount = entry.coinAmount || getCoinAmountFromItem(entry.item)
-        if (isDelayed) coinAmount = Math.floor(coinAmount * 2)
-        onAddCoins(coinAmount)
-        const bonusText = isDelayed ? ` (2x bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
-        onAddNotification('Order Approved! ✅', `${entry.item} delivered! ${coinAmount} coins added${bonusText}`, 'reward', '📦')
-      }
-
       // Update store order status locally
       const updatedOrders = storeOrders.map(o =>
         o.id === storeOrderId ? { ...o, status: 'approved' as const } : o
@@ -1597,45 +1637,69 @@ export function CouponCode({
       setStoreOrders(updatedOrders)
       saveStoreOrders(updatedOrders)
 
-      // Update order in Firebase
+      // Update order status in Firebase (status update only, no delivery - delivery is done separately below)
       firebaseUpdateOrderStatus(storeOrderId, 'approved').catch(() => {})
 
-      // Deliver items to user via Firebase notification
+      // Deliver items to buyer via Firebase notification (NOT to admin's account)
       const fbOrder = firebaseOrders.find(o => o.id === storeOrderId)
       if (fbOrder) {
+        const deliveryItems: { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number } = {}
+        if (isInrAbility) {
+          if (entry.item.includes('5x')) {
+            deliveryItems.abilities = [{ type: 'multiplier5x', count: entry.abilityCount || 5 }]
+          } else if (entry.item.includes('2.5x')) {
+            deliveryItems.abilities = [{ type: 'multiplier2_5x', count: entry.abilityCount || 5 }]
+          }
+        } else {
+          // Use getCoinAmountFromItem for accurate coin amounts from item name
+          let coinAmt = getCoinAmountFromItem(entry.item)
+          if (isDelayed) coinAmt = Math.floor(coinAmt * 2)
+          deliveryItems.coins = coinAmt
+        }
+        if (fbOrder.playerId) {
+          deliverOrderItems(storeOrderId, fbOrder.playerId, deliveryItems).catch(() => {})
+        }
+      }
+
+      // Show confirmation to admin (not a delivery notification - that goes to the buyer)
+      const bonusText = isDelayed ? ` (2x bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
+      onAddNotification('Order Approved ✅', `${entry.item} approved${bonusText}. Items will be delivered to buyer.`, 'system', '📦')
+    } else if (entry.type === 'inr_ability') {
+      // Legacy INR ability purchase - try to deliver via Firebase
+      const fbOrder = firebaseOrders.find(o => {
+        const safeItems = Array.isArray(o.items) ? o.items : []
+        const itemStr = safeItems.length > 0 ? safeItems.map((i: any) => `${i.name || 'Item'} x${i.quantity || 1}`).join(', ') : ''
+        return itemStr.includes('5x') || itemStr.includes('2.5x')
+      })
+      if (fbOrder && fbOrder.playerId) {
         const deliveryItems: { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number } = {}
         if (entry.item.includes('5x')) {
           deliveryItems.abilities = [{ type: 'multiplier5x', count: entry.abilityCount || 5 }]
         } else if (entry.item.includes('2.5x')) {
           deliveryItems.abilities = [{ type: 'multiplier2_5x', count: entry.abilityCount || 5 }]
-        } else {
-          let coinAmt = entry.coinAmount || getCoinAmountFromItem(entry.item)
-          if (isDelayed) coinAmt = Math.floor(coinAmt * 2)
-          deliveryItems.coins = coinAmt
         }
-        deliverOrderItems(storeOrderId, fbOrder.playerId, deliveryItems).catch(() => {})
-      }
-    } else if (entry.type === 'inr_ability') {
-      // INR ability purchase (5x/2.5x) - add the actual ability
-      if (entry.item.includes('5x')) {
-        onAddPowerUp('multiplier5x', entry.abilityCount || 5)
-      } else if (entry.item.includes('2.5x')) {
-        onAddPowerUp('multiplier2_5x', entry.abilityCount || 5)
+        deliverOrderItems(entry.id, fbOrder.playerId, deliveryItems).catch(() => {})
       }
       const updated = purchaseHistory.map(p =>
         p.id === entry.id ? { ...p, status: 'Delivered' as const } : p
       )
       setPurchaseHistory(updated)
       savePurchaseHistory(updated)
-      onAddNotification('Ability Approved! ✅', `${entry.item} delivered to your inventory!`, 'reward', '📦')
+      onAddNotification('Ability Approved ✅', `${entry.item} approved. Items delivered to buyer via Firebase.`, 'system', '📦')
     } else {
-      // Coin or coin-price ability purchase
-      let coinAmount = entry.coinAmount || getCoinAmountFromItem(entry.item)
-      if (isDelayed) {
-        coinAmount = Math.floor(coinAmount * 2) // 2x bonus for delayed
+      // Legacy coin or coin-price ability purchase - try to deliver via Firebase
+      const fbOrder = firebaseOrders.find(o => {
+        const safeItems = Array.isArray(o.items) ? o.items : []
+        const itemStr = safeItems.length > 0 ? safeItems.map((i: any) => `${i.name || 'Item'} x${i.quantity || 1}`).join(', ') : ''
+        return !itemStr.includes('5x') && !itemStr.includes('2.5x')
+      })
+      if (fbOrder && fbOrder.playerId) {
+        const deliveryItems: { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number } = {}
+        let coinAmt = getCoinAmountFromItem(entry.item)
+        if (isDelayed) coinAmt = Math.floor(coinAmt * 2)
+        deliveryItems.coins = coinAmt
+        deliverOrderItems(entry.id, fbOrder.playerId, deliveryItems).catch(() => {})
       }
-
-      onAddCoins(coinAmount)
 
       // Update purchase status
       const updated = purchaseHistory.map(p =>
@@ -1645,12 +1709,12 @@ export function CouponCode({
       savePurchaseHistory(updated)
 
       const bonusText = isDelayed ? ` (2x bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
-      onAddNotification('Order Approved! ✅', `${entry.item} delivered! ${coinAmount} coins added${bonusText}`, 'reward', '📦')
+      onAddNotification('Order Approved ✅', `${entry.item} approved${bonusText}. Items delivered to buyer via Firebase.`, 'system', '📦')
     }
     } catch (err) {
       showAdminError('Failed to approve purchase. Please try again.')
     }
-  }, [purchaseHistory, storeOrders, onAddCoins, onAddPowerUp, onAddNotification, firebaseOrders, showAdminError])
+  }, [purchaseHistory, storeOrders, onAddNotification, firebaseOrders, showAdminError])
 
   // Deny a purchase (works with both purchaseHistory and storeOrders)
   const handleDenyPurchase = useCallback((entry: PurchaseHistoryEntry) => {
@@ -2001,6 +2065,8 @@ export function CouponCode({
   const allPurchases = mergedAllPurchases
 
   // Approve a store order (from Firebase)
+  // IMPORTANT: Items are delivered ONLY via Firebase deliverOrderItems() to the buyer.
+  // firebaseUpdateOrderStatus() only updates the order status (no delivery) to avoid double delivery.
   const handleApproveStoreOrder = useCallback((order: StoreOrder) => {
     try {
       const updated = storeOrders.map(o =>
@@ -2008,21 +2074,43 @@ export function CouponCode({
       )
       setStoreOrders(updated)
       saveStoreOrders(updated)
-      // Update in Firebase
+      // Update order status in Firebase (status update only, no delivery)
       firebaseUpdateOrderStatus(order.id, 'approved').catch(() => {})
-      // Deliver items via Firebase notification
+      // Deliver items to buyer via Firebase notification
       const fbOrder = firebaseOrders.find(o => o.id === order.id)
-      if (fbOrder) {
+      if (fbOrder && fbOrder.playerId) {
         const isInrAbility = order.item.includes('5x') || order.item.includes('2.5x')
+        const isHammer = order.item.toLowerCase().includes('hammer')
+        const isMagnet = order.item.toLowerCase().includes('magnet')
+        const isBomb = order.item.toLowerCase().includes('bomb') || order.item.toLowerCase().includes('blast')
+        const isTimer = order.item.toLowerCase().includes('timer')
+        const isUndo = order.item.toLowerCase().includes('undo')
+        const isRoomCard = order.item.toLowerCase().includes('room card')
+        const isSpinTicket = order.item.toLowerCase().includes('spin') || order.item.toLowerCase().includes('ticket')
         const deliveryItems: { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number } = {}
+
         if (isInrAbility) {
           if (order.item.includes('5x')) {
             deliveryItems.abilities = [{ type: 'multiplier5x', count: order.quantity }]
           } else {
             deliveryItems.abilities = [{ type: 'multiplier2_5x', count: order.quantity }]
           }
+        } else if (isHammer || isMagnet || isBomb || isTimer || isUndo) {
+          // Coin-price ability purchase
+          const abilities: Array<{ type: string; count: number }> = []
+          if (isHammer) abilities.push({ type: 'hammer', count: order.quantity })
+          if (isMagnet) abilities.push({ type: 'magnet', count: order.quantity })
+          if (isBomb) abilities.push({ type: 'blast', count: order.quantity })
+          if (isTimer) abilities.push({ type: 'extraTime', count: order.quantity })
+          if (isUndo) abilities.push({ type: 'undo', count: order.quantity })
+          if (abilities.length > 0) deliveryItems.abilities = abilities
+        } else if (isRoomCard) {
+          deliveryItems.roomCards = order.quantity
+        } else if (isSpinTicket) {
+          deliveryItems.spinTickets = order.quantity
         } else {
-          deliveryItems.coins = order.quantity
+          // Coin pack - use getCoinAmountFromItem for accurate coin amounts from item name
+          deliveryItems.coins = getCoinAmountFromItem(order.item)
         }
         deliverOrderItems(order.id, fbOrder.playerId, deliveryItems).catch(() => {})
       }
@@ -2345,6 +2433,7 @@ export function CouponCode({
             className="fixed inset-0 z-[250] flex flex-col"
             style={{ background: 'linear-gradient(135deg, var(--game-bg-1), var(--game-bg-2))' }}
           >
+          <AdminErrorBoundary onError={showAdminError}>
             {/* Admin Header */}
             <div className="flex items-center justify-between p-3 border-b shrink-0" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
               <div className="flex items-center gap-2">
@@ -2596,7 +2685,7 @@ export function CouponCode({
                                     <p className="text-[9px] font-bold font-mono" style={{ color: '#EDC22E' }}>{c.code}</p>
                                     <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
                                       {c.discountPercent}% off • Uses: {c.currentUses}/{c.maxUses}
-                                      {c.targetUserIds.length > 0 ? ` • ${c.targetUserIds.length} targeted` : ' • All users'}
+                                      {(c.targetUserIds?.length ?? 0) > 0 ? ` • ${c.targetUserIds.length} targeted` : ' • All users'}
                                     </p>
                                   </div>
                                   <span className="text-[10px] font-bold" style={{ color: '#FF6D00' }}>-{c.discountPercent}%</span>
@@ -3452,9 +3541,9 @@ export function CouponCode({
                                         {c.minPurchase > 0 && ` • Min: ₹${c.minPurchase}`}
                                         {' • Uses: '}{c.currentUses}/{c.maxUses}
                                       </p>
-                                      {c.targetUserIds.length > 0 && (
+                                      {(c.targetUserIds?.length ?? 0) > 0 && (
                                         <p className="text-[7px]" style={{ color: 'rgba(124,77,255,0.8)' }}>
-                                          🎯 Targeted: {c.targetUserIds.slice(0, 3).join(', ')}{c.targetUserIds.length > 3 ? ` +${c.targetUserIds.length - 3} more` : ''}
+                                          🎯 Targeted: {c.targetUserIds.slice(0, 3).join(', ')}{(c.targetUserIds?.length ?? 0) > 3 ? ` +${c.targetUserIds.length - 3} more` : ''}
                                         </p>
                                       )}
                                     </div>
@@ -3470,7 +3559,7 @@ export function CouponCode({
                                       <button
                                         onClick={() => {
                                           // Send notification to targeted users
-                                          if (c.targetUserIds.length > 0) {
+                                          if ((c.targetUserIds?.length ?? 0) > 0) {
                                             onAddNotification('New Coupon Available! 🎟️', `You have a ${c.discountPercent}% off coupon: ${c.code}! ${c.description}`, 'reward', '💸')
                                           }
                                         }}
@@ -4858,6 +4947,7 @@ export function CouponCode({
                     )}
                 </AdminErrorBoundary>
             </div>
+          </AdminErrorBoundary>
 
             {/* Admin Footer Navigation */}
             <div className="flex-shrink-0 sticky bottom-0 z-20 flex items-center justify-around py-2 px-1"
@@ -4973,9 +5063,9 @@ export function CouponCode({
       </AnimatePresence>
 
       {/* Floating Save Button - visible when admin panel is open */}
-      {showAdminPanel && (
+      {showAdminPanel && isOpen && (
         <button
-          onClick={handleSaveAllAdmin}
+          onClick={() => { try { handleSaveAllAdmin() } catch { showAdminError('Save failed') } }}
           className="fixed bottom-4 right-4 z-50 px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg transition-transform active:scale-95"
           style={{
             background: 'linear-gradient(135deg, #EDC22E, #FF7A00)',
