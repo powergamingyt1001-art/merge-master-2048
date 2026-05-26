@@ -59,7 +59,7 @@ interface StoreOrder {
   transactionId: string
   utrNumber: string
   proofBase64?: string
-  status: 'pending' | 'approved' | 'rejected'
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled'
   upiId: string
 }
 
@@ -602,7 +602,7 @@ function TagBadge({ label, color }: { label: string; color: string }) {
 }
 
 function BuyButton({ onPress, label, disabled }: { onPress: () => void; label?: 'Add' | 'Buy'; disabled?: boolean }) {
-  const isBuy = label === 'Buy'
+  const isBuy = label !== 'Add'
   return (
     <button
       onClick={onPress}
@@ -615,7 +615,7 @@ function BuyButton({ onPress, label, disabled }: { onPress: () => void; label?: 
       }}
     >
       {isBuy ? <Coins className="w-3.5 h-3.5" /> : <ShoppingCart className="w-3.5 h-3.5" />}
-      {label || 'Add'}
+      {label || 'Buy'}
     </button>
   )
 }
@@ -1074,7 +1074,7 @@ function CoinsTab({ onAddToCart, cart, onUpdateCartQuantity }: {
                 </div>
               ) : (
                 <BuyButton
-                  label="Add"
+                  label="Buy"
                   onPress={() => onAddToCart({
                     id: pack.id,
                     emoji: '💰',
@@ -1177,7 +1177,7 @@ function AbilityCard({
           </div>
         ) : (
           <BuyButton
-            label="Add"
+            label="Buy"
             onPress={() => onAddToCart(item)}
           />
         )}
@@ -1650,7 +1650,7 @@ function HistoryTab({ orders, onDeleteAll, onDeleteSelected, purchaseHistory }: 
       case 'successful':
         return allHistoryItems.filter(i => i.status === 'approved')
       case 'failed':
-        return allHistoryItems.filter(i => i.status === 'rejected')
+        return allHistoryItems.filter(i => i.status === 'rejected' || i.status === 'cancelled')
       case 'pending':
         return allHistoryItems.filter(i => i.status === 'pending')
       case 'gift':
@@ -1664,11 +1664,12 @@ function HistoryTab({ orders, onDeleteAll, onDeleteSelected, purchaseHistory }: 
     pending: { bg: 'rgba(255,167,38,0.15)', color: '#FFA726', label: 'Pending' },
     approved: { bg: 'rgba(0,230,118,0.15)', color: '#00E676', label: 'Successful' },
     rejected: { bg: 'rgba(246,94,59,0.15)', color: '#F65E3B', label: 'Failed' },
+    cancelled: { bg: 'rgba(246,94,59,0.15)', color: '#F65E3B', label: 'Cancelled' },
   }
 
   const filterButtons: Array<{ key: HistoryFilter; label: string; color: string }> = [
     { key: 'all', label: 'All', color: '#FFFFFF' },
-    { key: 'successful', label: '✅ Success', color: '#00E676' },
+    { key: 'successful', label: '✅ Successful', color: '#00E676' },
     { key: 'failed', label: '❌ Failed', color: '#F65E3B' },
     { key: 'pending', label: '⏳ Pending', color: '#FFA726' },
     { key: 'gift', label: '🎁 Gift', color: '#E040FB' },
@@ -1952,7 +1953,7 @@ function SpinsTab({ onCoinBuy, onAddToCart, coins, cart, onUpdateCartQuantity }:
                   </div>
                 ) : (
                   <BuyButton
-                    label="Add"
+                    label="Buy"
                     onPress={() => onAddToCart({
                       id: pack.id,
                       emoji: '🎫',
@@ -2453,11 +2454,18 @@ export function Store({ isOpen, onClose, playerId, playerName, playerAvatar, use
       setPaymentModal({ open: true, itemName: itemNames, itemPrice: total, itemQuantity: 1 })
     }
 
+    // Show success popup for coin items purchased immediately
+    const coinItems = cart.filter(i => i.currency === 'coin')
+    if (coinItems.length > 0) {
+      const coinItemNames = coinItems.map(i => `${i.emoji} ${i.name} x${i.quantity}`).join(', ')
+      showSuccessPopup(coinItemNames)
+    }
+
     // Clear cart
     setCart([])
     setCouponCode('')
     setShowCart(false)
-  }, [cart, appliedCoupon, finalTotal, cartTotalINR, onDeductCoins, onAddPowerUp, onAddUndos, onAddNotification, onAddSpinTickets, playerId, playerName, userCode])
+  }, [cart, appliedCoupon, finalTotal, cartTotalINR, onDeductCoins, onAddPowerUp, onAddUndos, onAddNotification, onAddSpinTickets, playerId, playerName, userCode, showSuccessPopup])
 
   return (
     <>

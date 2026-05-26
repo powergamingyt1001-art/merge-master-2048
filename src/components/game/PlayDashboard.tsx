@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Play, Swords, Clock, Trophy, Coins, Crown, Bell, Lock, Search, Loader2, Users, X, UserPlus, Heart } from 'lucide-react'
+import { Play, Swords, Clock, Trophy, Coins, Crown, Bell, Lock, Search, Loader2, Users, X, UserPlus } from 'lucide-react'
 import { SpinWheel, SpinPrize } from './SpinWheel'
 import { LoginStreak } from './LoginStreak'
 import { WelcomeGift } from './WelcomeGift'
@@ -22,7 +22,7 @@ import {
   getDashboardBigBannerSlot,
 } from '@/components/ads/AdsterraAds'
 import { PowerUp, Notification, DailyTask, DailyTaskReward, GameHistoryEntry, getLevelInfo } from '@/hooks/useGame'
-import { sendFriendRequest, getFriendRequests, onFriendRequestsUpdate, acceptFriendRequest, declineFriendRequest, getFriends, onFriendsUpdate, searchPlayerByUserCode, removeFriend, onLikeCountUpdate, type FriendData, type FriendRequestData } from '@/lib/firebase-service'
+import { sendFriendRequest, getFriendRequests, onFriendRequestsUpdate, acceptFriendRequest, declineFriendRequest, getFriends, onFriendsUpdate, searchPlayerByUserCode, removeFriend, type FriendData, type FriendRequestData } from '@/lib/firebase-service'
 
 
 interface PlayDashboardProps {
@@ -100,9 +100,6 @@ interface PlayDashboardProps {
   onAddRoomCards: (count: number) => void
   onDeleteGameHistory?: (id: string) => void
   onClearGameHistory?: () => void
-  likeCount?: number
-  onLikeProfile?: (targetPlayerId: string) => void
-  likedProfileId?: string | null
   classicBestScore?: number
   tournamentBestScore?: number
   battleBestScore?: number
@@ -154,8 +151,7 @@ export function PlayDashboard({
   userCode, totalCoinsEarned, winningCoins, roomCardCount, gameHistory,
   streakWeek = 1, onAddRoomCards,
   onDeleteGameHistory, onClearGameHistory,
-  likeCount = 0, onLikeProfile,
-  likedProfileId = null, classicBestScore = 0, tournamentBestScore = 0, battleBestScore = 0,
+  classicBestScore = 0, tournamentBestScore = 0, battleBestScore = 0,
   skillPoints = 0, saveGame, saveAll, setAutoSaveEnabled,
 }: PlayDashboardProps) {
   const [showSpin, setShowSpin] = useState(false)
@@ -187,8 +183,6 @@ export function PlayDashboard({
   const [friendModeSelect, setFriendModeSelect] = useState<{ friendId: string; friendName: string; friendAvatar: string } | null>(null)
   // Friend request popup on dashboard
   const [showFriendRequestPopup, setShowFriendRequestPopup] = useState(false)
-  // Local like count from Firebase
-  const [localLikeCount, setLocalLikeCount] = useState(likeCount)
   // Searching animation for Battle/Coin/Classic modes
   const [searching, setSearching] = useState<{ active: boolean; type: 'battle' | 'coins' | 'classic'; timeLimit?: number; coinFee?: number; opponent?: { name: string; avatar: string } } | null>(null)
   const searchTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -215,14 +209,7 @@ export function PlayDashboard({
     }
   }, [friendRequests.length, showFriends])
 
-  // Real-time like count listener
-  useEffect(() => {
-    if (!playerId) return
-    const unsub = onLikeCountUpdate(playerId, (count) => setLocalLikeCount(count))
-    return unsub
-  }, [playerId])
-
-  // Search friend by UID
+  // Internet detection
   const handleFriendSearch = useCallback(async () => {
     if (!friendSearchUid.trim()) return
     setFriendSearchLoading(true)
@@ -379,14 +366,6 @@ export function PlayDashboard({
                 <p className="text-[8px] font-bold leading-tight" style={{ color: '#FFFFFF' }}>{playerName}</p>
                 <p className="text-[6px] leading-tight" style={{ color: getLevelInfo(playerLevel).color }}>Lv.{playerLevel} {getLevelInfo(playerLevel).icon}</p>
               </div>
-              {/* Like count badge */}
-              {localLikeCount > 0 && (
-                <div className="absolute -top-1 -right-1 flex items-center gap-0.5 px-1 py-0 rounded-full"
-                  style={{ backgroundColor: 'rgba(246,94,59,0.9)', border: '1px solid rgba(255,255,255,0.3)' }}>
-                  <Heart className="w-2 h-2" fill="white" style={{ color: '#FFFFFF' }} />
-                  <span className="text-[6px] font-bold" style={{ color: '#FFFFFF' }}>{localLikeCount > 99 ? '99+' : localLikeCount}</span>
-                </div>
-              )}
             </button>
 
             <div className="text-center">
@@ -1044,7 +1023,6 @@ export function PlayDashboard({
         gamePoints={gamePoints} bestScore={bestScore} coins={coins} totalCoinsEarned={totalCoinsEarned} winningCoins={winningCoins}
         playerName={playerName} playerAvatar={playerAvatar} playerId={playerId} tournamentPoints={tournamentPoints}
         classicBestScore={classicBestScore} tournamentBestScore={tournamentBestScore} battleBestScore={battleBestScore}
-        onLikeProfile={onLikeProfile} likedProfileId={likedProfileId}
       />
       <Tournament isOpen={showTournament} onClose={() => setShowTournament(false)}
         coins={coins}
@@ -1083,9 +1061,6 @@ export function PlayDashboard({
         onDeleteGameHistory={onDeleteGameHistory}
         onClearGameHistory={onClearGameHistory}
         playerId={playerId} viewerPlayerId={playerId}
-        likeCount={localLikeCount}
-        isLiked={likedProfileId === playerId}
-        onToggleLike={() => onLikeProfile?.(playerId)}
         skillPoints={skillPoints}
       />
       <NotificationsPanel isOpen={showNotifications} onClose={() => setShowNotifications(false)}

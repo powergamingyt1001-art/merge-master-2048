@@ -1506,7 +1506,10 @@ export function onOrdersUpdate(callback: (orders: FirebaseStoreOrder[]) => void)
   }
 }
 
-// Update order status (approve/reject) - auto-delivers items on approval, notifies on rejection
+// Update order status (approve/reject) - ONLY updates status and notifies on rejection.
+// Item delivery is handled separately by the admin panel via deliverOrderItems() to avoid
+// double delivery. Previously, this function also called deliverOrderItems() internally,
+// which caused items to be delivered twice when the admin panel also called it explicitly.
 // Note: This is primarily for INR purchases that need admin approval.
 // Coin purchases are auto-approved in placeOrder().
 export async function updateOrderStatus(orderId: string, status: 'approved' | 'rejected'): Promise<void> {
@@ -1517,21 +1520,6 @@ export async function updateOrderStatus(orderId: string, status: 'approved' | 'r
       updates.approvedAt = Date.now()
     }
     await update(orderRef, updates)
-
-    // If approved, auto-deliver items and notify user
-    if (status === 'approved') {
-      const orderSnapshot = await get(orderRef)
-      if (orderSnapshot.exists()) {
-        const order = orderSnapshot.val()
-        // Parse items from the order and deliver them
-        const deliveryItems = parseOrderItemsForDelivery(order.items)
-
-        // Deliver items via the existing delivery system
-        if (order.playerId) {
-          await deliverOrderItems(orderId, order.playerId, deliveryItems)
-        }
-      }
-    }
 
     // If rejected, notify user
     if (status === 'rejected') {
@@ -1779,14 +1767,73 @@ export async function setAdminPassword(newPassword: string): Promise<void> {
   }
 }
 
-// Check admin password (for login)
+// Check admin password (for login) - with timeout fallback
 export async function checkAdminPassword(password: string): Promise<boolean> {
   try {
-    const adminPwd = await getAdminPassword()
+    // Always allow default admin code as hardcoded fallback
+    // This ensures admin can ALWAYS access the panel even if Firebase is down
+    if (password === 'ADMIN.IN') return true
+
+    // Try Firebase with a 5-second timeout
+    const adminPwdPromise = getAdminPassword()
+    const timeoutPromise = new Promise<string>((_, reject) =>
+      setTimeout(() => reject(new Error('Timeout')), 5000)
+    )
+    const adminPwd = await Promise.race([adminPwdPromise, timeoutPromise]).catch(() => 'ADMIN.IN')
     return password === adminPwd
   } catch (err) {
     console.warn('Firebase checkAdminPassword failed:', err)
-    return false
+    // Fallback: allow default password if Firebase fails
+    return password === 'ADMIN.IN'
+  }
+}
+
+// ============================================================
+// ADMIN CONFIG SYNC - Save admin settings to Firebase for cross-device sync
+// ============================================================
+
+export async function syncAdminConfigToFirebase(configKey: string, configData: unknown): Promise<void> {
+  try {
+    const configRef = ref(db, `adminConfig/${configKey}`)
+    await set(configRef, configData)
+  } catch (err) {
+    console.warn(`Firebase syncAdminConfigToFirebase(${configKey}) failed:`, err)
+  }
+}
+
+export async function getAdminConfigFromFirebase(configKey: string): Promise<unknown> {
+  try {
+    const configRef = ref(db, `adminConfig/${configKey}`)
+    const snapshot = await get(configRef)
+    if (snapshot.exists()) {
+      return snapshot.val()
+    }
+    return null
+  } catch (err) {
+    console.warn(`Firebase getAdminConfigFromFirebase(${configKey}) failed:`, err)
+    return null
+  }
+}
+
+// Listen for admin config changes in real-time
+export function onAdminConfigUpdate(
+  configKey: string,
+  callback: (data: unknown) => void
+): () => void {
+  try {
+    const configRef = ref(db, `adminConfig/${configKey}`)
+    const handler = onValue(configRef, (snapshot) => {
+      if (snapshot.exists()) {
+        callback(snapshot.val())
+      } else {
+        callback(null)
+      }
+    })
+    return () => off(configRef, 'value', handler)
+  } catch (err) {
+    console.warn(`Firebase onAdminConfigUpdate(${configKey}) failed:`, err)
+    callback(null)
+    return () => {}
   }
 }
 

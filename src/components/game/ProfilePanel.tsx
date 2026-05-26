@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Crown, Trophy, Star, Edit3, Check, Bell, Coins, Swords, Calendar, Percent, Gift, Trash2, Sun, Moon, Copy, DoorOpen, History, Heart, UserPlus } from 'lucide-react'
+import { X, Crown, Trophy, Star, Edit3, Check, Bell, Coins, Swords, Calendar, Percent, Gift, Trash2, Sun, Moon, Copy, History, UserPlus } from 'lucide-react'
 import { Notification, PLAYER_AVATARS, getLevelInfo, getLevelThreshold, MAX_LEVEL, GameHistoryEntry } from '@/hooks/useGame'
-import { removeLike, transferLike, hasLiked, onLikesUpdate } from '@/lib/firebase-service'
 import { AdsterraBanner320x50 } from '@/components/ads/AdsterraAds'
 import { useTheme } from 'next-themes'
 
@@ -49,9 +48,6 @@ interface ProfilePanelProps {
   onStartRoomGame?: (settings: any) => void
   skillPoints?: number
   isOwnProfile?: boolean
-  likeCount?: number
-  isLiked?: boolean
-  onToggleLike?: () => void
   onAddNotification?: (title: string, message: string, type: 'reward' | 'rank' | 'invite' | 'commission' | 'system' | 'battle' | 'friend_request', emoji: string) => void
   playerId?: string
   viewerPlayerId?: string
@@ -133,7 +129,7 @@ export function ProfilePanel({
   totalBattlesPlayed, totalBattlesWon,
   onResetAllData,
   userCode, totalCoinsEarned, roomCardCount, battleBestScore, gameHistory,
-  skillPoints, isOwnProfile = true, likeCount = 0, isLiked = false, onToggleLike,
+  skillPoints, isOwnProfile = true,
   onAddNotification,
   playerId, viewerPlayerId,
   onDeleteGameHistory, onClearGameHistory,
@@ -147,61 +143,12 @@ export function ProfilePanel({
   const [copiedCode, setCopiedCode] = useState(false)
   const [showGameHistory, setShowGameHistory] = useState(false)
   const [historyTab, setHistoryTab] = useState<'today' | 'yesterday' | 'week'>('today')
-  const [localLiked, setLocalLiked] = useState(isLiked)
-  const [localLikeCount, setLocalLikeCount] = useState(likeCount)
   const { theme, setTheme } = useTheme()
 
   // Sync local state with next-themes
   useEffect(() => {
     setIsDarkTheme(theme !== 'light')
   }, [theme])
-
-  // Sync local like state from props
-  useEffect(() => {
-    setLocalLiked(isLiked)
-    setLocalLikeCount(likeCount)
-  }, [isLiked, likeCount])
-
-  // Firebase real-time likes listener for own profile
-  useEffect(() => {
-    const targetId = playerId || ''
-    if (!targetId) return
-    const unsubscribe = onLikesUpdate(targetId, (count) => {
-      setLocalLikeCount(count)
-    })
-    return unsubscribe
-  }, [playerId])
-
-  // Check if viewer has liked this profile on mount
-  useEffect(() => {
-    const targetId = playerId || ''
-    const viewerId = viewerPlayerId || ''
-    if (!targetId || !viewerId || targetId === viewerId) return
-    hasLiked(viewerId, targetId).then((alreadyLiked) => {
-      setLocalLiked(alreadyLiked)
-    })
-  }, [playerId, viewerPlayerId])
-
-  const handleToggleLike = async () => {
-    const targetId = playerId || ''
-    const viewerId = viewerPlayerId || ''
-    if (!targetId || !viewerId) return
-    // Don't allow self-like
-    if (targetId === viewerId) return
-
-    if (localLiked) {
-      // Unlike: remove the like
-      setLocalLiked(false)
-      setLocalLikeCount(prev => Math.max(0, prev - 1))
-      await removeLike(viewerId, targetId)
-    } else {
-      // Like: use transferLike (one like per user, transfers from any previous target)
-      setLocalLiked(true)
-      setLocalLikeCount(prev => prev + 1)
-      await transferLike(viewerId, targetId)
-    }
-    onToggleLike?.()
-  }
 
   const levelInfo = getLevelInfo(playerLevel)
   const currentLevelThreshold = getLevelThreshold(playerLevel)
@@ -321,23 +268,6 @@ export function ProfilePanel({
             <div className="flex items-center justify-between p-4 pb-2 sticky top-0 z-10" style={{ background: 'linear-gradient(135deg, var(--game-bg-1), var(--game-bg-2))' }}>
               <h3 className="text-lg font-bold" style={{ color: '#FFFFFF' }}>👤 Profile</h3>
               <div className="flex items-center gap-2">
-                {/* Like Button */}
-                <button
-                  onClick={handleToggleLike}
-                  className="flex items-center gap-1 px-2 py-1 rounded-full transition-transform active:scale-90"
-                  style={{
-                    backgroundColor: localLiked ? 'rgba(244,63,94,0.15)' : 'rgba(255,255,255,0.06)',
-                    border: localLiked ? '1px solid rgba(244,63,94,0.3)' : '1px solid rgba(255,255,255,0.08)',
-                  }}>
-                  {localLiked ? (
-                    <Heart className="w-3.5 h-3.5 fill-current" style={{ color: '#F43F5E' }} />
-                  ) : (
-                    <Heart className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.4)' }} />
-                  )}
-                  <span className="text-[9px] font-bold" style={{ color: localLiked ? '#F43F5E' : 'rgba(255,255,255,0.4)' }}>
-                    {localLikeCount}
-                  </span>
-                </button>
                 <button onClick={onClose} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
                   <X className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.5)' }} />
                 </button>
@@ -584,17 +514,23 @@ export function ProfilePanel({
                   <p className="text-[9px] font-bold" style={{ color: '#FF7A00' }}>{gameHistory.length}</p>
                 </button>
 
-                {/* Room Cards */}
-                <div className="p-2 rounded-xl text-center" style={{ backgroundColor: 'rgba(224,64,251,0.06)', border: '1px solid rgba(224,64,251,0.12)' }}>
+                {/* Room Cards - Bigger Prominent Box */}
+                <div className="p-2.5 rounded-xl text-center" style={{ backgroundColor: 'rgba(224,64,251,0.1)', border: '1px solid rgba(224,64,251,0.25)' }}>
                   <div className="flex items-center justify-center gap-1 mb-1">
-                    <DoorOpen className="w-3 h-3" style={{ color: '#E040FB' }} />
-                    <span className="text-[7px] font-bold" style={{ color: '#E040FB' }}>Room Cards</span>
+                    <span className="text-sm">🃏</span>
+                    <span className="text-[8px] font-bold" style={{ color: '#E040FB' }}>Room Cards</span>
                   </div>
-                  <span className="text-sm font-extrabold" style={{ color: '#E040FB' }}>
+                  <span className="text-lg font-extrabold" style={{ color: '#E040FB' }}>
                     {roomCardCount}
                   </span>
-                  <p className="text-[6px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                    cards left
+                  <div className="h-1.5 rounded-full overflow-hidden mt-1" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                    <div className="h-full rounded-full transition-all" style={{
+                      width: `${Math.min(100, roomCardCount * 10)}%`,
+                      background: roomCardCount === 0 ? 'linear-gradient(90deg, #F65E3B, #FF7A00)' : 'linear-gradient(90deg, #E040FB, #AA00FF)',
+                    }} />
+                  </div>
+                  <p className="text-[6px] mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    {roomCardCount > 0 ? 'Ready to fight!' : 'No cards - buy from store'}
                   </p>
                 </div>
               </div>

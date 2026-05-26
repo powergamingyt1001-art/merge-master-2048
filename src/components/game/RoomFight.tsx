@@ -537,13 +537,21 @@ export function RoomFight({
               </button>
             </div>
 
-            {/* Room Cards indicator */}
+            {/* Room Cards indicator - Only shown on Create and Random tabs */}
+            {(activeTab === 'create' || activeTab === 'random') && (
             <div className="mx-4 mb-2 flex items-center gap-1.5">
               <span className="text-[9px] font-bold" style={{ color: '#EDC22E' }}>🃏 Room Cards: {roomCardCount}</span>
               {roomCardCount < 1 && (
                 <span className="text-[7px] px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: 'rgba(246,94,59,0.2)', color: '#F65E3B' }}>Need 1</span>
               )}
             </div>
+            )}
+            {/* Free to join message on Join tab */}
+            {activeTab === 'join' && (
+            <div className="mx-4 mb-2 flex items-center gap-1.5">
+              <span className="text-[9px] font-bold" style={{ color: '#00E676' }}>🚪 Free to join — no room card needed!</span>
+            </div>
+            )}
 
             {/* Tab Switcher */}
             {!waitingForOpponent && !joinSearching && !joinConnected && (
