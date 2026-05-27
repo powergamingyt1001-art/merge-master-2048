@@ -3,9 +3,9 @@
 import React, { useState, useCallback, useEffect, Component, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Ticket, Check, AlertCircle, Shield, Clock, ChevronRight, Trash2, Plus, Settings, Eye, Ban, ThumbsUp, Sparkles, Coins, RotateCcw, Zap, Minus, RefreshCw, Users as UsersIcon, Copy, Percent, Package, TrendingUp, DollarSign, Send, Lock, UserCheck, Filter, Save, Database } from 'lucide-react'
-import { getTotalUserCount, getOnlineUserCount, getTotalReferralsCount, checkAdminPassword, setAdminPassword as firebaseSetAdminPassword, authenticatePartner, getPartners as firebaseGetPartners, savePartner as firebaseSavePartner, deletePartner as firebaseDeletePartner, onOrdersUpdate, updateOrderStatus as firebaseUpdateOrderStatus, deliverOrderItems, broadcastCoupon as firebaseBroadcastCoupon, broadcastDailyTask as firebaseBroadcastDailyTask, onCouponBroadcast, syncAdminConfigToFirebase, getAdminConfigFromFirebase, type FirebaseStoreOrder, type PartnerData } from '@/lib/firebase-service'
+import { getTotalUserCount, getOnlineUserCount, getTotalReferralsCount, checkAdminPassword, setAdminPassword as firebaseSetAdminPassword, authenticatePartner, getPartners as firebaseGetPartners, savePartner as firebaseSavePartner, deletePartner as firebaseDeletePartner, onOrdersUpdate, updateOrderStatus as firebaseUpdateOrderStatus, deliverOrderItems, getPlayerByUserCode, broadcastCoupon as firebaseBroadcastCoupon, broadcastDailyTask as firebaseBroadcastDailyTask, onCouponBroadcast, syncAdminConfigToFirebase, getAdminConfigFromFirebase, type FirebaseStoreOrder, type PartnerData } from '@/lib/firebase-service'
 import { db } from '@/lib/firebase'
-import { ref, onValue } from 'firebase/database'
+import { ref, onValue, get as fbGet } from 'firebase/database'
 
 // ============================================================
 // ADMIN ERROR BOUNDARY - Catches rendering errors in admin panel
@@ -74,6 +74,8 @@ interface CouponCodeProps {
   saveGame?: () => void
   saveAll?: () => void
   setAutoSaveEnabled?: (enabled: boolean) => void
+  forceOpenAdmin?: boolean  // When true, auto-open admin panel
+  onAdminOpened?: () => void  // Callback after admin panel is opened
 }
 
 interface ClaimedCoupon {
@@ -226,6 +228,7 @@ interface PurchaseHistoryEntry {
   coinAmount?: number
   abilityType?: string
   abilityCount?: number
+  userCode?: string
 }
 
 function loadPurchaseHistory(): PurchaseHistoryEntry[] {
@@ -726,6 +729,8 @@ export function CouponCode({
   saveGame,
   saveAll,
   setAutoSaveEnabled,
+  forceOpenAdmin,
+  onAdminOpened,
 }: CouponCodeProps) {
   const [codeInput, setCodeInput] = useState('')
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
@@ -740,6 +745,16 @@ export function CouponCode({
 
   // Admin panel state
   const [showAdminPanel, setShowAdminPanel] = useState(false)
+
+  // Auto-open admin panel when forceOpenAdmin prop is true
+  useEffect(() => {
+    if (forceOpenAdmin && isOpen) {
+      setAdminRole('admin')
+      setShowAdminPanel(true)
+      onAdminOpened?.()
+    }
+  }, [forceOpenAdmin, isOpen, onAdminOpened])
+
   const [adminTab, setAdminTab] = useState<AdminTab>('dashboard')
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryEntry[]>(() => loadPurchaseHistory())
   const [customCodes, setCustomCodes] = useState<CustomCouponCode[]>(() => loadCustomCouponCodes())
@@ -1618,7 +1633,12 @@ export function CouponCode({
   // IMPORTANT: Items are delivered ONLY via Firebase deliverOrderItems() to the buyer.
   // We do NOT call onAddCoins/onAddPowerUp here because those add to the ADMIN's own account,
   // not the buyer's. The buyer receives items through the Firebase notification listener in useGame.ts.
-  const handleApprovePurchase = useCallback((entry: PurchaseHistoryEntry) => {
+  //
+  // FIX: This function now has robust fallback logic to find the buyer's playerId:
+  //   1. Try firebaseOrders state (fast, but may be stale if Firebase sync is slow)
+  //   2. Read order directly from Firebase (works even if state is empty)
+  //   3. Look up player by userCode from the entry (fallback for edge cases)
+  const handleApprovePurchase = useCallback(async (entry: PurchaseHistoryEntry) => {
     try {
     const purchaseDate = new Date(entry.date).getTime()
     const now = Date.now()
@@ -1627,94 +1647,181 @@ export function CouponCode({
     const isStoreOrder = entry.id.startsWith('store_')
     const storeOrderId = isStoreOrder ? entry.id.replace('store_', '') : null
 
-    if (isStoreOrder && storeOrderId) {
-      const isInrAbility = entry.item.includes('5x') || entry.item.includes('2.5x')
+    // Compute delivery items from the entry
+    const isInrAbility = entry.item.includes('5x') || entry.item.includes('2.5x')
+    const isHammer = entry.item.toLowerCase().includes('hammer')
+    const isMagnet = entry.item.toLowerCase().includes('magnet')
+    const isBomb = entry.item.toLowerCase().includes('bomb') || entry.item.toLowerCase().includes('blast')
+    const isTimer = entry.item.toLowerCase().includes('timer')
+    const isUndo = entry.item.toLowerCase().includes('undo')
+    const isRoomCard = entry.item.toLowerCase().includes('room card')
+    const isSpinTicket = entry.item.toLowerCase().includes('spin') || entry.item.toLowerCase().includes('ticket')
 
-      // Update store order status locally
+    const deliveryItems: { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number } = {}
+
+    if (isInrAbility) {
+      if (entry.item.includes('5x')) {
+        deliveryItems.abilities = [{ type: 'multiplier5x', count: entry.abilityCount || 5 }]
+      } else if (entry.item.includes('2.5x')) {
+        deliveryItems.abilities = [{ type: 'multiplier2_5x', count: entry.abilityCount || 5 }]
+      }
+    } else if (isHammer || isMagnet || isBomb || isTimer || isUndo) {
+      const abilities: Array<{ type: string; count: number }> = []
+      if (isHammer) abilities.push({ type: 'hammer', count: entry.abilityCount || 5 })
+      if (isMagnet) abilities.push({ type: 'magnet', count: entry.abilityCount || 5 })
+      if (isBomb) abilities.push({ type: 'blast', count: entry.abilityCount || 5 })
+      if (isTimer) abilities.push({ type: 'extraTime', count: entry.abilityCount || 5 })
+      if (isUndo) abilities.push({ type: 'undo', count: entry.abilityCount || 5 })
+      if (abilities.length > 0) deliveryItems.abilities = abilities
+    } else if (isRoomCard) {
+      deliveryItems.roomCards = entry.abilityCount || 1
+    } else if (isSpinTicket) {
+      deliveryItems.spinTickets = entry.abilityCount || 1
+    } else {
+      let coinAmt = getCoinAmountFromItem(entry.item)
+      if (isDelayed) coinAmt = Math.floor(coinAmt * 2)
+      deliveryItems.coins = coinAmt
+    }
+
+    // STEP 1: Find the buyer's playerId - try firebaseOrders state first
+    let buyerPlayerId: string | null = null
+    let buyerName: string | null = null
+
+    if (isStoreOrder && storeOrderId) {
+      const fbOrder = firebaseOrders.find(o => o.id === storeOrderId)
+      if (fbOrder?.playerId) {
+        buyerPlayerId = fbOrder.playerId
+        buyerName = fbOrder.playerName || fbOrder.name
+        console.log(`[Approve] Found buyer from firebaseOrders state: ${buyerPlayerId} (${buyerName})`)
+      }
+    }
+
+    // STEP 2: If not found in state, read the order directly from Firebase
+    if (!buyerPlayerId && storeOrderId) {
+      try {
+        const orderSnapshot = await fbGet(ref(db, `orders/${storeOrderId}`))
+        if (orderSnapshot.exists()) {
+          const orderData = orderSnapshot.val()
+          if (orderData.playerId) {
+            buyerPlayerId = orderData.playerId
+            buyerName = orderData.playerName || orderData.name
+            console.log(`[Approve] Found buyer from direct Firebase read: ${buyerPlayerId} (${buyerName})`)
+          }
+        } else {
+          console.warn(`[Approve] Order ${storeOrderId} not found in Firebase`)
+        }
+      } catch (err) {
+        console.warn('[Approve] Direct Firebase order read failed:', err)
+      }
+    }
+
+    // STEP 3: If still not found, look up the player by userCode from the entry
+    if (!buyerPlayerId && entry.userCode) {
+      try {
+        const player = await getPlayerByUserCode(entry.userCode)
+        if (player) {
+          buyerPlayerId = player.id
+          buyerName = player.name
+          console.log(`[Approve] Found buyer by userCode ${entry.userCode}: ${buyerPlayerId} (${buyerName})`)
+        }
+      } catch (err) {
+        console.warn('[Approve] Player lookup by userCode failed:', err)
+      }
+    }
+
+    // Update local statuses
+    if (isStoreOrder && storeOrderId) {
       const updatedOrders = storeOrders.map(o =>
         o.id === storeOrderId ? { ...o, status: 'approved' as const } : o
       )
       setStoreOrders(updatedOrders)
       saveStoreOrders(updatedOrders)
-
-      // Update order status in Firebase (status update only, no delivery - delivery is done separately below)
       firebaseUpdateOrderStatus(storeOrderId, 'approved').catch(() => {})
+    }
 
-      // Deliver items to buyer via Firebase notification (NOT to admin's account)
-      const fbOrder = firebaseOrders.find(o => o.id === storeOrderId)
-      if (fbOrder) {
-        const deliveryItems: { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number } = {}
-        if (isInrAbility) {
-          if (entry.item.includes('5x')) {
-            deliveryItems.abilities = [{ type: 'multiplier5x', count: entry.abilityCount || 5 }]
-          } else if (entry.item.includes('2.5x')) {
-            deliveryItems.abilities = [{ type: 'multiplier2_5x', count: entry.abilityCount || 5 }]
-          }
-        } else {
-          // Use getCoinAmountFromItem for accurate coin amounts from item name
-          let coinAmt = getCoinAmountFromItem(entry.item)
-          if (isDelayed) coinAmt = Math.floor(coinAmt * 2)
-          deliveryItems.coins = coinAmt
-        }
-        if (fbOrder.playerId) {
-          deliverOrderItems(storeOrderId, fbOrder.playerId, deliveryItems).catch(() => {})
-        }
-      }
+    const updated = purchaseHistory.map(p =>
+      p.id === entry.id ? { ...p, status: 'Delivered' as const } : p
+    )
+    setPurchaseHistory(updated)
+    savePurchaseHistory(updated)
 
-      // Show confirmation to admin (not a delivery notification - that goes to the buyer)
-      const bonusText = isDelayed ? ` (2x bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
-      onAddNotification('Order Approved ✅', `${entry.item} approved${bonusText}. Items will be delivered to buyer.`, 'system', '📦')
-    } else if (entry.type === 'inr_ability') {
-      // Legacy INR ability purchase - try to deliver via Firebase
-      const fbOrder = firebaseOrders.find(o => {
-        const safeItems = Array.isArray(o.items) ? o.items : []
-        const itemStr = safeItems.length > 0 ? safeItems.map((i: any) => `${i.name || 'Item'} x${i.quantity || 1}`).join(', ') : ''
-        return itemStr.includes('5x') || itemStr.includes('2.5x')
-      })
-      if (fbOrder && fbOrder.playerId) {
-        const deliveryItems: { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number } = {}
-        if (entry.item.includes('5x')) {
-          deliveryItems.abilities = [{ type: 'multiplier5x', count: entry.abilityCount || 5 }]
-        } else if (entry.item.includes('2.5x')) {
-          deliveryItems.abilities = [{ type: 'multiplier2_5x', count: entry.abilityCount || 5 }]
-        }
-        deliverOrderItems(entry.id, fbOrder.playerId, deliveryItems).catch(() => {})
+    // DELIVER ITEMS - with proper success/failure feedback
+    if (buyerPlayerId) {
+      try {
+        await deliverOrderItems(storeOrderId || entry.id, buyerPlayerId, deliveryItems)
+        const bonusText = isDelayed ? ` (2x bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
+        console.log(`[Approve] Delivery successful to ${buyerPlayerId} (${buyerName})`)
+        onAddNotification('✅ Delivery Sent!', `Items delivered to ${buyerName || 'user'} (UID: ${entry.userCode || 'unknown'})${bonusText}`, 'system', '📦')
+      } catch (err) {
+        console.error('[Approve] deliverOrderItems failed:', err)
+        onAddNotification('⚠️ Delivery Failed', `Could not deliver to ${buyerName || 'user'}. Try "Send to UID" instead. Error: ${err}`, 'system', '⚠️')
       }
-      const updated = purchaseHistory.map(p =>
-        p.id === entry.id ? { ...p, status: 'Delivered' as const } : p
-      )
-      setPurchaseHistory(updated)
-      savePurchaseHistory(updated)
-      onAddNotification('Ability Approved ✅', `${entry.item} approved. Items delivered to buyer via Firebase.`, 'system', '📦')
     } else {
-      // Legacy coin or coin-price ability purchase - try to deliver via Firebase
-      const fbOrder = firebaseOrders.find(o => {
-        const safeItems = Array.isArray(o.items) ? o.items : []
-        const itemStr = safeItems.length > 0 ? safeItems.map((i: any) => `${i.name || 'Item'} x${i.quantity || 1}`).join(', ') : ''
-        return !itemStr.includes('5x') && !itemStr.includes('2.5x')
-      })
-      if (fbOrder && fbOrder.playerId) {
-        const deliveryItems: { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number } = {}
-        let coinAmt = getCoinAmountFromItem(entry.item)
-        if (isDelayed) coinAmt = Math.floor(coinAmt * 2)
-        deliveryItems.coins = coinAmt
-        deliverOrderItems(entry.id, fbOrder.playerId, deliveryItems).catch(() => {})
-      }
-
-      // Update purchase status
-      const updated = purchaseHistory.map(p =>
-        p.id === entry.id ? { ...p, status: 'Delivered' as const } : p
-      )
-      setPurchaseHistory(updated)
-      savePurchaseHistory(updated)
-
-      const bonusText = isDelayed ? ` (2x bonus for ${Math.floor(hoursSincePurchase)}hr delay!)` : ''
-      onAddNotification('Order Approved ✅', `${entry.item} approved${bonusText}. Items delivered to buyer via Firebase.`, 'system', '📦')
+      console.warn('[Approve] Could not find buyer playerId for order', storeOrderId || entry.id)
+      onAddNotification('⚠️ Buyer Not Found', `Cannot deliver - buyer UID not found. Use "Send to UID" to deliver manually.`, 'system', '⚠️')
     }
     } catch (err) {
+      console.error('[Approve] handleApprovePurchase error:', err)
       showAdminError('Failed to approve purchase. Please try again.')
     }
   }, [purchaseHistory, storeOrders, onAddNotification, firebaseOrders, showAdminError])
+
+  // ====== SEND TO UID - Admin can directly send items to a user by UID ======
+  const [sendToUid, setSendToUid] = useState('')
+  const [sendCoins, setSendCoins] = useState(0)
+  const [sendSpins, setSendSpins] = useState(0)
+  const [sendHammers, setSendHammers] = useState(0)
+  const [sendMagnets, setSendMagnets] = useState(0)
+  const [sendBombs, setSendBombs] = useState(0)
+  const [sendRoomCards, setSendRoomCards] = useState(0)
+  const [sendLoading, setSendLoading] = useState(false)
+  const [sendResult, setSendResult] = useState<{ success: boolean; message: string } | null>(null)
+
+  const handleSendToUid = useCallback(async () => {
+    if (!sendToUid) return
+    setSendLoading(true)
+    setSendResult(null)
+    try {
+      const player = await getPlayerByUserCode(sendToUid)
+      if (!player) {
+        setSendResult({ success: false, message: `❌ UID ${sendToUid} not found!` })
+        setSendLoading(false)
+        return
+      }
+
+      const deliveryItems: { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number } = {}
+      if (sendCoins > 0) deliveryItems.coins = sendCoins
+      const abilities: Array<{ type: string; count: number }> = []
+      if (sendHammers > 0) abilities.push({ type: 'hammer', count: sendHammers })
+      if (sendMagnets > 0) abilities.push({ type: 'magnet', count: sendMagnets })
+      if (sendBombs > 0) abilities.push({ type: 'blast', count: sendBombs })
+      if (abilities.length > 0) deliveryItems.abilities = abilities
+      if (sendRoomCards > 0) deliveryItems.roomCards = sendRoomCards
+      if (sendSpins > 0) deliveryItems.spinTickets = sendSpins
+
+      if (!deliveryItems.coins && !deliveryItems.abilities?.length && !deliveryItems.roomCards && !deliveryItems.spinTickets) {
+        setSendResult({ success: false, message: '❌ Enter at least 1 item to send!' })
+        setSendLoading(false)
+        return
+      }
+
+      await deliverOrderItems(`admin_send_${Date.now()}`, player.id, deliveryItems)
+      setSendResult({ success: true, message: `✅ Sent to ${player.name} (UID: ${sendToUid})!` })
+      onAddNotification('📤 Items Sent!', `Delivered items to ${player.name} (UID: ${sendToUid})`, 'system', '✅')
+      // Reset form
+      setSendCoins(0)
+      setSendSpins(0)
+      setSendHammers(0)
+      setSendMagnets(0)
+      setSendBombs(0)
+      setSendRoomCards(0)
+      setSendToUid('')
+    } catch (err) {
+      console.error('[SendToUID] Failed:', err)
+      setSendResult({ success: false, message: `❌ Failed: ${err}` })
+    }
+    setSendLoading(false)
+  }, [sendToUid, sendCoins, sendSpins, sendHammers, sendMagnets, sendBombs, sendRoomCards, onAddNotification])
 
   // Deny a purchase (works with both purchaseHistory and storeOrders)
   const handleDenyPurchase = useCallback((entry: PurchaseHistoryEntry) => {
@@ -2032,6 +2139,7 @@ export function CouponCode({
           coinAmount: isInrAbility ? undefined : safeItems.reduce((s, i) => s + (i.quantity || 0), 0),
           abilityType: isInrAbility ? (itemStr.includes('5x') ? '5x' : '2.5x') : undefined,
           abilityCount: isInrAbility ? safeItems.reduce((s, i) => s + (i.quantity || 0), 0) : undefined,
+          userCode: fo.userCode,
         }
       }),
       // Fallback: localStorage storeOrders that haven't synced to Firebase yet
@@ -2053,6 +2161,7 @@ export function CouponCode({
             coinAmount: isInrAbility ? undefined : order.quantity,
             abilityType: isInrAbility ? (order.item.includes('5x') ? '5x' : '2.5x') : undefined,
             abilityCount: isInrAbility ? order.quantity : undefined,
+            userCode: (order as any).userCode,
           }
         }),
     ]
@@ -2067,7 +2176,7 @@ export function CouponCode({
   // Approve a store order (from Firebase)
   // IMPORTANT: Items are delivered ONLY via Firebase deliverOrderItems() to the buyer.
   // firebaseUpdateOrderStatus() only updates the order status (no delivery) to avoid double delivery.
-  const handleApproveStoreOrder = useCallback((order: StoreOrder) => {
+  const handleApproveStoreOrder = useCallback(async (order: StoreOrder) => {
     try {
       const updated = storeOrders.map(o =>
         o.id === order.id ? { ...o, status: 'approved' as const } : o
@@ -2076,48 +2185,104 @@ export function CouponCode({
       saveStoreOrders(updated)
       // Update order status in Firebase (status update only, no delivery)
       firebaseUpdateOrderStatus(order.id, 'approved').catch(() => {})
-      // Deliver items to buyer via Firebase notification
-      const fbOrder = firebaseOrders.find(o => o.id === order.id)
-      if (fbOrder && fbOrder.playerId) {
-        const isInrAbility = order.item.includes('5x') || order.item.includes('2.5x')
-        const isHammer = order.item.toLowerCase().includes('hammer')
-        const isMagnet = order.item.toLowerCase().includes('magnet')
-        const isBomb = order.item.toLowerCase().includes('bomb') || order.item.toLowerCase().includes('blast')
-        const isTimer = order.item.toLowerCase().includes('timer')
-        const isUndo = order.item.toLowerCase().includes('undo')
-        const isRoomCard = order.item.toLowerCase().includes('room card')
-        const isSpinTicket = order.item.toLowerCase().includes('spin') || order.item.toLowerCase().includes('ticket')
-        const deliveryItems: { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number } = {}
 
-        if (isInrAbility) {
-          if (order.item.includes('5x')) {
-            deliveryItems.abilities = [{ type: 'multiplier5x', count: order.quantity }]
-          } else {
-            deliveryItems.abilities = [{ type: 'multiplier2_5x', count: order.quantity }]
-          }
-        } else if (isHammer || isMagnet || isBomb || isTimer || isUndo) {
-          // Coin-price ability purchase
-          const abilities: Array<{ type: string; count: number }> = []
-          if (isHammer) abilities.push({ type: 'hammer', count: order.quantity })
-          if (isMagnet) abilities.push({ type: 'magnet', count: order.quantity })
-          if (isBomb) abilities.push({ type: 'blast', count: order.quantity })
-          if (isTimer) abilities.push({ type: 'extraTime', count: order.quantity })
-          if (isUndo) abilities.push({ type: 'undo', count: order.quantity })
-          if (abilities.length > 0) deliveryItems.abilities = abilities
-        } else if (isRoomCard) {
-          deliveryItems.roomCards = order.quantity
-        } else if (isSpinTicket) {
-          deliveryItems.spinTickets = order.quantity
+      // Compute delivery items
+      const isInrAbility = order.item.includes('5x') || order.item.includes('2.5x')
+      const isHammer = order.item.toLowerCase().includes('hammer')
+      const isMagnet = order.item.toLowerCase().includes('magnet')
+      const isBomb = order.item.toLowerCase().includes('bomb') || order.item.toLowerCase().includes('blast')
+      const isTimer = order.item.toLowerCase().includes('timer')
+      const isUndo = order.item.toLowerCase().includes('undo')
+      const isRoomCard = order.item.toLowerCase().includes('room card')
+      const isSpinTicket = order.item.toLowerCase().includes('spin') || order.item.toLowerCase().includes('ticket')
+      const deliveryItems: { coins?: number; abilities?: Array<{ type: string; count: number }>; roomCards?: number; spinTickets?: number } = {}
+
+      if (isInrAbility) {
+        if (order.item.includes('5x')) {
+          deliveryItems.abilities = [{ type: 'multiplier5x', count: order.quantity }]
         } else {
-          // Coin pack - use getCoinAmountFromItem for accurate coin amounts from item name
-          deliveryItems.coins = getCoinAmountFromItem(order.item)
+          deliveryItems.abilities = [{ type: 'multiplier2_5x', count: order.quantity }]
         }
-        deliverOrderItems(order.id, fbOrder.playerId, deliveryItems).catch(() => {})
+      } else if (isHammer || isMagnet || isBomb || isTimer || isUndo) {
+        // Coin-price ability purchase
+        const abilities: Array<{ type: string; count: number }> = []
+        if (isHammer) abilities.push({ type: 'hammer', count: order.quantity })
+        if (isMagnet) abilities.push({ type: 'magnet', count: order.quantity })
+        if (isBomb) abilities.push({ type: 'blast', count: order.quantity })
+        if (isTimer) abilities.push({ type: 'extraTime', count: order.quantity })
+        if (isUndo) abilities.push({ type: 'undo', count: order.quantity })
+        if (abilities.length > 0) deliveryItems.abilities = abilities
+      } else if (isRoomCard) {
+        deliveryItems.roomCards = order.quantity
+      } else if (isSpinTicket) {
+        deliveryItems.spinTickets = order.quantity
+      } else {
+        // Coin pack - use getCoinAmountFromItem for accurate coin amounts from item name
+        deliveryItems.coins = getCoinAmountFromItem(order.item)
+      }
+
+      // Find buyer's playerId with robust fallback logic
+      let buyerPlayerId: string | null = null
+      let buyerName: string | null = null
+
+      // STEP 1: Try firebaseOrders state
+      const fbOrder = firebaseOrders.find(o => o.id === order.id)
+      if (fbOrder?.playerId) {
+        buyerPlayerId = fbOrder.playerId
+        buyerName = fbOrder.playerName || fbOrder.name
+        console.log(`[ApproveStore] Found buyer from firebaseOrders state: ${buyerPlayerId} (${buyerName})`)
+      }
+
+      // STEP 2: Read directly from Firebase
+      if (!buyerPlayerId) {
+        try {
+          const orderSnapshot = await fbGet(ref(db, `orders/${order.id}`))
+          if (orderSnapshot.exists()) {
+            const orderData = orderSnapshot.val()
+            if (orderData.playerId) {
+              buyerPlayerId = orderData.playerId
+              buyerName = orderData.playerName || orderData.name
+              console.log(`[ApproveStore] Found buyer from direct Firebase read: ${buyerPlayerId} (${buyerName})`)
+            }
+          }
+        } catch (err) {
+          console.warn('[ApproveStore] Direct Firebase order read failed:', err)
+        }
+      }
+
+      // STEP 3: Look up by userCode if available
+      if (!buyerPlayerId && (order as any).userCode) {
+        try {
+          const player = await getPlayerByUserCode((order as any).userCode)
+          if (player) {
+            buyerPlayerId = player.id
+            buyerName = player.name
+            console.log(`[ApproveStore] Found buyer by userCode: ${buyerPlayerId} (${buyerName})`)
+          }
+        } catch (err) {
+          console.warn('[ApproveStore] Player lookup by userCode failed:', err)
+        }
+      }
+
+      // Deliver items with feedback
+      if (buyerPlayerId) {
+        try {
+          await deliverOrderItems(order.id, buyerPlayerId, deliveryItems)
+          console.log(`[ApproveStore] Delivery successful to ${buyerPlayerId} (${buyerName})`)
+          onAddNotification('✅ Delivery Sent!', `Items delivered to ${buyerName || 'user'}`, 'system', '📦')
+        } catch (err) {
+          console.error('[ApproveStore] deliverOrderItems failed:', err)
+          onAddNotification('⚠️ Delivery Failed', `Could not deliver to ${buyerName || 'user'}. Try "Send to UID" instead. Error: ${err}`, 'system', '⚠️')
+        }
+      } else {
+        console.warn('[ApproveStore] Could not find buyer playerId for order', order.id)
+        onAddNotification('⚠️ Buyer Not Found', `Cannot deliver - buyer UID not found. Use "Send to UID" to deliver manually.`, 'system', '⚠️')
       }
     } catch (err) {
+      console.error('[ApproveStore] Error:', err)
       showAdminError('Failed to approve store order.')
     }
-  }, [storeOrders, firebaseOrders, showAdminError])
+  }, [storeOrders, firebaseOrders, onAddNotification, showAdminError])
 
   // Deny a store order (from Firebase)
   const handleDenyStoreOrder = useCallback((order: StoreOrder) => {
@@ -2704,6 +2869,71 @@ export function CouponCode({
                           </div>
                           <p className="text-lg font-bold" style={{ color: '#7C4DFF' }}>{totalReferrals}</p>
                           <p className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>Total referrals across all users</p>
+                        </div>
+
+                        {/* Send to UID Section */}
+                        <div className="p-3 rounded-lg" style={{ backgroundColor: 'rgba(0,230,118,0.05)', border: '1px solid rgba(0,230,118,0.15)' }}>
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Send className="w-3.5 h-3.5" style={{ color: '#00E676' }} />
+                            <p className="text-[10px] font-bold" style={{ color: '#00E676' }}>
+                              📤 Send to UID
+                            </p>
+                          </div>
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={sendToUid}
+                              onChange={e => setSendToUid(e.target.value.replace(/[^0-9]/g, ''))}
+                              placeholder="Enter user UID (e.g., 5001)"
+                              className="w-full px-3 py-2 rounded-lg text-[10px] font-mono"
+                              style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }}
+                            />
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>💰 Coins</label>
+                                <input type="number" value={sendCoins} onChange={e => setSendCoins(Number(e.target.value))} min={0}
+                                  className="w-full px-2 py-1 rounded text-[9px]" style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#EDC22E' }} />
+                              </div>
+                              <div>
+                                <label className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>🎫 Spin Tickets</label>
+                                <input type="number" value={sendSpins} onChange={e => setSendSpins(Number(e.target.value))} min={0}
+                                  className="w-full px-2 py-1 rounded text-[9px]" style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }} />
+                              </div>
+                              <div>
+                                <label className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>🔨 Hammers</label>
+                                <input type="number" value={sendHammers} onChange={e => setSendHammers(Number(e.target.value))} min={0}
+                                  className="w-full px-2 py-1 rounded text-[9px]" style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }} />
+                              </div>
+                              <div>
+                                <label className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>🧲 Magnets</label>
+                                <input type="number" value={sendMagnets} onChange={e => setSendMagnets(Number(e.target.value))} min={0}
+                                  className="w-full px-2 py-1 rounded text-[9px]" style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }} />
+                              </div>
+                              <div>
+                                <label className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>💣 Bombs</label>
+                                <input type="number" value={sendBombs} onChange={e => setSendBombs(Number(e.target.value))} min={0}
+                                  className="w-full px-2 py-1 rounded text-[9px]" style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }} />
+                              </div>
+                              <div>
+                                <label className="text-[7px]" style={{ color: 'rgba(255,255,255,0.4)' }}>🃏 Room Cards</label>
+                                <input type="number" value={sendRoomCards} onChange={e => setSendRoomCards(Number(e.target.value))} min={0}
+                                  className="w-full px-2 py-1 rounded text-[9px]" style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#FFFFFF' }} />
+                              </div>
+                            </div>
+                            <button
+                              onClick={handleSendToUid}
+                              disabled={sendLoading || !sendToUid}
+                              className="w-full py-2 rounded-lg text-[10px] font-bold transition-transform active:scale-95"
+                              style={{ background: 'linear-gradient(135deg, #00E676, #00C853)', color: '#FFFFFF', opacity: (sendLoading || !sendToUid) ? 0.5 : 1 }}
+                            >
+                              {sendLoading ? '⏳ Sending...' : '📤 Send to UID'}
+                            </button>
+                            {sendResult && (
+                              <p className="text-[8px] font-bold" style={{ color: sendResult.success ? '#00E676' : '#F65E3B' }}>
+                                {sendResult.message}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}

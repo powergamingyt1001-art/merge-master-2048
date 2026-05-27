@@ -169,6 +169,7 @@ export function PlayDashboard({
   const [showContact, setShowContact] = useState(false)
   const [showStore, setShowStore] = useState(false)
   const [showCoupon, setShowCoupon] = useState(false)
+  const [forceOpenAdmin, setForceOpenAdmin] = useState(false)
   const [showRoomFight, setShowRoomFight] = useState(false)
   const [showFriends, setShowFriends] = useState(false)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
@@ -1062,6 +1063,11 @@ export function PlayDashboard({
         onClearGameHistory={onClearGameHistory}
         playerId={playerId} viewerPlayerId={playerId}
         skillPoints={skillPoints}
+        onOpenAdminPanel={() => {
+          setShowProfile(false)
+          setShowCoupon(true)
+          setForceOpenAdmin(true)
+        }}
       />
       <NotificationsPanel isOpen={showNotifications} onClose={() => setShowNotifications(false)}
         notifications={notifications} onMarkRead={onMarkNotificationRead} onMarkAllRead={onMarkAllNotificationsRead}
@@ -1070,7 +1076,7 @@ export function PlayDashboard({
       <AboutPage isOpen={showAbout} onClose={() => setShowAbout(false)} />
       <ContactPage isOpen={showContact} onClose={() => setShowContact(false)} />
       <Store isOpen={showStore} onClose={() => setShowStore(false)} playerId={playerId} playerName={playerName} playerAvatar={playerAvatar} userCode={userCode} coins={coins} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} onDeductCoins={onDeductCoins} onAddPowerUp={onAddPowerUp} onAddUndos={onAddUndos} onAddRoomCards={onAddRoomCards} onAddSpinTickets={onAddSpinTickets} />
-      <CouponCode isOpen={showCoupon} onClose={() => setShowCoupon(false)} coins={coins} hammerCount={hammerCount} magnetCount={magnetCount} blastCount={blastCount} spinTickets={spinTickets} onAddCoins={onAddCoins} onAddPowerUp={onAddPowerUp} onAddSpinTickets={onAddSpinTickets} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} saveGame={saveGame} saveAll={saveAll} setAutoSaveEnabled={setAutoSaveEnabled} />
+      <CouponCode isOpen={showCoupon} onClose={() => { setShowCoupon(false); setForceOpenAdmin(false) }} coins={coins} hammerCount={hammerCount} magnetCount={magnetCount} blastCount={blastCount} spinTickets={spinTickets} onAddCoins={onAddCoins} onAddPowerUp={onAddPowerUp} onAddSpinTickets={onAddSpinTickets} onAddNotification={(title, message, type, emoji) => onAddNotification(title, message, type as Notification['type'], emoji)} saveGame={saveGame} saveAll={saveAll} setAutoSaveEnabled={setAutoSaveEnabled} forceOpenAdmin={forceOpenAdmin} onAdminOpened={() => setForceOpenAdmin(false)} />
 
       <RoomFight
         isOpen={showRoomFight}

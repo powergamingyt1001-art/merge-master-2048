@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { syncPlayerToFirebase, processReferral, processCommissionForReferrer, getReferrals, onReferralsUpdate, getCommissionNotifications, claimCommissionNotification, type FirebaseReferral, joinMatchmaking, leaveMatchmaking, findMatch, onMatchmakingUpdate, cleanupStaleMatchmaking, createBattle, joinBattle, onBattleUpdate, updateBattleScore, finishBattle, leaveBattle as firebaseLeaveBattle, markMatched, type MatchmakingEntry, type FirebaseBattle, onUserNotificationsUpdate, markNotificationDelivered, markGiftDelivered, getNextUserCode } from '@/lib/firebase-service'
+import { syncPlayerToFirebase, processReferral, processCommissionForReferrer, getReferrals, onReferralsUpdate, getCommissionNotifications, claimCommissionNotification, type FirebaseReferral, joinMatchmaking, leaveMatchmaking, findMatch, onMatchmakingUpdate, cleanupStaleMatchmaking, createBattle, joinBattle, onBattleUpdate, updateBattleScore, finishBattle, leaveBattle as firebaseLeaveBattle, markMatched, type MatchmakingEntry, type FirebaseBattle, onUserNotificationsUpdate, markNotificationDelivered, markGiftDelivered, getNextUserCode, getPlayer } from '@/lib/firebase-service'
 
 export type Direction = 'up' | 'down' | 'left' | 'right'
 export type PowerUp = 'hammer' | 'magnet' | 'blast' | 'multiplier5x' | 'multiplier2_5x' | 'extraTime'
@@ -1298,6 +1298,46 @@ export function useGame() {
       })
     }).catch(() => { /* silent - localStorage fallback already handled */ })
   }, [state.playerId])
+
+  // Reconcile items from Firebase on load - ensures items delivered via admin approval
+  // are picked up even if the notification listener missed them
+  useEffect(() => {
+    if (!state.playerId) return
+    // Only run once after a short delay (wait for initial state to load)
+    const timer = setTimeout(async () => {
+      try {
+        const fbPlayer = await getPlayer(state.playerId)
+        if (!fbPlayer) return
+
+        // Compare Firebase values with local state - if Firebase has MORE, reconcile
+        const updates: Partial<typeof state> = {}
+        let hasUpdates = false
+
+        const reconcileNum = (localVal: number, fbVal: number | undefined, field: keyof typeof state) => {
+          if (fbVal !== undefined && fbVal > localVal) {
+            updates[field] = fbVal
+            hasUpdates = true
+          }
+        }
+
+        reconcileNum(state.coins, fbPlayer.coins, 'coins')
+        reconcileNum(state.totalCoinsEarned, fbPlayer.totalCoinsEarned, 'totalCoinsEarned')
+        reconcileNum(state.hammerCount, fbPlayer.hammerCount, 'hammerCount')
+        reconcileNum(state.magnetCount, fbPlayer.magnetCount, 'magnetCount')
+        reconcileNum(state.blastCount, fbPlayer.blastCount, 'blastCount')
+        reconcileNum(state.multiplier5xCount, fbPlayer.multiplier5xCount, 'multiplier5xCount')
+        reconcileNum(state.multiplier2_5xCount, fbPlayer.multiplier2_5xCount, 'multiplier2_5xCount')
+        reconcileNum(state.extraTimeCount, fbPlayer.extraTimeCount, 'extraTimeCount')
+        reconcileNum(state.roomCardCount, fbPlayer.roomCardCount, 'roomCardCount')
+        reconcileNum(state.spinTickets, fbPlayer.spinTickets, 'spinTickets')
+
+        if (hasUpdates) {
+          setState(prev => ({ ...prev, ...updates }))
+        }
+      } catch { /* silent */ }
+    }, 3000) // 3 second delay to avoid running on every render
+    return () => clearTimeout(timer)
+  }, [state.playerId]) // Only run when playerId changes (mount)
 
   // Listen to referrals in real-time (people who used MY invite code)
   useEffect(() => {
@@ -3286,5 +3326,45 @@ export function useGame() {
         gameHistory: [],
       }))
     }, []),
+    syncFromFirebase: useCallback(async () => {
+      if (!state.playerId) return
+      try {
+        const fbPlayer = await getPlayer(state.playerId)
+        if (!fbPlayer) return
+
+        // Compare Firebase values with local state - if Firebase has MORE, reconcile
+        const updates: Partial<typeof state> = {}
+        let hasUpdates = false
+        let reconciledItems: string[] = []
+
+        const reconcileNum = (localVal: number, fbVal: number | undefined, field: keyof typeof state, label: string) => {
+          if (fbVal !== undefined && fbVal > localVal) {
+            updates[field] = fbVal
+            hasUpdates = true
+            reconciledItems.push(`${label}: ${localVal} → ${fbVal}`)
+          }
+        }
+
+        reconcileNum(state.coins, fbPlayer.coins, 'coins', '💰 Coins')
+        reconcileNum(state.totalCoinsEarned, fbPlayer.totalCoinsEarned, 'totalCoinsEarned', '💰 Total Earned')
+        reconcileNum(state.hammerCount, fbPlayer.hammerCount, 'hammerCount', '🔨 Hammers')
+        reconcileNum(state.magnetCount, fbPlayer.magnetCount, 'magnetCount', '🧲 Magnets')
+        reconcileNum(state.blastCount, fbPlayer.blastCount, 'blastCount', '💣 Bombs')
+        reconcileNum(state.multiplier5xCount, fbPlayer.multiplier5xCount, 'multiplier5xCount', '⚡ 5x')
+        reconcileNum(state.multiplier2_5xCount, fbPlayer.multiplier2_5xCount, 'multiplier2_5xCount', '🔥 2.5x')
+        reconcileNum(state.extraTimeCount, fbPlayer.extraTimeCount, 'extraTimeCount', '⏱️ Timers')
+        reconcileNum(state.roomCardCount, fbPlayer.roomCardCount, 'roomCardCount', '🃏 Room Cards')
+        reconcileNum(state.spinTickets, fbPlayer.spinTickets, 'spinTickets', '🎫 Spins')
+
+        if (hasUpdates) {
+          setState(prev => ({ ...prev, ...updates }))
+          addNotification('🔄 Synced from Cloud!', `Updated: ${reconciledItems.join(', ')}`, 'reward', '☁️')
+        } else {
+          addNotification('☁️ Cloud Sync', 'Your data is up to date!', 'system', '✅')
+        }
+      } catch {
+        addNotification('☁️ Sync Failed', 'Could not reach cloud. Try again later.', 'system', '⚠️')
+      }
+    }, [state.playerId, state.coins, state.hammerCount, state.magnetCount, state.blastCount, state.multiplier5xCount, state.multiplier2_5xCount, state.extraTimeCount, state.roomCardCount, state.spinTickets, state.totalCoinsEarned, addNotification]),
   }
 }

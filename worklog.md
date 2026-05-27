@@ -108,3 +108,36 @@ Stage Summary:
 - Admin panel loads Firebase config on open (cross-device sync)
 - All critical bugs fixed: admin panel crash, gift delivery, order success popup, room fight joiner, like system, spin quantities, store button labels, history filters
 - Game countdown and ability cooldown already working correctly
+
+---
+Task ID: 1
+Agent: full-stack-developer
+Task: Fix admin approval delivery + Add Send to UID feature
+
+Work Log:
+- Read CouponCode.tsx (5094 lines) and firebase-service.ts to understand the root cause
+- Identified root cause: handleApprovePurchase only looks in firebaseOrders state (may be stale/empty), silently fails with .catch(() => {})
+- Added `userCode` field to PurchaseHistoryEntry interface
+- Added `userCode: fo.userCode` to Firebase orders mapping in mergedAllPurchases
+- Added `userCode: (order as any).userCode` to localStorage orders mapping in mergedAllPurchases
+- Added `getPlayerByUserCode` to imports from firebase-service
+- Added `get as fbGet` to imports from firebase/database for direct Firebase reads
+- Rewrote handleApprovePurchase with 3-step robust fallback logic:
+  1. Try firebaseOrders.find() (fast, but may be stale)
+  2. Read order directly from Firebase via fbGet(ref(db, 'orders/' + storeOrderId))
+  3. Look up player by userCode via getPlayerByUserCode()
+- Changed handleApprovePurchase from sync to async for proper await support
+- Added proper delivery success/failure feedback notifications (replacing silent .catch(() => {}))
+- Added console.log/warn/error debugging at every step
+- Rewrote handleApproveStoreOrder with the same 3-step fallback logic
+- Added "Send to UID" feature: 10 new state variables + handleSendToUid handler
+- Added "Send to UID" UI section in admin Dashboard tab with UID input, coins/spins/hammers/magnets/bombs/room cards fields
+- Ran bun run lint — all checks pass with no errors
+
+Stage Summary:
+- Admin approval now reliably finds buyer's playerId through 3-step fallback (state → Firebase direct read → userCode lookup)
+- Delivery failures are no longer silent — admin sees ⚠️ notifications with actionable messages
+- "Send to UID" feature lets admin directly send items to any user by their UID (numeric userCode)
+- userCode stored in merged purchase entries for future fallback lookups
+- handleApproveStoreOrder also fixed with same robust logic
+- All lint checks pass, dev server running on port 3000
