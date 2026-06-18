@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { AdSenseInit } from "@/components/ads/AdSenseInit";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -109,11 +110,18 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="Merge 2048" />
         <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
         <link rel="icon" type="image/png" href="/favicon.png" />
+        {/* Google AdSense — loaded early for faster ad rendering */}
+        <script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4486474550864010"
+          crossOrigin="anonymous"
+        />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+          <AdSenseInit />
           {children}
           <Toaster />
         </ThemeProvider>

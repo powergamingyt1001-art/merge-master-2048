@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { LoadingScreen } from '@/components/game/LoadingScreen'
 import { PlayDashboard } from '@/components/game/PlayDashboard'
@@ -10,6 +10,8 @@ import { useGame } from '@/hooks/useGame'
 import { GameProvider } from '@/context/GameContext'
 import { AdOverlay, BackgroundImpressionTimer } from '@/components/ads/AdOverlay'
 import { AdsterraPopunder } from '@/components/ads/AdsterraAds'
+import { AdProvider, useAdContext } from '@/hooks/useAds'
+import { InterstitialAd } from '@/components/game/InterstitialAd'
 
 type GamePhase = 'loading' | 'dashboard' | 'game'
 type PendingGameAction = 'classic' | 'bot' | 'coins' | 'tournament' | null
@@ -22,6 +24,8 @@ export default function Home() {
   const [pendingBotTime, setPendingBotTime] = useState(60)
   const [pendingCoinFee, setPendingCoinFee] = useState(0)
   const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : false)
+  // Interstitial ad trigger — increments to fire the GameOverAdHandler
+  const [gameOverAdTriggerKey, setGameOverAdTriggerKey] = useState(0)
   // Removed: DashboardReturnOverlay state (interstitial ad removed)
   const game = useGame()
 
@@ -107,8 +111,19 @@ export default function Home() {
   }, [pendingAction, pendingBotTime, pendingCoinFee, game])
 
   const handleBackToDashboard = useCallback(() => {
+    // When online, show interstitial ad before returning to dashboard
+    if (isOnline) {
+      setGameOverAdTriggerKey(k => k + 1)
+    } else {
+      // Offline — go straight to dashboard
+      game.goBackToDashboard()
+      setPhase('dashboard')
+    }
+  }, [game, isOnline])
+
+  // Called after the game-over interstitial ad closes (or is skipped)
+  const handleGameOverAdComplete = useCallback(() => {
     game.goBackToDashboard()
-    // Removed interstitial ad overlay - go directly to dashboard
     setPhase('dashboard')
   }, [game])
 
@@ -150,13 +165,21 @@ export default function Home() {
 
   return (
     <ErrorBoundary>
-      <GameProvider game={game}>
+      <AdProvider>
         {/* Background impression timer for revenue */}
         <BackgroundImpressionTimer />
 
         {/* Adsterra Global Ads - Popunder only (Social Bar removed) */}
         <AdsterraPopunder />
 
+        {/* Game-over interstitial ad — uses useAdContext for rate-limiting */}
+        <GameOverAdHandler
+          triggerKey={gameOverAdTriggerKey}
+          isOnline={isOnline}
+          onAdComplete={handleGameOverAdComplete}
+        />
+
+        <GameProvider game={game}>
         <main className="min-h-screen">
           <AnimatePresence mode="wait">
             {phase === 'loading' && <LoadingScreen key="loading" onFinish={handleLoadingComplete} />}
@@ -260,7 +283,83 @@ export default function Home() {
         />
 
         {/* Removed: Dashboard Return Overlay (interstitial ad on game close) */}
-      </GameProvider>
+        </GameProvider>
+      </AdProvider>
     </ErrorBoundary>
+  )
+}
+
+// ============================================================
+// GameOverAdHandler — Lives INSIDE AdProvider so it can call
+// useAdContext(). On game over, triggers an interstitial ad
+// (rate-limited by the AdProvider's showInterstitialAd logic).
+// ============================================================
+function GameOverAdHandler({
+  triggerKey,
+  isOnline,
+  onAdComplete,
+}: {
+  triggerKey: number
+  isOnline: boolean
+  onAdComplete: () => void
+}) {
+  // Safe — this component is always rendered inside <AdProvider>
+  const adCtx = useAdContext()
+  const [showAd, setShowAd] = useState(false)
+  const prevTriggerKey = useRef(0)
+  const completedRef = useRef(false)
+
+  useEffect(() => {
+    if (triggerKey === 0) return
+    if (triggerKey === prevTriggerKey.current) return
+    prevTriggerKey.current = triggerKey
+    completedRef.current = false
+
+    // No internet → skip ad entirely
+    if (!isOnline) {
+      onAdComplete()
+      return
+    }
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        // Record this game played (drives the quick-death + games-played counters
+        // that showInterstitialAd uses for rate-limiting decisions)
+        adCtx.recordGamePlayed(0)
+        const shouldShow = await adCtx.showInterstitialAd('death')
+        if (cancelled) return
+        if (shouldShow) {
+          setShowAd(true)
+        } else {
+          // Rate-limit / quick-death logic skipped the ad — proceed to dashboard
+          onAdComplete()
+        }
+      } catch {
+        if (!cancelled) onAdComplete()
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [triggerKey, isOnline, adCtx, onAdComplete])
+
+  const handleClose = useCallback(() => {
+    if (completedRef.current) return
+    completedRef.current = true
+    setShowAd(false)
+    onAdComplete()
+  }, [onAdComplete])
+
+  if (!showAd) return null
+
+  return (
+    <InterstitialAd
+      isOpen={showAd}
+      onClose={handleClose}
+      isOnline={isOnline}
+      duration={5}
+    />
   )
 }

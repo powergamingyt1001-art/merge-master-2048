@@ -18,6 +18,7 @@ import {
   Heart, Hammer, Magnet, Bomb, Crown, Zap, ArrowLeftCircle, Swords, Coins,
 } from 'lucide-react'
 import { AdsterraBanner300x250, AdsterraBanner468x60 } from '@/components/ads/AdsterraAds'
+import { BannerAd } from '@/components/game/BannerAd'
 import { getRandomLink } from '@/components/ads/AdOverlay'
 
 // ============================================================
@@ -958,6 +959,11 @@ export function GameBoard({ onBackToDashboard, onPlayAgain }: GameBoardProps) {
       {/* ====== BOTTOM AD DURING GAMEPLAY - always visible ====== */}
       <div className="flex-shrink-0 w-full" style={{ marginTop: 4 }}>
         <AdsterraBanner300x250 />
+      </div>
+
+      {/* ====== GOOGLE ADSENSE BANNER — bottom of game screen ====== */}
+      <div className="flex-shrink-0 w-full">
+        <BannerAd position="bottom" isOnline={isOnline} />
       </div>
 
 

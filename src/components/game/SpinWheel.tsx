@@ -2,9 +2,10 @@
 
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Play, Tv } from 'lucide-react'
+import { X, Play, Tv, Gift } from 'lucide-react'
 import { SpinWheelAd } from '@/components/ads/AdOverlay'
 import { AdsterraBanner320x50 } from '@/components/ads/AdsterraAds'
+import { RewardedAd } from '@/components/game/RewardedAd'
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -79,6 +80,7 @@ export function SpinWheel({
   const [result, setResult] = useState<{ index: number; prize: SpinPrize } | null>(null)
   const [rotation, setRotation] = useState(0)
   const [showAdOverlay, setShowAdOverlay] = useState(false)
+  const [showRewardedAd, setShowRewardedAd] = useState(false)
   const [spinMultiplier, setSpinMultiplier] = useState(1)
   const [multiResults, setMultiResults] = useState<{ prize: SpinPrize; revealed: boolean }[]>([])
   const [allRevealed, setAllRevealed] = useState(false)
@@ -217,6 +219,21 @@ export function SpinWheel({
     onWatchAdForSpin()
     setShowAdOverlay(false)
   }, [onWatchAdForSpin])
+
+  // Google AdSense Rewarded Ad — gives a free spin on completion
+  const handleWatchRewardedAd = useCallback(() => {
+    if (!isOnline) return
+    setShowRewardedAd(true)
+  }, [isOnline])
+
+  const handleRewardedAdReward = useCallback(() => {
+    onWatchAdForSpin()
+    setShowRewardedAd(false)
+  }, [onWatchAdForSpin])
+
+  const handleRewardedAdClose = useCallback(() => {
+    setShowRewardedAd(false)
+  }, [])
 
   const hasResult = result !== null || multiResults.length > 0
 
@@ -489,6 +506,22 @@ export function SpinWheel({
                   </button>
                 )}
 
+                {/* Google AdSense Rewarded Ad — alternative ad network for free spin */}
+                {isOnline && !hasResult && !spinning && (
+                  <button
+                    onClick={handleWatchRewardedAd}
+                    className="w-full py-2.5 mt-2 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-95"
+                    style={{
+                      background: 'linear-gradient(135deg, #00E676, #00C853)',
+                      color: '#FFFFFF',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                    }}
+                  >
+                    <Gift className="w-4 h-4" />
+                    🎁 Watch Ad for Free Spin
+                  </button>
+                )}
+
                 {/* No tickets and offline message */}
                 {!isOnline && spinTickets <= 0 && !hasResult && (
                   <p className="text-center text-[10px] mt-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
@@ -509,11 +542,19 @@ export function SpinWheel({
         )}
       </AnimatePresence>
 
-      {/* Spin Wheel Ad Overlay */}
+      {/* Spin Wheel Ad Overlay (Adsterra) */}
       <SpinWheelAd
         isOpen={showAdOverlay}
         onClose={() => setShowAdOverlay(false)}
         onAdComplete={handleAdComplete}
+      />
+
+      {/* Google AdSense Rewarded Ad Overlay */}
+      <RewardedAd
+        isOpen={showRewardedAd}
+        onClose={handleRewardedAdClose}
+        onReward={handleRewardedAdReward}
+        isOnline={isOnline}
       />
     </>
   )

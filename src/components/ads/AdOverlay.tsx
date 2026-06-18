@@ -335,11 +335,98 @@ function SpinWheelAdInner({ onClose, onAdComplete }: { onClose: () => void; onAd
 }
 
 // ============================================================
-// BACKGROUND IMPRESSION TIMER - DISABLED
-// Previously loaded hidden iframes every 30s which caused random
-// redirects. Now returns null with no side effects.
+// BACKGROUND IMPRESSION TIMER - ENABLED
+// Tracks passive ad impressions by recording time-on-page and
+// visibility-change events to localStorage. Refreshes the
+// "active session" timestamp every 30 seconds while the page
+// is visible so backend analytics can count active impressions.
+// Does NOT load hidden iframes (which previously caused random
+// redirects). Visible ad units elsewhere on the page handle
+// the actual ad rendering; this component only records metrics.
 // ============================================================
 export function BackgroundImpressionTimer() {
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const IMPRESSION_KEY = 'mm2048_impressions'
+    const SESSION_KEY = 'mm2048_session_start'
+
+    const readImpressions = (): { count: number; lastUpdate: number; sessionSeconds: number } => {
+      try {
+        const raw = localStorage.getItem(IMPRESSION_KEY)
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          return {
+            count: parsed.count || 0,
+            lastUpdate: parsed.lastUpdate || 0,
+            sessionSeconds: parsed.sessionSeconds || 0,
+          }
+        }
+      } catch { /* ignore */ }
+      return { count: 0, lastUpdate: 0, sessionSeconds: 0 }
+    }
+
+    const writeImpressions = (data: { count: number; lastUpdate: number; sessionSeconds: number }) => {
+      try {
+        localStorage.setItem(IMPRESSION_KEY, JSON.stringify(data))
+      } catch { /* ignore */ }
+    }
+
+    // Initialize session start (once per page load)
+    const sessionStart = Date.now()
+    try {
+      localStorage.setItem(SESSION_KEY, String(sessionStart))
+    } catch { /* ignore */ }
+
+    // Increment impression count on first visibility
+    const data = readImpressions()
+    data.count += 1
+    data.lastUpdate = sessionStart
+    writeImpressions(data)
+
+    // Tick every 30 seconds while page is visible — accumulates active session time
+    let interval: ReturnType<typeof setInterval> | null = null
+    const startTicking = () => {
+      if (interval) return
+      interval = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          const cur = readImpressions()
+          cur.sessionSeconds += 30
+          cur.lastUpdate = Date.now()
+          writeImpressions(cur)
+        }
+      }, 30 * 1000)
+    }
+    const stopTicking = () => {
+      if (interval) {
+        clearInterval(interval)
+        interval = null
+      }
+    }
+
+    // Only tick while page is visible
+    if (document.visibilityState === 'visible') startTicking()
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        // User came back — count as a new impression
+        const cur = readImpressions()
+        cur.count += 1
+        cur.lastUpdate = Date.now()
+        writeImpressions(cur)
+        startTicking()
+      } else {
+        stopTicking()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      stopTicking()
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [])
+
   return null
 }
 

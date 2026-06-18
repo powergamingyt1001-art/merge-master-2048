@@ -54,13 +54,41 @@ export function getDashboardBigBannerSlot(): string {
   return chosen
 }
 
-// --- Popunder Ad (DISABLED - causes random website redirects) ---
-// The popunder script loads external JS that redirects users to random
-// websites on click. This has been disabled to prevent the redirect issue.
-// Banner ads still work normally and generate revenue.
+// --- Popunder Ad (RE-ENABLED) ---
+// Loads the Adsterra popunder script. Rate-limited to once per 30 minutes
+// via localStorage to prevent spamming the user on every page load.
+// Note: popunders may redirect on user click — that's expected behavior.
 export function AdsterraPopunder() {
-  // DISABLED - popunder causes random website redirects on click
-  // Keeping the function export for compatibility but it does nothing
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    // Only show once per 30 minutes
+    const lastTime = parseInt(localStorage.getItem('last_popunder_time') || '0', 10)
+    const now = Date.now()
+    if (now - lastTime < 30 * 60 * 1000) return // Skip if shown recently
+
+    // Avoid duplicate script injection on hot-reload
+    if (document.getElementById('adsterra-popunder')) return
+
+    const script = document.createElement('script')
+    script.id = 'adsterra-popunder'
+    script.async = true
+    script.setAttribute('data-cfasync', 'false')
+    // Real Adsterra popunder script (verified from Adsterra dashboard via git history)
+    script.src = 'https://pl29392034.profitablecpmratenetwork.com/40/9d/aa/409daa8e988b716a6a40b571e679667a.js'
+    document.body.appendChild(script)
+
+    localStorage.setItem('last_popunder_time', String(now))
+
+    return () => {
+      try {
+        const el = document.getElementById('adsterra-popunder')
+        if (el) el.remove()
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [])
   return null
 }
 

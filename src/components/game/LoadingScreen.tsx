@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 
 interface LoadingScreenProps {
@@ -9,26 +9,37 @@ interface LoadingScreenProps {
 
 export function LoadingScreen({ onFinish }: LoadingScreenProps) {
   const [progress, setProgress] = useState(0)
+  const onFinishRef = useRef(onFinish)
+  onFinishRef.current = onFinish
 
   useEffect(() => {
     const totalDuration = 3000
     const interval = 50
     const steps = totalDuration / interval
     let current = 0
+    let finished = false
 
     const timer = setInterval(() => {
       current++
       const pct = Math.min(100, Math.round((current / steps) * 100))
       setProgress(pct)
 
-      if (current >= steps) {
+      if (current >= steps && !finished) {
+        finished = true
         clearInterval(timer)
-        setTimeout(onFinish, 200)
+        // Use a small delay then call the latest onFinish
+        setTimeout(() => {
+          try {
+            onFinishRef.current()
+          } catch (e) {
+            console.error('LoadingScreen onFinish error:', e)
+          }
+        }, 200)
       }
     }, interval)
 
     return () => clearInterval(timer)
-  }, [onFinish])
+  }, [])
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-end overflow-hidden">

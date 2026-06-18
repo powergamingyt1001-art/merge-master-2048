@@ -21,6 +21,8 @@ import {
   AdsterraBanner320x50,
   getDashboardBigBannerSlot,
 } from '@/components/ads/AdsterraAds'
+import { BannerAd } from '@/components/game/BannerAd'
+import { MultiplexAd } from '@/components/game/MultiplexAd'
 import { PowerUp, Notification, DailyTask, DailyTaskReward, GameHistoryEntry, getLevelInfo } from '@/hooks/useGame'
 import { sendFriendRequest, getFriendRequests, onFriendRequestsUpdate, acceptFriendRequest, declineFriendRequest, getFriends, onFriendsUpdate, searchPlayerByUserCode, removeFriend, type FriendData, type FriendRequestData } from '@/lib/firebase-service'
 
@@ -727,6 +729,13 @@ export function PlayDashboard({
             </div>
           )}
 
+          {/* Google AdSense Multiplex Ad — multi-ad unit for maximum revenue */}
+          {isOnline && (
+            <div className="w-full">
+              <MultiplexAd isOnline={isOnline} />
+            </div>
+          )}
+
           {/* Best Score + Commission row */}
           <div className="w-full flex gap-1.5">
             {modBestScore > 0 && (
@@ -760,6 +769,11 @@ export function PlayDashboard({
       {/* ====== FOOTER AD - Only big banner if 'footer' slot chosen ====== */}
       <div className="flex-shrink-0 relative z-10 w-full">
         {bigBannerSlot === 'footer' ? <AdsterraBanner728x90 /> : <AdsterraBanner320x50 />}
+      </div>
+
+      {/* ====== GOOGLE ADSENSE BANNER — bottom of dashboard, always visible when online ====== */}
+      <div className="flex-shrink-0 relative z-10 w-full">
+        <BannerAd position="bottom" isOnline={isOnline} />
       </div>
 
       {/* Searching Opponent Overlay */}
